@@ -1,4 +1,4 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Frameset//EN" "http://www.w3.org/TR/html4/frameset.dtd">
+<!DOCTYPE HTML>
 <html lang="ja">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
@@ -6,11 +6,16 @@
     <title>GitHubページ</title>
   </head>
   <body>
-     GitHub Pages
-      <h3>見出し</h3>
-      <p id = "sample" align = "center"><strong><font id = "My_font" size = "15">webページ</font></strong>を</p>
-      リンクは<a href = "https://inaridarkfox4231.github.io/hello-world/">こちら</a><br>
-      <button id = "My_button" name = "button" onclick = "window.alert('ohayo!')">Clike me!</button>
+    <p align = "center">数を入力してください（5桁まで）。<br>
+      数１：<input id = "number1" type = "textBox1" size = "5" maxlength = "5" value = "0"></input><br>
+      数２：<input id = "number2" type = "textBox1" size = "5" maxlength = "5" value = "0"></input><br>
+      足し算の結果は・・<input type = "button" value = "足し算" onclick = "calc_sum()"></input>
+      <input id = "sum" type = "textBox1" size = "10"></input><br>
+      引き算の結果は・・<input type = "button" value = "引き算" onclick = "calc_subtract()"></input>
+      <input id = "subtract" type = "textBox1" size = "10"></input><br>
+      掛け算の結果は・・<input type = "button" value = "掛け算" onclick = "calc_product()"></input>
+      <input id = "product" type = "textBox1" size = "10"></input><br>
+    </p>
   </body>
  <script src = './src/index.js'></script>
 </html>
