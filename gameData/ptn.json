@@ -6,5 +6,23 @@
       "main":[{"shotSpeed":["set", [3, 6]]}, {"shotDirection":["set", [0, 360]]}, {"fire":""},
             {"loop":2, "back":-1}, {"wait":1}, {"loop":-1, "back":-1}]
     }
-  }
+  },
+  "seed1":{
+    "colorName":"dkgreen", "shotColorName":"green", "bgColor":"ltgreen", "shotShapeName":"wedgeMiddle",
+    "x":0.5, "y":0.5, "shotSpeed":2,
+    "action":{
+      "main":[{"shotDirection":["set", [0, 360]]}, {"fire":"fire"}, {"wait":60}, {"loop":-1, "back":-1}]
+    },
+    "fireDef":{"fire":{"radial":{"count":16}, "nway":{"count":7, "interval":2}}}
+  },
+  "seed2":{
+    "colorName":"red", "shotColorName":"orange", "bgColor": "plorange",
+    "x":0.5, "y":0.5, "shotSpeed":2,
+    "action":{
+      "main":[{"shotDirection":["add", 2]}, {"short":"attack"},
+            {"shotDirection":["add", -2]}, {"short":"attack"}, {"loop":-1, "back":-1}]
+    },
+    "short":{"attack":[{"fire":"radial16"}, {"wait":4}, {"loop":8, "back":3}, {"wait":16}]},
+    "fireDef":{"radial16":{"radial":{"count":16}}}
+  },
 }
