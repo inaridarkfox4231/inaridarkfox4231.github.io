@@ -1,0 +1,10 @@
+{
+  "seed0":{
+    "colorName":"dkgrey", "shotColorName":"black", "bgColor":"grey",
+    "x":0.5, "y":0.5,
+    "action":{
+      "main":[{"shotSpeed":["set", [3, 6]]}, {"shotDirection":["set", [0, 360]]}, {"fire":""},
+            {"loop":2, "back":-1}, {"wait":1}, {"loop":-1, "back":-1}]
+    }
+  }
+}
