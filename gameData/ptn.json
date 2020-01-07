@@ -24,5 +24,36 @@
     },
     "short":{"attack":[{"fire":"radial16"}, {"wait":4}, {"loop":8, "back":3}, {"wait":16}]},
     "fireDef":{"radial16":{"radial":{"count":16}}}
+  },
+  "seed3":{
+    "x":0.5, "y":0.5, "shotSpeed":6.283185307179586, "shotDirection":0, "shotBehavior":["circle"],
+    "action":{
+      "main":[{"shotAction":["set", "sweep"]}, {"fire":"rad2"}],
+      "sweep":[{"hide":true}, {"shotSpeed":["set", 2]}, {"shotDirection":["add", 12]},
+               {"fire":""}, {"wait":1}, {"loop":-1, "back":-2}]
+    },
+    "fireDef":{"rad2":{"formation":{"type":"points", "p":[[120, 0]]}, "bend":90, "radial":{"count":2}}},
+    "behaviorDef":{"circle":["circular", {"radius":120}]}
+  },
+  "seed4":{
+    "bgColor":"plgreen",
+    "x":0.5, "y":0.3, "shotSpeed":1.6755160819145563, "shotDirection":90,
+    "shotColorName":"plblue", "shotShapeName":"squareMiddle",
+    "action":{
+      "main":[{"shotColor":"green"},
+            {"shotAction":["set", "cannon1"]}, {"shotBehavior":["add", "circle"]}, {"fire":"setCannon1"},
+            {"shotBehavior":["clear"]}, {"shotAction":["set", "cannon2"]}, {"shotBehavior":["add", "circleInv"]},
+            {"fire":"setCannon2"}, {"vanish":1}
+           ],
+      "cannon1":[{"shotColor":"dkgreen"}, {"shotShape":"wedgeSmall"}, {"short":"cannonMain"}],
+      "cannon2":[{"shotColor":"dkgreen"}, {"shotShape":"wedgeSmall"}, {"wait":48}, {"short":"cannonMain"}]
+    },
+    "short":{"cannonMain":[{"shotSpeed":["set", 5]}, {"aim":0}, {"fire":"line7"}, {"wait":4}, {"loop":8, "back":3},
+                        {"wait":64}, {"loop":-1, "back":5}]},
+    "fireDef":{"setCannon1":{"formation":{"type":"points", "p":[[48, 0]]}, "bend":90},
+             "setCannon2":{"formation":{"type":"points", "p":[[48, 0]]}, "bend":-90},
+             "line7":{"line":{"count":7, "upSpeed":0.3}}},
+    "behaviorDef":{"circle":["circular", {"radius":96, "clockwise":true}],
+                 "circleInv":["circular", {"radius":96, "clockwise":false}]}
   }
 }
