@@ -373,10 +373,10 @@ class SelfUnit{
 		this.initialize();
 	}
   prepareWeapon(weaponData){
-    const myPtn0 = parsePatternSeed(weaponData[0]);
-    const myPtn1 = parsePatternSeed(weaponData[1]);
-    this.ptnArray.push(myPtn0); // ptnArrayには攻撃パターンが色々入っててシフトキーで変更できる予定。
-    this.ptnArray.push(myPtn1);
+    for(let i = 0; i < weaponData.length; i++){
+      const myPtn = parsePatternSeed(weaponData[i]);
+      this.ptnArray.push(myPtn);
+    }
     // 具体的には各種decorate処理及びactionの差し替え。
     // 追加プロパティ：action, actionIndex, counter, ptnArray, ptnIndex. 廃止プロパティ：weapon, fire, wait.
   }
