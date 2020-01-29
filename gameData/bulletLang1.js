@@ -14,6 +14,9 @@ const COS_PENTA = [1, 0.30901699437494745, -0.8090169943749473, -0.8090169943749
 const SIN_PENTA = [0, 0.9510565162951535, 0.5877852522924732, -0.587785252292473, -0.9510565162951536];
 const ROOT_THREE_HALF = 0.8660254037844386; // √3/2.
 
+let nwayId = 0;
+let radialId = 0;
+let lineId = 0;  // catchの度に増やしていく
 
 // ---------------------------------------------------------------------------------------- //
 // createSystem.
@@ -21,8 +24,17 @@ const ROOT_THREE_HALF = 0.8660254037844386; // √3/2.
 function createSystem(w, h, unitCapacity){
   window["AREA_WIDTH"] = w;
   window["AREA_HEIGHT"] = h;
+  // デフォルトムーヴ
+  window["STAY_MOVE"] = new StayMove();
+  window["GO_MOVE"] = new GoMove();
   let _system = new System();
   window["entity"] = _system;
+  // デフォルトカラーとシェイプ
+  window["SQUARE_MIDDLE"] = entity.drawShape["squareMiddle"];
+  window["WEDGE_SMALL"] = entity.drawShape["wedgeSmall"];
+  window["PL_BLUE"] = entity.drawColor["plblue"];
+  window["BLUE"] = entity.drawColor["blue"];
+  // オブジェクトプール
   window["unitPool"] = new ObjectPool(() => { return new Unit(); }, unitCapacity);
   return _system;
 }
@@ -57,9 +69,9 @@ class System{
     this.seedCapacity = 0;
 	}
   addPatternSeed(seed){
+    // なんかデフォルトを設定するとかここでできそうな。たとえばnwayのとか。radialとか。
     this.seedArray.push(seed);
     this.seedCapacity++;
-    // なんかデフォルトを設定するとかここでできそうな。たとえばnwayのとか。radialとか。
   }
   createPlayer(weaponData, flag = PLAYER){
     this.player = new SelfUnit(weaponData, flag);
@@ -131,7 +143,7 @@ class System{
     for(let i = 0; i < this.unitArray.length; i++){
       const u = this.unitArray[i];
       if(!u.collider.inFrame()){ continue; } // inFrame「でない」ならば考慮しない
-      if(u.vanishFlag){ continue; } // vanishFlag「である」ならば考慮しない
+      if(u.vanish){ continue; } // vanish「である」ならば考慮しない
       if(u.hide){ continue; } // hide状態なら考慮しない
       this._qTree.addActor(u);
     }
@@ -196,8 +208,8 @@ class System{
         const hit = this._detector.detectCollision(collider1, collider2);
 
         if(hit) {
-          // 両方ともvanishFlagがfalseならば判定する。
-          if(!obj1.vanishFlag && !obj2.vanishFlag){
+          // 両方ともvanishがfalseならば判定する。
+          if(!obj1.vanish && !obj2.vanish){
             obj1.hit(obj2);
             obj2.hit(obj1);
           }
@@ -223,7 +235,7 @@ class System{
         const hit = this._detector.detectCollision(collider1, collider2);
 
         if(hit) {
-          if(!obj.vanishFlag && !cellObj.vanishFlag){
+          if(!obj.vanish && !cellObj.vanish){
             obj.hit(cellObj);
             cellObj.hit(obj);
           }
@@ -265,6 +277,7 @@ class System{
   registUnitColors(){
     // 第3引数：damageFactor, 第4引数：lifeFactor. バランス調整が課題。
     this.registColor("black", color(0), 1, 50)
+        .registColor("white", color(255), 20, 1)
         .registColor("blue", color(63, 72, 204), 1, 1)
         .registColor("dkblue", color(35, 43, 131), 1, 1)
         .registColor("skblue", color(0, 128, 255), 1, 1)
@@ -276,10 +289,12 @@ class System{
         .registColor("dkred", color(146, 12, 18), 3, 3)
         .registColor("yellow", color(255, 242, 0), 1, 1)
         .registColor("dkyellow", color(142, 135, 0), 1, 1)
-        .registColor("dkgreen", color(17, 91, 39), 1, 1)
+        .registColor("dkgreen", color(17, 91, 39), 2, 3)
         .registColor("green", color(34, 177, 76), 1, 1)
         .registColor("plgreen", color(108, 227, 145), 1, 1)
         .registColor("brown", color(128, 64, 0), 1, 1)
+        .registColor("plbrown", color(215, 179, 159), 1, 1)
+        .registColor("dkbrown", color(103, 65, 44), 2, 3)
         .registColor("purple", color(163, 73, 164), 1, 1)
         .registColor("dkpurple", color(95, 41, 95), 1, 1)
         .registColor("plorange", color(255, 191, 149), 1, 1)
@@ -290,7 +305,10 @@ class System{
         .registColor("plgrey", color(200), 1, 1)
         .registColor("grey", color(128), 1, 1)
         .registColor("ltgreen", color(181, 230, 29), 1, 1)
+        .registColor("killgreen", color(116, 149, 17), 20, 5) // 濃い黄緑
         .registColor("pink", color(255, 55, 120), 1, 1)
+        .registColor("bossBrown", color(65, 40, 27), 5, 30)
+        .registColor("bossPink", color(255, 26, 100), 5, 50)
         .registColor("bossBlue", color(57, 86, 125), 5, 50) // ボス用（急遽）。とりあえず500にしといて。
         .registColor("bossRed", color(74, 6, 10), 5, 50); // ボス用のワインレッド（1面のボス）
   }
@@ -319,7 +337,8 @@ class System{
         .registShape("laserSmall", new DrawLaserShape(8))
         .registShape("laserMiddle", new DrawLaserShape(16))
         .registShape("laserLarge", new DrawLaserShape(24))
-        .registShape("laserHuge", new DrawLaserShape(48));
+        .registShape("laserHuge", new DrawLaserShape(48))
+        .registShape("cherryLarge", new DrawCherryShape(30));
   }
 }
 
@@ -368,15 +387,17 @@ class SelfUnit{
     this.life = this.maxLife;
     this.healCount = 0;     // ヒールカウントシステム。キー入力の際に+1され、maxに達するとHPが1増える
     this.maxHealCount = 20; // maxの値
-    this.vanishFlag = false;
+    this.vanish = false;
     this.prepareWeapon(weaponData);
 		this.initialize();
 	}
   prepareWeapon(weaponData){
     for(let i = 0; i < weaponData.length; i++){
       const myPtn = parsePatternSeed(weaponData[i]);
+      console.log(myPtn);
       this.ptnArray.push(myPtn);
     }
+    // shiftKeyで変更。
     // 具体的には各種decorate処理及びactionの差し替え。
     // 追加プロパティ：action, actionIndex, counter, ptnArray, ptnIndex. 廃止プロパティ：weapon, fire, wait.
   }
@@ -395,7 +416,7 @@ class SelfUnit{
     this.life = this.maxLife;
     this.healCount = 0; // ヒールカウント
     this.maxHealCount = 20; // 20回移動するたびにHPが1回復する
-    this.vanishFlag = false;
+    this.vanish = false;
 	}
 	setPosition(x, y){
 		this.position.set(x, y);
@@ -405,17 +426,18 @@ class SelfUnit{
     this.counter.initialize();
     // パターンの内容を元にごにょごにょ
     // 位置はいじらないよ！
-    const {speed, shotSpeed, shotDirection, shotBehavior, shotColor, color, shotShape, shotDelay} = ptn;
+    const {speed, shotSpeed, shotDirection, shotMove, shotColor, color, shotShape, shotDelay} = ptn;
     this.speed = (speed !== undefined ? ptn.speed : 4);
     this.shotSpeed = (shotSpeed !== undefined ? ptn.shotSpeed : 8);
     this.shotDirection = (shotDirection !== undefined ? ptn.shotDirection : -90);
-    this.shotBehavior = {};
-    if(shotBehavior !== undefined){ Object.assign(this.shotBehavior, ptn.shotBehavior); }
+    // shotMoveにする。behaviorは廃止。
+    this.shotMove = (shotMove !== undefined ? ptn.shotMove : GO_MOVE);
     this.shotAction = []; // action内で設定する。
     this.shotColor = (shotColor !== undefined ? ptn.shotColor : entity.drawColor["black"]);
     this.color = (color !== undefined ? ptn.color : entity.drawColor["black"]);
     this.shotShape = (shotShape !== undefined ? ptn.shotShape : entity.drawShape["wedgeSmall"]);
     this.shotDelay = (shotDelay !== undefined ? ptn.shotDelay : 0);
+    this.shotDistance = 0; // これがないと発射できないよ
     // actionをセット。
     this.action = ptn.action;
     this.actionIndex = 0;
@@ -427,7 +449,7 @@ class SelfUnit{
     this.setPattern(this.ptnArray[this.ptnIndex]);
   }
 	update(){
-    if(this.vanishFlag){ return; }
+    if(this.vanish){ return; }
 		this.rotationAngle += this.rotationSpeed;
     const {x, y} = this.position;
 	  if(keyIsDown(LEFT_ARROW)){ this.position.x -= this.speed; }
@@ -454,16 +476,16 @@ class SelfUnit{
     const newParticle = new Particle(this.position.x, this.position.y, 20, this.color);
     entity.particleArray.add(newParticle);
     this.life = 0;
-    this.vanishFlag = true;
+    this.vanish = true;
   }
   hit(unit){
     //console.log("player hit!");
-    // unitからダメージ量を計算してhitPointをupdateして0以下になるようなら消滅する（vanishFlag必要）。
+    // unitからダメージ量を計算してhitPointをupdateして0以下になるようなら消滅する（vanish必要）。
     // unitと違って単にエフェクト出して描画されなくなるだけにする。
     this.lifeUpdate(-unit.damage);
   }
   execute(){
-    if(this.vanishFlag){ return; }
+    if(this.vanish){ return; }
     // アクションの実行（処理が終了しているときは何もしない）（vanish待ちのときも何もしない）
     if(this.action.length > 0 && this.actionIndex < this.action.length){
       let debug = 0; // デバッグモード
@@ -487,7 +509,7 @@ class SelfUnit{
 		this.position.y = constrain(this.position.y, 5, AREA_HEIGHT - 5);
 	}
 	draw(){
-    if(this.vanishFlag){ return; }
+    if(this.vanish){ return; }
 		const {x, y} = this.position;
 		const c = cos(this.rotationAngle) * this.size;
 		const s = sin(this.rotationAngle) * this.size;
@@ -515,7 +537,6 @@ class Unit{
     this.position = createVector();
     this.previousPosition = createVector(); // 前フレームでの位置
     this.velocity = createVector();
-    this.defaultBehavior = [goBehavior, frameOutBehavior]; // デフォルト。固定。
     this.counter = new LoopCounter(); // クラス化. loopの制御はこれ以降このコンポジットに一任する。
     this.collider = new CircleCollider(); // 最初に1回だけ作って使いまわす。種類が変わるときだけいじる。基本update.
     this.initialize();
@@ -526,11 +547,11 @@ class Unit{
     this.position.set(0, 0);
     this.previousPosition.set(0, 0);
     this.velocity.set(0, 0);
-    this.speed = 0;
-    this.direction = 0;
-    this.delay = 0;
-    this.behavior = {}; // オブジェクトにし、各valueを実行する形とする。
-    this.action = []; // 各々の行動はcommandと呼ばれる（今までセグメントと呼んでいたもの）
+    this.speed = 0; // 1.
+    this.direction = 0; // 2.
+    this.delay = 0; // 3.
+    this.move = GO_MOVE; // デフォはGO. 4.
+    this.action = []; // 各々の行動はcommandと呼ばれる（今までセグメントと呼んでいたもの） 5.
     this.actionIndex = 0; // 処理中のcommandのインデックス
 
     this.counter.initialize();
@@ -538,25 +559,26 @@ class Unit{
     // 親の情報（bearingや親がやられたときの発動など用途様々）
     this.parent = undefined; // 自分を生み出したunitに関する情報。ノードでなければ何かしら設定される。
     // bulletを生成する際に使うプロパティ
-    this.shotSpeed = 0;
-    this.shotDirection = 0;
+    this.shotSpeed = 0; // 6.
+    this.shotDirection = 0; // 7.
+    this.shotAim = 0; // 11.
     this.shotDelay = 0;
-    this.shotBehavior = {};
+    this.shotDistance = 0;  // ショットの初期位置（デフォは0,つまりunitの位置）
+    this.shotMove = GO_MOVE; // デフォはGO.
     this.shotAction = [];
     this.shotCollisionFlag = ENEMY_BULLET; // 基本的にはショットのフラグは敵弾丸。いじるとき、いじる。
     // 色、形. デフォルトはこんな感じ。
-    this.shape = entity.drawShape["squareMiddle"]; // これ使ってdrawするからね。描画用クラス。
-    this.color = entity.drawColor["plblue"];
-    this.shotShape = entity.drawShape["wedgeSmall"];
-    this.shotColor = entity.drawColor["blue"];
+    this.shape = SQUARE_MIDDLE; // これ使ってdrawするからね。描画用クラス。 // 8.
+    this.color = PL_BLUE; // 9.
+    this.shotShape = WEDGE_SMALL;
+    this.shotColor = BLUE;
     this.drawParam = {}; // 描画用付加データは毎回初期化する
     // その他の挙動を制御する固有のプロパティ
     this.properFrameCount = 0;
-    this.vanishFlag = false; // trueなら、消す。
+    this.vanish = false; // trueなら、消す。
     this.hide = false; // 隠したいとき // appearでも作る？disappearとか。それも面白そうね。ステルス？・・・
-    this.follow = false; // behaviorの直後、actionの直前のタイミングでshotDirectionをdirectionで更新する。
     // 衝突判定関連
-    this.collisionFlag = ENEMY_BULLET; // default. ENEMY, PLAYER_BULLETの場合もある。
+    this.collisionFlag = ENEMY_BULLET; // default. ENEMY, PLAYER_BULLETの場合もある。 // 10.
     // colliderがcircleでなくなってる場合は新たにCircleColliderを生成して当てはめる。
     if(this.collider.type !== "circle"){ this.collider = new CircleCollider(); }
     else{ /* Check(必要なら) */ this.collider.update(0, 0, 0); }
@@ -578,62 +600,36 @@ class Unit{
     this.velocity.set(this.speed * cos(this.direction), this.speed * sin(this.direction));
   }
   setPattern(ptn){
-    const {x, y, behavior, shotBehavior, collisionFlag, shotCollisionFlag} = ptn;
+    const {x, y} = ptn;
     // この時点でもうx, yはキャンバス内のどこかだしspeedとかその辺もちゃんとした数だし(getNumber通し済み)
-    // behaviorとshotBehaviorもちゃんと{name:関数, ...}形式になっている。
     this.position.set(x, y);
-    const moveProperties = ["speed", "direction", "delay", "shotSpeed", "shotDirection", "shotDelay"];
+    const moveProperties = ["speed", "direction", "delay", "shotSpeed", "shotDirection"];
     moveProperties.forEach((propName) => {
       if(ptn[propName] !== undefined){ this[propName] = ptn[propName]; } // 確定は済んでる
     })
-
-    // ここ注意。ptn.colorやptn.shotColorなどはオブジェクト。だからそのまま放り込む。
-    // ただし、ノードユニットを作る大元などはもちろん文字列で指定してある（でないとjsonに落とせないので）。
-    // そういうのはparseの段階で文字列からオブジェクトに変換するので問題ないよ。
-    // actionでshotColorやshotShapeをいじる場合ももちろん文字列指定、適切にparseを行う。
-
-    // ノンデフォルトの場合に変更します
-    const colorProperties = ["color", "shotColor"]
-    colorProperties.forEach((propName) => {
-      if(ptn[propName] !== undefined){
-        //this[name] = ptn[name];
-        this[propName] = ptn[propName];
-      } // オブジェクト
-    })
-
-    // ノンデフォルトの場合に変更。
-    const shapeProperties = ["shape", "shotShape"]
-    shapeProperties.forEach((propName) => {
-      if(ptn[propName] !== undefined){
-        //this[name] = ptn[name];
-        this[propName] = ptn[propName];
-      } // オブジェクト
-    })
-
     this.velocityUpdate(); // 速度が決まる場合を考慮する
-    if(behavior !== undefined){
-      this.behavior = {};
-      Object.assign(this.behavior, behavior); // 自分が実行するbehavior. 付け外しできるようオブジェクトで。
-    }
-    if(shotBehavior !== undefined){
-      Object.assign(this.shotBehavior, shotBehavior); // オブジェクトのコピー
-    }
-    if(collisionFlag !== undefined){
-      this.collisionFlag = collisionFlag; // collisionFlagがENEMY_BULLETでない場合は別途指示する
-    }
-    if(shotCollisionFlag !== undefined){
-      this.shotCollisionFlag = shotCollisionFlag;
-    }
+
+    this.shotAim = this.shotDirection;
+
+    // ノンデフォルトの場合に変更します（自分と同じものを出す場合は個別に決めてね。）
+    if(ptn.color !== undefined){ this.color = ptn.color; }
+    if(ptn.shape !== undefined){ this.shape = ptn.shape; }
+    if(ptn.move !== undefined){ this.move = ptn.move; }
+    if(ptn.collisionFlag !== undefined){ this.collisionFlag = ptn.collisionFlag; } // ENEMY_BULLETでない場合は別途指示
     this.action = ptn.action; // action配列
+
+    // shotCollisionFlagの初期設定。基本的に複製。
+    if(this.collisionFlag === PLAYER_BULLET){ this.shotCollisionFlag = PLAYER_BULLET; }
+    if(this.collisionFlag === ENEMY_BULLET){ this.shotCollisionFlag = ENEMY_BULLET; }
+
     // parentの設定(用途様々)
     if(ptn.parent !== undefined){
       this.parent = ptn.parent;
     }
-    // shapeのセッティング忘れてた・・・・・・・できた！
-    // ここでcolliderの初期設定、違うcolliderになる場合は違うものにする。
-    // laserのセッティングにparentを使うのでこうしないとparentの情報が使えないのね。
+    // parentの情報を使う場合があるのでparentのあとでshapeのsetを実行する
     this.shape.set(this);
-    // lifeとdamage
+    // lifeとdamage(ptn作るときに事前に計算しておいた方がいい、)
+    // (でないとたとえば100個作る場合に100回同じ計算する羽目になる。shapeとcolorから出るならここでしなくていいよ。)
     if(this.collisionFlag === ENEMY_BULLET || this.collisionFlag === PLAYER_BULLET){
       this.damage = calcDamage(this.shape, this.color); // shape:基礎ダメージ、color:倍率
     }
@@ -643,9 +639,9 @@ class Unit{
     }
   }
   eject(){
-    if(this.vanishFlag){ this.vanish(); }
+    if(this.vanish){ this.vanishAction(); }
   }
-  vanish(){
+  vanishAction(){
     // 複数ある場合っての今回出て来てるので・・うん。うしろから。
     // とにかくね、remove関連は後ろからなのよ・・でないとやっぱバグるのよね。
     for(let i = this.belongingArrayList.length - 1; i >= 0; i--){
@@ -665,19 +661,14 @@ class Unit{
   }
   update(){
     // vanishのときはスルー
-    if(this.vanishFlag){ return; }
+    if(this.vanish){ return; }
     // delay処理（カウントはexecuteの方で減らす・・分離されてしまっているので。）
     if(this.delay > 0){ return; }
     // previousPositionをセット
     this.setPreviousPosition();
-    // followがtrueの場合はshotDirectionをいじる
-    if(this.follow){ this.shotDirection = this.direction; }
-    // behaviorの実行
-    Object.values(this.behavior).forEach((behavior) => {
-      behavior(this);
-    })
-    // defaultBehaviorの実行
-    this.defaultBehavior.forEach((behavior) => { behavior(this); })
+    // moveとframeOutCheck.
+    this.move.execute(this);
+    this.frameOutCheck();
     // ColliderのUpdate(typeによって分けるけどとりあえずcircleだからね・・)
     if(this.collider.type == "circle"){
       // サークル
@@ -688,12 +679,19 @@ class Unit{
                            this.parent.position.x, this.parent.position.y);
     }
   }
+  frameOutCheck(){
+    const {x, y} = this.position;
+    if(x < -AREA_WIDTH * 0.2 || x > AREA_WIDTH * 1.2 || y < -AREA_HEIGHT * 0.2 || y > AREA_HEIGHT * 1.2){
+      this.flagOff(); // これにより外側で消えたときにパーティクルが出現するのを防ぐ
+      this.vanish = true;
+    }
+  }
   lifeUpdate(diff){
     this.life += diff;
     if(this.life > this.maxLife){ this.life = this.maxLife; }
     if(this.life > 0){ return; }
     this.life = 0;
-    this.vanishFlag = true;
+    this.vanish = true;
   }
   hit(unit){
     const flag = this.collisionFlag;
@@ -705,7 +703,7 @@ class Unit{
         // レーザーはスリップなので小さくする
         createParticle(this, unit, 2.0, 15, 4, 2);
       }
-      if(this.collider.type === "circle"){ this.vanishFlag = true; } // サークルなら衝突で消える
+      if(this.collider.type === "circle"){ this.vanish = true; } // サークルなら衝突で消える
       return;
     }else if(flag === ENEMY || flag === PLAYER){
       this.lifeUpdate(-unit.damage);
@@ -714,12 +712,12 @@ class Unit{
   }
   execute(){
     // vanishのときはスルー
-    if(this.vanishFlag){ return; }
+    if(this.vanish){ return; }
     // delay処理. カウントはこっちで減らす。
     if(this.delay > 0){ this.delay--; return; }
     if(this.bind){
       // bindの場合、親が死んだら死ぬ。
-      if(this.parent.vanishFlag){ this.vanishFlag = true; return; }
+      if(this.parent.vanish){ this.vanish = true; return; }
     }
     // 以下の部分をexecuteとして切り離す
     // アクションの実行（処理が終了しているときは何もしない）（vanish待ちのときも何もしない）
@@ -742,7 +740,7 @@ class Unit{
     this.properFrameCount++;
   }
   draw(){
-    if(this.hide || this.vanishFlag){ return; } // hide === trueのとき描画しない
+    if(this.hide || this.vanish){ return; } // hide === trueのとき描画しない
     //this.drawModule.draw(this);
     this.shape.draw(this);
     if(this.collisionFlag === ENEMY){
@@ -840,9 +838,9 @@ class Particle{
 		})
 	}
   eject(){
-    if(!this.alive){ this.vanish(); }
+    if(!this.alive){ this.vanishAction(); }
   }
-  vanish(){
+  vanishAction(){
     this.belongingArray.remove(this);
   }
 }
@@ -961,7 +959,7 @@ class DrawSquareShape extends DrawShape{
   set(unit){
     // colliderInitialize.
     unit.collider.update(unit.position.x, unit.position.y, this.size);
-    unit.drawParam = {rotationAngle:0, rotationSpeed:2};
+    unit.drawParam = {rotationAngle:45, rotationSpeed:2};
   }
   draw(unit){
     const {x, y} = unit.position;
@@ -1034,6 +1032,34 @@ class DrawDoubleWedgeShape extends DrawShape{
              x,     y, x - 0.5 * c - ROOT_THREE_HALF * s, y - 0.5 * s + ROOT_THREE_HALF * c);
     quad(x - c, y - s, x + 0.5 * c + ROOT_THREE_HALF * s, y + 0.5 * s - ROOT_THREE_HALF * c,
              x,     y, x + 0.5 * c - ROOT_THREE_HALF * s, y + 0.5 * s + ROOT_THREE_HALF * c);
+    unit.drawParam.rotationAngle += unit.drawParam.rotationSpeed;
+  }
+}
+
+// DrawCherryShape.
+// 桜っぽい感じのやつ。敵専用。1面のボス。typeはcircleでsizeは10, 20, 30, 60で
+// 基礎lifeはそれぞれ8, 16, 24, 48（0.8倍）
+class DrawCherryShape extends DrawShape{
+  constructor(size){
+    super();
+    this.colliderType = "circle";
+    this.size = size;
+    this.life = size * 0.8;
+  }
+  set(unit){
+    // colliderInitialize.
+    unit.collider.update(unit.position.x, unit.position.y, this.size); // 本来の大きさで。
+    unit.drawParam = {rotationAngle:0, rotationSpeed:4};
+  }
+  draw(unit){
+    const {x, y} = unit.position;
+    const direction = unit.drawParam.rotationAngle;
+    const c = cos(direction) * this.size * 0.75;
+    const s = sin(direction) * this.size * 0.75;
+    for(let i = 0; i < 5; i++){
+      arc(x + c * COS_PENTA[i] - s * SIN_PENTA[i], y + c * SIN_PENTA[i] + s * COS_PENTA[i],
+          this.size, this.size, 45 + 72 * i + direction, 315 + 72 * i + direction);
+    }
     unit.drawParam.rotationAngle += unit.drawParam.rotationSpeed;
   }
 }
@@ -1548,6 +1574,7 @@ function getPlayerDistSquare(pos){
   return pow(pos.x - x, 2) + pow(pos.y - y, 2);
 }
 
+// パースの時に関数にしちゃった方がいいかも。あとcase:3は廃止でいいかも。
 function getNumber(data){
   // dataが単なる数ならそれを返す。
   // [2, 4]とかなら2から4までのどれかの実数を返す。
@@ -1577,393 +1604,71 @@ function directionDist(d1, d2){
 }
 
 // ---------------------------------------------------------------------------------------- //
-// Behavior.
-// ああこれbehaviorか。配列に入れて毎フレーム実行するやつや・・goとかもそうよね。
-// せいぜいデフォのgoの他はaccellerate, decelerate, brakeAccell, raidくらいか。組み合わせる。
-// 組み合わせるのでもういちいちあれ（位置に速度プラス）を書かない。
+// Move. behaviorは廃止。
 
-// 画面外で消える
-function frameOutBehavior(unit){
-  const {x, y} = unit.position;
-  if(x < -AREA_WIDTH * 0.2 || x > AREA_WIDTH * 1.2 || y < -AREA_HEIGHT * 0.2 || y > AREA_HEIGHT * 1.2){
-    unit.flagOff(); // これにより外側で消えたときにパーティクルが出現するのを防ぐ
-    unit.vanishFlag = true;
+class StayMove{
+  constructor(){}
+  execute(unit){ return; }
+}
+
+class GoMove{
+  constructor(){}
+  execute(unit){ unit.position.add(unit.velocity); return; }
+}
+
+// 円形移動。parentを中心にbearingのディグリー角速度で回転する。動く場合でも可能。楕円軌道も可能。
+class CircularMove{
+  constructor(param){
+    this.bearing = param.bearing;
+    this.radiusDiff = (param.hasOwnProperty("radiusDiff") ? param.radiusDiff : 0);
+    this.ratioXY = (param.hasOwnProperty("ratioXY") ? param.ratioXY : 1.0);
   }
-}
-
-// 速度の方向に進む
-function goBehavior(unit){
-  unit.position.add(unit.velocity);
-}
-
-// 加速
-// accelleration
-// terminalSpeed用意しますね.(デフォはINF)
-function accellerateBehavior(param){
-  if(!param.hasOwnProperty("terminalSpeed")){ param.terminalSpeed = INF; }
-  return (unit) => {
-    if(unit.speed < param.terminalSpeed){
-      unit.speed += param.accelleration;
-    }
-    unit.velocityUpdate();
-  }
-}
-
-// 一定時間減速
-// friction, deceleration, terminalSpeed.
-// frictionがある場合は掛け算、decelerationがある場合はその値で減速する。
-function decelerateBehavior(param){
-  return (unit) => {
-    if(unit.speed > param.terminalSpeed){
-      if(param.hasOwnProperty("friction")){
-        unit.speed *= (1 - param.friction);
-      }else{
-        unit.speed -= param.deceleration;
-      }
-      unit.velocityUpdate();
-    }
-  }
-}
-
-// 一定時間減速したのち加速
-// threshold, friction, accelleration
-function brakeAccellBehavior(param){
-  return (unit) => {
-    if(unit.properFrameCount < param.threshold){
-      unit.speed *= (1 - param.friction);
-    }else{
-      unit.speed += param.accelleration;
-    }
-    unit.velocityUpdate();
-  }
-}
-
-// circular変える。
-// step1:parentの位置との距離を計測 step2:parent→selfの方向を計測 step3:そこにいくつか足す(3とか-2とか)
-// step4:新しい位置が確定するので更新 step5:directionは元の位置→新しい位置. 以上。
-// radiusDiffで半径も変えられるので実質spiralの機能も併せ持つ。
-
-// だめ。動くときとかこれだと失敗する。じゃあどうやって・・・
-// 毎フレーム、parentがいる限り、parentの位置計算より後でおこなわれるので、
-// parentの前フレームでの位置情報さえあれば正確に計算できるはず。
-// これは(↓)parentが動かないことが前提。動くと失敗する。
-// 前フレームに対してこれを使って計算してから変位を足せば正しい位置が得られるはず。
-
-// ratioXYは楕円軌道の縦÷横。たとえば2なら縦長の楕円。
-function circularBehavior(param){
-  // param.bearing:3とか-2とか. radiusDiff: 0.5とか-0.5とか。
-  if(!param.hasOwnProperty("radiusDiff")){ param.radiusDiff = 0; }
-  if(!param.hasOwnProperty("ratioXY")){ param.ratioXY = 1.0; }
-  return (unit) => {
+  execute(unit){
     const {x, y} = unit.position;
     const {x:px, y:py} = unit.parent.previousPosition;
     const {x:cx, y:cy} = unit.parent.position;
     const dx = x - px;
-    const dy = (y - py) / param.ratioXY;
+    const dy = (y - py) / this.ratioXY;
     const r = Math.sqrt(dx * dx + dy * dy);
     const dir = atan2(dy, dx);
-    const newX = cx + (r + param.radiusDiff) * cos(dir + param.bearing);
-    const newY = cy + (r + param.radiusDiff) * sin(dir + param.bearing) * param.ratioXY;
+    const newX = cx + (r + this.radiusDiff) * cos(dir + this.bearing);
+    const newY = cy + (r + this.radiusDiff) * sin(dir + this.bearing) * this.ratioXY;
     unit.direction = atan2(newY - y, newX - x);
     unit.setPosition(newX, newY);
   }
 }
 
-// freeFall. gravityに従って自由落下する。
-function freeFallBehavior(param){
-  if(!param.hasOwnProperty("gravity")){ param.gravity = 0.1; } // デフォは0.1
-  return (unit) => {
-    unit.velocity.y += param.gravity;
-    unit.direction = atan2(unit.velocity.y, unit.velocity.x);
-  }
-}
-
-
-// 多彩な曲線
-function curveBehavior(param){
-	return (unit) => {
-		unit.direction += param.a + param.b * cos(param.c * unit.properFrameCount);
-		unit.velocityUpdate();
-	}
-}
-// プレーヤーに近付くと加速するくらいだったら作ってもいいかな(raidBehavior)
-
-// あとはプレイヤーが近付くとバーストするとか面白そう（いい加減にしろ）
-// 画面の端で3回反射するまで動き続けるとか面白そう。
-// 放物軌道とか・・
-// 画面の端を走って下まで行って直進してプレイヤーと縦で重なると2倍速でぎゅーんって真上に（以下略）
-
-// 一定フレームごとにスイッチ入ってぎゅーんって自機の前に移動する（easing）のを周期的に繰り返すなど
-
 // ---------------------------------------------------------------------------------------- //
 // createFirePattern.
-// 各種パターンの生成。そのうちdelayとかstealthとか実装したい。
-// delay:一定時間止まってからスタートする。
-// stealth:一定時間の間姿が見えない（当たり判定も存在しない）・・トラップみたいなのイメージしてる。
-// stealthとホーミングやディレイを組み合わせたら面白いものが出来そう。
 
-function getFormation(param){
-  let ptnArray = [];
-  switch(param.type){
-    case "default":
-      // その場に1個
-      ptnArray.push({x:0, y:0});
-      break;
-    case "points":
-      // 指定した場所. p[[x1, y1], [x2, y2], [x3, y3]]みたいな。
-      for(let i = 0; i < param.p.length; i++){
-        ptnArray.push({x:param.p[i][0], y:param.p[i][1]});
-      }
-      break;
-    case "frontVertical":
-      // 射出方向に横一列
-      for(let i = 0; i < param.count; i++){
-        ptnArray.push({x:param.distance, y:(i - (param.count - 1) / 2) * param.interval});
-      }
-      break;
-    case "frontHorizontal":
-      // 射出方向に縦一列
-      for(let i = 0; i < param.count; i++){
-        ptnArray.push({x:param.distance + i * param.interval, y:0});
-      }
-      break;
-    case "wedge":
-      // 射出方向のどこかから対称にV字(2n+1個)
-      ptnArray.push({x:param.distance, y:0});
-      for(let i = 1; i < param.count; i++){
-        ptnArray.push({x:param.distance + i * param.diffX, y:i * param.diffY});
-        ptnArray.push({x:param.distance + i * param.diffX, y:-i * param.diffY});
-      }
-      break;
-    case "randomCircle":
-      // 中心から一定の円形の範囲内でランダムにいくつか
-      for(let i = 0; i < param.count; i++){
-        let r = random(0, param.radius);
-        let theta = random(0, 360);
-        ptnArray.push({x:r * cos(theta), y:r * sin(theta)});
-      }
-      break;
-  }
-  return ptnArray;
-}
+function executeFire(unit){
+  // bulletにセットするパターンを作ります。
+  let ptn = {};
 
-function fitting(posArray, direction){
-  // posArrayをすべてdirectionだけ回転させる
-  posArray.forEach((pos) => {
-    const {x, y} = pos;
-    pos.x = x * cos(direction) - y * sin(direction);
-    pos.y = y * cos(direction) + x * sin(direction);
-  })
-}
+  // formation, fitting, nway, radial, lineすべて廃止
 
-// いわゆるnway.
-// countが個数、intervalは角度のインターバル。
-function createNWay(param, ptnArray){
-  let newArray = [];
-  // x, yは指定角度だけ回転させる、あとdirectionも。
-  ptnArray.forEach((ptn) => {
-    for(let i = 0; i < param.count; i++){
-      const shotDirDiff = (param.hasOwnProperty("shotDirDiff") ? param.shotDirDiff : param.interval);
-      const shotSpeedDiff = (param.hasOwnProperty("shotSpeedDiff") ? param.shotSpeedDiff : 0);
-      const diffAngle = (i - (param.count - 1) / 2) * param.interval;
-      let obj = {};
-      Object.assign(obj, ptn);
-      const {x, y, direction, shotSpeed, shotDirection} = ptn;
-      //let newPtn = {speed:ptn.speed};
-      obj.x = x * cos(diffAngle) - y * sin(diffAngle);
-      obj.y = y * cos(diffAngle) + x * sin(diffAngle);
-      obj.direction = direction + diffAngle;
-      // shotDirection, shotSpeedについて（デフォは追従）
-      obj.shotDirection = shotDirection + (i - (param.count - 1) / 2) * shotDirDiff;
-      obj.shotSpeed = shotSpeed + (i - (param.count - 1) / 2) * shotSpeedDiff;
-      newArray.push(obj);
-    }
-  })
-  return newArray;
-}
+  // 位置ずらし
+  ptn.x = unit.position.x + cos(unit.shotDirection) * unit.shotDistance;
+  ptn.y = unit.position.y + sin(unit.shotDirection) * unit.shotDistance;
+  // speed, direction.
+  ptn.speed = unit.shotSpeed;
+  ptn.direction = unit.shotDirection;
+  ptn.shotDirection = unit.shotAim; // ???
+  ptn.shotSpeed = ptn.speed;
+  // option.
+  ptn.delay = unit.shotDelay;
+  ptn.move = unit.shotMove;
+  // action(無くても[]が入るだけ)
+  ptn.action = unit.shotAction;
+  // 色、形関連
+  ptn.color = unit.shotColor;
+  ptn.shape = unit.shotShape;
+  // collisionFlag.
+  ptn.collisionFlag = unit.shotCollisionFlag;
+  // <<---重要--->> parentの設定。createUnitのときに設定される。
+  ptn.parent = unit;
 
-// いわゆるradial.
-// countが角度の個数.
-function createRadial(param, ptnArray){
-  let newArray = [];
-  // diffAngleに360/param.countを使うだけ。
-  ptnArray.forEach((ptn) => {
-    for(let i = 0; i < param.count; i++){
-      const shotDirDiff = (param.hasOwnProperty("shotDirDiff") ? param.shotDirDiff : 360 / param.count);
-      const shotSpeedDiff = (param.hasOwnProperty("shotSpeedDiff") ? param.shotSpeedDiff : 0);
-      const diffAngle = 360 * i / param.count;
-      let obj = {};
-      Object.assign(obj, ptn);
-      const {x, y, direction, shotSpeed, shotDirection} = ptn;
-      obj.x = x * cos(diffAngle) - y * sin(diffAngle);
-      obj.y = y * cos(diffAngle) + x * sin(diffAngle);
-      obj.direction = direction + diffAngle;
-      // shotSpeedとshotDirection.
-      obj.shotDirection = shotDirection + shotDirDiff * i;
-      obj.shotSpeed = shotSpeed + shotSpeedDiff * i;
-      newArray.push(obj);
-    }
-  })
-  return newArray;
-}
-
-// いわゆるline.
-// 速さを増しながら複数用意する感じ
-// countが弾ひとつからいくつ作るか、upSpeedはまんまの意味。
-function createLine(param, ptnArray){
-  let newArray = [];
-  ptnArray.forEach((ptn) => {
-    for(let i = 0; i < param.count; i++){
-      const shotDirDiff = (param.hasOwnProperty("shotDirDiff") ? param.shotDirDiff : 0);
-      const shotSpeedDiff = (param.hasOwnProperty("shotSpeedDiff") ? param.shotSpeedDiff : param.upSpeed);
-      let obj = {};
-      Object.assign(obj, ptn);
-      const {speed, shotSpeed, shotDirection} = ptn;
-      obj.speed = speed + i * param.upSpeed;
-      obj.shotSpeed = shotSpeed + i * shotSpeedDiff;
-      obj.shotDirection = shotDirection + i * shotDirDiff;
-      // lineの各bulletについて角度を変えるなんてことも・・してどうするんだって話だけど。
-      newArray.push(obj);
-    }
-  })
-  return newArray;
-}
-
-// この関数をたとえば4フレームに1回とかすることでいろいろ実現できるよって感じのあれ。
-// data.formation:{}フォーメーションを決める
-//   type:default・・普通に真ん中に1個（formation未指定の場合はこれになる）
-//   type:frontVertical・・
-// data.nwayやらdata.radialやら存在するならそれを考慮・・準備中。
-// dataに入ってるのはformationとnwayやradial, lineなどの情報だけ。あとは全部・・そうです。
-// つまり配置関連の情報がdataで挙動についてはunitに全部入ってるからそっちを使うことになる。
-// 完成したbulletのたとえばshotdelayなどもaction内で制御することになるわけ。
-function createFirePattern(data){
-  return (unit) => {
-    // bulletにセットするパターンを作ります。既に実行形式。setとactionしかない。
-    // 一番最初にcannonにセットするやつと違って余計なものが排除された純粋なパターン。
-    // dataに入ってるのはまずformationプロパティ、ない場合はデフォルト、自分の場所に1個。
-    // formationがなくてもx, yプロパティがあれば(x, y)にひとつだけっていうのが実現するように仕様変更して。
-    // 位置指定
-    let ptnArray = [];
-    if(data.hasOwnProperty("formation")){
-      // 指定する場合
-      ptnArray = getFormation(data.formation);
-    }else if(data.hasOwnProperty("x") && data.hasOwnProperty("y")){
-      // 1点の場合
-      ptnArray = [{x:getNumber(data.x), y:getNumber(data.y)}]; // ランダム指定も可能
-    }else{
-      // デフォルト
-      ptnArray = [{x:0, y:0}];
-    }
-    // この時点で[{x:~~, y:~~}]の列ができている。回転させて正面にもってくる。
-    // このとき発射方向に合わせて回転する。
-    fitting(ptnArray, unit.shotDirection);
-    // 速度を設定
-    // ここ、同じ方向当てはめるようになってるけど、いっせいにある角度だけ
-    // 回転させるようにするとかのオプションがあってもいいかもしれない。
-    ptnArray.forEach((ptn) => {
-      ptn.speed = unit.shotSpeed;
-      ptn.direction = unit.shotDirection + (data.hasOwnProperty("bend") ? data.bend : 0);
-      // たとえば90°ずつ曲げるとか, -90°ずつ曲げるとか。30°とかね。
-      // shotSpeedとshotDirectionのデフォの設定(follow前提)
-      // speedは"follow"ならptn.speedで数ならその値、directionは"follow"ならptn.directionで"aim"なら
-      // プレイヤー方向で["aim", 5]みたくできて数は["abs", 60]みたいに指定する["rel", 40]で曲げることも
-      // 可能・・speedも["abs", 4]ですべて4, ["rel", 2]ですべて+2みたいな。
-      // デフォは["follow"].
-      // bendはdirectionに対する作用だから必要でしょ・・まあ、別にいいけども。
-      const shotSpeedOption = (data.hasOwnProperty("shotSpeedOption") ? data.shotSpeedOption : ["follow"]);
-      const shotDirOption = (data.hasOwnProperty("shotDirOption") ? data.shotDirOption : ["follow"]);
-      switch(shotSpeedOption[0]){
-        case "follow":
-          ptn.shotSpeed = ptn.speed; break;
-        case "abs":
-          ptn.shotSpeed = shotSpeedOption[1]; break;
-        case "rel":
-          ptn.shotSpeed = ptn.speed + shotSpeedOption[1]; break;
-        case "multiple":
-          ptn.shotSpeed = ptn.speed * shotSpeedOption[1]; break;
-      }
-      switch(shotDirOption[0]){
-        case "follow":
-          ptn.shotDirection = ptn.direction; break;
-        case "aim":
-          ptn.shotDirection = getPlayerDirection(unit.position, shotDirOption[1]); break;
-        case "abs":
-          ptn.shotDirection = shotDirOption[1]; break;
-        case "rel":
-          ptn.shotDirection = ptn.direction + shotDirOption[1]; break;
-      }
-    })
-
-    // このタイミングでunitのshotSpeedなどに指定があるなら一斉に適用する。でなければデフォルト値を使う。
-    // ...あれ？
-
-    // nwayとかradialとかする(data.decorateに情報が入っている)
-    // nwayは唯一重複が効くので仕様変更する。
-    if(data.hasOwnProperty("nway")){
-      // data.nway.countが3とか7だったらそのままでいいけど[13, 2]とかの場合には
-      // 繰り返し適用する。その場合intervalも[8, 5]とかなってて対応させる感じ。
-      if(typeof(data.nway.count) === "number"){
-        ptnArray = createNWay(data.nway, ptnArray);
-      }else{
-        const kindNum = data.nway.count.length;
-        const wayData = data.nway;
-        for(let i = 0; i < kindNum; i++){
-          ptnArray = createNWay({count:wayData.count[i], interval:wayData.interval[i]}, ptnArray);
-        }
-      }
-      //ptnArray = createNWay(data.nway, ptnArray); // とりあえずnway.
-    }
-    if(data.hasOwnProperty("radial")){
-      ptnArray = createRadial(data.radial, ptnArray); // とりあえずradial.
-    }
-    if(data.hasOwnProperty("line")){
-      ptnArray = createLine(data.line, ptnArray); // なんかline.
-    }
-    // この時点でこれ以上ptnは増えないのでdelayとbehaviorをまとめて設定する
-    // 実行形式のpatternを作る。略形式じゃないやつ。あれにはfireとかいろいろ入ってるけど、
-    // ここで作るのはそういうのが入ってない、完全版。
-    ptnArray.forEach((ptn) => {
-      // ここ、playerPositionにしたりどこか具体的な位置にしても面白そう。relとかで。
-      ptn.x += unit.position.x;
-      ptn.y += unit.position.y;
-      ptn.delay = unit.shotDelay; // ディレイ
-      ptn.behavior = {}; // ビヘイビア
-      Object.assign(ptn.behavior, unit.shotBehavior); // アサインで作らないとコピー元がいじられてしまうの
-      // あとでObject.values使ってあれにする。
-      //ptn.shotSpeed = ptn.speed; // 基本、同じ速さ。
-      //ptn.shotDirection = ptn.direction; // 基本、飛んでく方向だろうと。
-      // ↑まずいよねぇ・・
-      ptn.shotDelay = 0; // デフォルト
-      ptn.shotBehavior = {}; // デフォルト
-      ptn.action = unit.shotAction; // 無くても[]が入るだけ
-      // 色、形関連
-      ptn.color = unit.shotColor;
-      ptn.shape = unit.shotShape;
-      // 基本的に自分の複製をする(Commandで変更可能)
-      ptn.shotColor = ptn.color;
-      ptn.shotShape = ptn.shape;
-      // collisionFlag.
-      ptn.collisionFlag = unit.shotCollisionFlag; // 当然。
-      // ENEMY_BULLETの分裂で出来るのはENEMY_BULLET, PLAYER_BULLETの分裂でできるのはPLAYER_BULLET.
-      if(ptn.collisionFlag === ENEMY_BULLET){ ptn.shotCollisionFlag = ENEMY_BULLET; }
-      if(ptn.collisionFlag === PLAYER_BULLET){ ptn.shotCollisionFlag = PLAYER_BULLET; }
-      // ※shotCollisionFlagのデフォルトはENEMY_BULLETです。
-      // たとえばOFFがENEMYを作るときとか、collisionFlagはENEMYでこの上の2行は無視される。で、ENEMY_BULLETになる。
-      // PLAYERが出す場合はcollisionFlagのところがPLAYERになることがそもそもありえないのでありえない感じ。
-
-      // <<---重要--->> parentの設定。createUnitのときに設定される。
-      ptn.parent = unit;
-
-      //console.log(ptn.color.name);
-
-    })
-    // kindは廃止。draw関連はshapeプロパティで操作するので。
-    ptnArray.forEach((ptn) => {
-      createUnit(ptn); // 形を指定する。基本的にWedge.
-    })
-    // お疲れさまでした。
-  }
+  createUnit(ptn); // 形を指定する。基本的にWedge.
 }
 
 // ---------------------------------------------------------------------------------------- //
@@ -1997,76 +1702,22 @@ function parsePatternSeed(seed){
   if(x !== undefined){ ptn.x = getNumber(x) * AREA_WIDTH; }
   if(y !== undefined){ ptn.y = getNumber(y) * AREA_HEIGHT; }
 
-  // behavior関連
-  const moveProperties = ["speed", "direction", "delay", "shotSpeed", "shotDirection", "shotDelay"]
+  // move関連
+  const moveProperties = ["speed", "direction", "delay", "shotSpeed", "shotDirection"]
   moveProperties.forEach((propName) => {
     if(seed[propName] !== undefined){ ptn[propName] = getNumber(seed[propName]); }
   })
   // 色、形関連
   // ここでオブジェクトにしてしまう（色や形はこのタイミングでは登録済み）
   // seed[propName]は文字列（キー）なのでこれを元にオブジェクトを召喚する。
-  const colorProperties = ["color", "shotColor"];
-  colorProperties.forEach((propName) => {
-    if(seed[propName] !== undefined){ ptn[propName] = entity.drawColor[seed[propName]]; }
-  })
-  const shapeProperties = ["shape", "shotShape"];
-  shapeProperties.forEach((propName) => {
-    if(seed[propName] !== undefined){ ptn[propName] = entity.drawShape[seed[propName]]; }
-  })
-  // fireDef, behaviorDefの展開
-  // Defを展開してdata.fire, data.behaviorにnameの形で放り込む
-  // fireはseed.fireDef.name1:パターンデータ, .name2:パターンデータみたいな感じ。
-  data.fire = {};
-  if(seed.fireDef !== undefined){
-    Object.keys(seed.fireDef).forEach((name) => {
-      // いろいろ
-      //let fireFunc = createFirePattern(seed.fireDef[name])
-      //data.fire[name] = fireFunc;
-      data.fire[name] = seed.fireDef[name];
-    })
-  }
+  if(seed.color !== undefined){ ptn.color = entity.drawColor[seed.color]; }
+  if(seed.shape !== undefined){ ptn.shape = entity.drawShape[seed.shape]; }
 
-  // behaviorは...Behaviorの...だけ名前に入ってるからそこ補ってからwindow[...]でOK
-  data.behavior = {};
-  if(seed.behaviorDef !== undefined){
-    Object.keys(seed.behaviorDef).forEach((name) => {
-      // seed.behaviorDef.name1:["関数名(Behavior除く)", パラメータ]という感じ。
-      let behaviorFunc = window[seed.behaviorDef[name][0] + "Behavior"](seed.behaviorDef[name][1]);
-      data.behavior[name] = behaviorFunc;
-    })
-  }
+  // fireDef廃止。
 
-  // behavior部分(「name:関数」からなるオブジェクト)(valuesを取ってリストに放り込む)
-  if(seed.behavior !== undefined){
-    ptn.behavior = {};
-    seed.behavior.forEach((name) => {
-      ptn.behavior[name] = data.behavior[name];
-    })
-  }
-  // shotBehavior部分(「name:関数」・・同じ)
-  if(seed.shotBehavior !== undefined){
-    ptn.shotBehavior = {};
-    seed.shotBehavior.forEach((name) => {
-      ptn.shotBehavior[name] = data.behavior[name];
-    })
-    // 実行形式内のbehaviorは普通にセッター部分だから問題ないけど。
-    // あとはactionを作って完成。seedをいろいろいじる。
-  }
-  // デフォルトのcollisionFlagね・・敵を出すだけならOFFにするべきよねぇ。
-  // 一応hideと枠外の場合は判定しないことにしてるけど。
-  if(seed.collisionFlag === undefined){
-    // collisionFlagが未指定の場合はOFF-ENEMY.
-    ptn.collisionFlag = OFF;
-    ptn.shotCollisionFlag = ENEMY;
-  }else if(seed.shotCollisionFlag === undefined){
-    // collisionFlagのみ指定の場合は何であっても(""や-1であっても)ENEMY-ENEMY_BULLET.
-    ptn.collisionFlag = ENEMY;
-    ptn.shotCollisionFlag = ENEMY_BULLET;
-  }else{
-    // 両方指定の場合は両方指定
-    ptn.collisionFlag = seed.collisionFlag;
-    ptn.shotCollisionFlag = seed.collisionFlag;
-  }
+  // colliは未指定ならOFFでそうでないならENEMYでOK.
+  // たとえばOFFにENEMY放らせたいならあとで指定してね。
+  if(seed.collisionFlag === undefined){ ptn.collisionFlag = OFF; }else{ ptn.collisionFlag = ENEMY; }
 
   // ここでseed.actionのキー配列を取得
   const actionKeys = Object.keys(seed.action);
@@ -2078,19 +1729,152 @@ function parsePatternSeed(seed){
     })
   }
 
+  // まずnway, line, radialがあればなんとかする（増やすかも）
+  // actionをキー配列の下から見ていって適宜シード列で置き換える感じ。下から出ないと失敗する。
+  // それが終わったら、loopとsignal(そのうちjumpやswitchも作りたい・・)に出てくるbackの文字列を
+  // どのくらい戻るかの整数で置き換える。というわけでもう-1記法は使わない。
+  let preData = {};
+  for(let i = actionKeys.length - 1; i >= 0; i--){
+    const key = actionKeys[i];
+    preData[key] = expandPatternData(preData, seed.action[key]); // nwayやradialをあれする
+    preData[key] = setBackNum(preData[key]); // backを定数にする。
+  }
+
   // actionの内容を実行形式にする・・
   // 配列内のactionコマンドに出てくる文字列はすべて後者のものを参照しているので、
   // キー配列で後ろから見ていって・・
   // 得られた翻訳結果は順繰りにdata.actionに放り込んでいくイメージ。
   data.action = {}; // これがないと記法的にアウト
   for(let i = actionKeys.length - 1; i >= 0; i--){
-    data.action[actionKeys[i]] = createAction(data, seed.action[actionKeys[i]]);
+    data.action[actionKeys[i]] = createAction(data, preData[actionKeys[i]]);
   }
   // 配列はもう出てこないのでcreateActionの内容も大幅に書き換えることになる。
   // たとえば2番目のactionの配列を実行形式にするのに3番目以降のactionの実行形式のデータが使えるとかそういう感じ。
   // 最終的にdata.action.mainが求めるactionとなる。
   ptn.action = data.action.main;
   return ptn;
+}
+
+function expandPatternData(preData, seedArray){
+  // action:"uuu" で preData.uuuを放り込むような場合にpreDataが役に立つイメージ。
+  let result = [];
+  for(let i = 0; i < seedArray.length; i++){
+    const seed = seedArray[i];
+    const _type = getTopKey(seed);
+    switch(_type){
+      case "nway":
+        const parsed1 = createNwayArray(seed, preData);
+        result.push(...parsed1);
+        break;
+      case "radial":
+        const parsed2 = createRadialArray(seed, preData);
+        result.push(...parsed2);
+        break;
+      case "line":
+        const parsed3 = createLineArray(seed, preData);
+        result.push(...parsed3);
+        break;
+      default:
+        result.push(seed);
+    }
+  }
+  return result;
+}
+
+function createNwayArray(seed, data){
+  // count, interval, action:"hoge" ← data.hoge.
+  let result = [];
+  const {count, interval, action} = seed.nway;
+  result.push({shotDirection:["add", -(count - 1) * interval / 2]});
+  result.push({catch:("nway" + nwayId)});
+  if(action === undefined){
+    result.push({fire:""});
+  }else if(typeof(action) === "string"){
+    result.push(...data[action]);
+  }else{
+    result.push(...action); // 文字列でない、これはそのまま放り込むケース。action:[{}, {}, ...]とかそういうイメージ。
+  }
+  result.push({shotDirection:["add", interval]});
+  result.push({loop:count, back:("nway" + nwayId)});
+  result.push({shotDirection:["add", -(count + 1) * interval / 2]}); // 戻す
+  nwayId++;  // id増やしておく。
+  return result;
+}
+
+function createRadialArray(seed, data){
+  // count, action = "hoho" ← data.hoho.
+  let result = [];
+  const {count, action} = seed.radial;
+  result.push({catch:("radial" + radialId)});
+  if(action === undefined){
+    result.push({fire:""});
+  }else if(typeof(action) === "string"){
+    result.push(...data[action]);
+  }else{
+    result.push(...action);
+  }
+  result.push({shotDirection:["add", 360 / count]}); // 負の数で逆回転
+  result.push({loop:count, back:("radial" + radialId)});
+  radialId++;
+  return result;
+}
+
+function createLineArray(seed, data){
+  // count, upSpeed, action = "fikk" ← data.fikk.
+  let result = [];
+  const {count, upSpeed, action} = seed.line;
+  result.push({catch:("line" + lineId)});
+  if(action === undefined){
+    result.push({fire:""});
+  }else if(typeof(action) === "string"){
+    result.push(...data[action]);
+  }else{
+    result.push(...action);
+  }
+  result.push({shotSpeed:["add", upSpeed]});
+  result.push({loop:count, back:("line" + lineId)});
+  result.push({shotSpeed:["add", upSpeed * (-1) * count]}); // 戻す
+  lineId++;
+  return result;
+}
+
+// 垂直方向にいくつか(distanceの位置を起点として垂直にいくつか)
+// function createVerticalArray(){}
+
+// 水平方向にいくつか(distanceの位置を中心に水平でいくつか)
+// function createHorizontalArray(){}
+
+function setBackNum(seedArray){
+  // dataArrayの中のback持ってるオブジェクトのbackの文字列に対して
+  // そこからいくつ遡ったら同じ文字列のcatchにたどり着くか調べてその値をひとつ減らして数とする。
+  let result = [];
+  for(let i = 0; i < seedArray.length; i++){
+    const seed = seedArray[i];
+    if(!seed.hasOwnProperty("back")){
+      // backがなければそのまま
+      result.push(seed);
+      continue;
+    }
+    const key = seed.back;
+    if(typeof(key) === "number"){
+      // backが計算済みならそのまま
+      result.push(seed);
+      continue;
+    }
+    let n = 1;
+    while(n < seedArray.length){
+      const backSeed = seedArray[i - n];
+      if(backSeed.hasOwnProperty("catch") && backSeed.catch === key){ break; } // catchプロパティが合致したらOK.
+      n++; // これないと無限ループ。
+    }
+    // seedのback変えちゃうとまずいんでレプリカを作ります。
+    let replica = {};
+    Object.assign(replica, seed);
+    replica.back = n - 1;
+    result.push(replica);
+  }
+  //console.log(result);
+  return result;
 }
 
 // 展開関数作り直し。
@@ -2150,15 +1934,17 @@ function createAction(data, targetAction){
 // 翻訳。
 // 1.セット系
 // speed, shotSpeed, direction, shotDirectionについては"set"と"add"... {speed:["set", [3, 7]]}
-// {behavior:["add", "circle1"]} {shotBehavior:["add", "spiral7"]} こういうの {shotBehavior:["clear"]}
 // {fire:"radial16way7"}とかね。
 
 // これがreturnするのがクラスになればいいのね。
+// ここでreturnされるのがクラスになって、executeのところについては、
+// コマンドのメソッドのexecuteに設定されてるやつがそのまま実行されるようになればいいのよね。
 function interpretCommand(data, command, index){
   let result = {};
+  // だからgetTopKeyをもっと活用する必要があるかもね。
   const _type = getTopKey(command); // 最初のキーがそのままtypeになる。
   result.type = _type;
-  if(["speed", "direction", "shotSpeed", "shotDirection", "shotDelay"].includes(_type)){
+  if(["speed", "direction", "shotSpeed", "shotDirection", "shotDelay", "shotDistance", "shotAim"].includes(_type)){
     result.mode = command[_type][0]; // "set" or "add" or "mirror" or etc...
     result[_type + "Change"] = command[_type][1]; // 3とか[2, 9]とか[1, 10, 1]
     // 長さが3の場合はcountを設定する。この場合、waitの変種となる。
@@ -2173,30 +1959,20 @@ function interpretCommand(data, command, index){
     return result;
   }
 
-  if(["behavior", "shotBehavior"].includes(_type)){
-    result.mode = command[_type][0]; // "add" or "remove" or "clear". "clear"は全部消すやつ。
-    // [1]には名前が入っててそれをプロパティ名にする。
-    if(result.mode === "add" || result.mode === "remove"){
-      result.name = command[_type][1]; // 名前は必要
-      result.behavior = data.behavior[result.name]; // ビヘイビア本体
+  // 例：{move:"go"} {move:"stay"} {shotMove:"circular", bearing:3}
+  if(["move", "shotMove"].includes(_type)){
+    switch(command[_type]){
+      case "go": result.move = GO_MOVE; break;
+      case "stay": result.move = STAY_MOVE; break;
+      case "circular":
+        result.move = new CircularMove(command); // 余計なもの入ってるけど気にしなくてOK!
+        break;
     }
     return result;
   }
+
   if(_type === "fire"){
-    // fire:名前, の名前を関数にするだけ。
-    // ライブラリに存在しない場合は自動的にデフォルトになる（書き忘れ対策）
-    // ここで翻訳すればいい。data.fire[name]にはfiredef[name]を入れておいて。
-    // で、dictがあるとき（command.fireの他にcommand.~~があるとき）、data.fire[name]の中の"$eee"を
-    // dict.eeeで置き換える。そんな感じ。dictって言ってもcommandの中のfire以外のプロパティのことだけど。
-    // 具体例
-    // fireDef:{ways:{nway:{count:"$count", interval:30}}} で {fire:"ways", count:4} みたいなね。
-    // dataにはactionも入っている？？
-    if(data.fire[command.fire] === undefined){ result.fire = createFirePattern({}); }
-    else{
-      //result.fire = data.fire[command.fire];
-      let fireData = interpretNestedData(data.fire[command.fire], command);
-      result.fire = createFirePattern(fireData); // 変更
-    }
+    // fireするだけ
     return result;
   }
   // action.
@@ -2224,19 +2000,31 @@ function interpretCommand(data, command, index){
     return result;
   }
   if(_type === "aim"){ result.margin = command.aim; return result; } // 狙う際のマージン
-  if(_type === "vanish"){ result.vanishDelay = command.vanish; return result; } // 消えるまでのディレイ
+  if(_type === "vanish"){ result.flag = command.vanish; return result; } // true.
   if(_type === "hide"){
     // 隠れる. trueのとき見えなくする。falseで逆。
     //console.log(command.hide);
     result.flag = command.hide; return result;
   }
-  if(_type === "follow"){
-    // followをonoffにする
-    result.flag = command.follow; return result;
-  }
   if(_type === "bind"){
     // bindをtruefalseにする
     result.flag = command.bind; return result;
+  }
+  if(_type === "set"){
+    // 位置をいじる。{set:{x:100, y:40}}なら強制的に(100, 40)に移動する。
+    // 配列を使うとランダムも可能
+    result.x = command.set.x; result.y = command.set.y;
+    return result;
+  }
+  if(_type === "deco"){
+    // shotプロパティをいじる。{deco:{speed:8, direction:90, color:"grey", shape:"wedgeMiddle"}}とかする。
+    const propNames = ["speed", "direction", "color", "shape"];
+    propNames.forEach((name) => {
+      if(command.deco.hasOwnProperty(name)){
+        result[name] = command.deco[name];
+      }
+    })
+    return result;
   }
   if(_type === "signal"){
     // signalプロパティにはmodeが入っててそれにより指示が決まる。
@@ -2253,6 +2041,9 @@ function interpretCommand(data, command, index){
     }
     return result;
     // 自機に近付いたら次へ、みたいな場合は数を指定するかも？
+  }
+  if(_type === "catch"){
+    return result; // {type:"catch"}だけ。
   }
 }
 
@@ -2297,9 +2088,8 @@ function interpretNestedData(data, dict){
 // execute.
 
 function execute(unit, command){
-  //console.log(command);
   const _type = command.type;
-  if(["speed", "direction", "shotSpeed", "shotDirection", "shotDelay"].includes(_type)){
+  if(["speed", "direction", "shotSpeed", "shotDirection", "shotDelay", "shotDistance", "shotAim"].includes(_type)){
     // speedとかshotDirectionとかいじる
     // 第2引数（3番目)がある場合。
     // まずループを抜けるかどうかはプロパティの有無で純粋に決まる。プロパティが無ければ抜けないで進む(true)。
@@ -2323,9 +2113,6 @@ function execute(unit, command){
       }else{
         unit[_type] += newParameter; // ターンを消費しないで普通に足す
       }
-    }else if(command.mode === "mirror"){
-      // direction限定。角度をθ → 2a-θにする。speedやdelayでは使わないでね。
-      unit.direction = 2 * newParameter - unit[_type];
     }else if(command.mode === "aim"){
       // direction限定。意味は、わかるよね。
       unit.direction = getPlayerDirection(unit.position, newParameter);
@@ -2335,6 +2122,7 @@ function execute(unit, command){
       // たとえば["rel", 40]で自分のdirection+40がshotDirectionに設定される。
       if(_type === "shotSpeed"){ unit[_type] = unit.speed + newParameter; }
       if(_type === "shotDirection"){ unit[_type] = unit.direction + newParameter; }
+      if(_type === "shotAim"){ unit[_type] = unit.shotDirection + newParameter; }
     }else if(command.mode === "fromParent"){
       // shotDirection限定。親から自分に向かう方向に対していくつか足してそれを自分のshotDirectionとする。
       // つまり0なら親から自分に向かう方向ってことね。180だと逆。
@@ -2364,24 +2152,20 @@ function execute(unit, command){
     unit.actionIndex++;
     return true; // ループは抜けない
   }
-  if(["behavior", "shotBehavior"].includes(_type)){
-    // 自分やショットにセットするビヘイビアの付け外し
-    if(command.mode === "add"){
-      unit[_type][command.name] = command.behavior;
-    }else if(command.mode === "remove"){
-      delete unit[_type][command.name];
-    }else if(command.mode === "clear"){
-      unit[_type] = {};
-    }
+
+  // たとえば{type:"move", move:GO_MOVE}みたいになってるわけ。
+  if(["move", "shotMove"].includes(_type)){
+    unit[_type] = command.move; // もう出来てる
     unit.actionIndex++;
-    return true; // ループは抜けない
+    return true;
   }
+
   if(_type === "fire"){
     // fire忘れてた
     if(unit.isPlayer && !keyIsDown(32)){
       return false; // プレイヤーの場合はスペースキーが押されなければ離脱する。
     }
-    command.fire(unit);
+    executeFire(unit);
     unit.actionIndex++;
     return true; // 発射したら次へ！
   }
@@ -2420,8 +2204,8 @@ function execute(unit, command){
     return true; // ループは抜けない
   }
   if(_type === "vanish"){
-    // vanishDelayまで何もしない、そのあと消える。デフォルトは1. {vanish:1}ですぐ消える。
-    if(unit.counter.loopCheck(command.vanishDelay)){ unit.vanishFlag = true; }
+    // flagを当てはめるだけ。
+    unit.vanish = command.flag;
     return false; // ループを抜ける
   }
   if(_type === "hide"){
@@ -2430,20 +2214,29 @@ function execute(unit, command){
     unit.actionIndex++;
     return true; // ループは抜けない
   }
-  if(_type === "follow"){
-    unit.follow = command.flag;
-    unit.actionIndex++;
-    return true; // ループは抜けない
-  }
   if(_type === "bind"){
     unit.bind = command.flag;
     unit.actionIndex++;
     return true; // ループは抜けない
   }
+  if(_type === "set"){
+    unit.setPosition(getNumber(command.x), getNumber(command.y));
+    unit.actionIndex++;
+    return true; // ループは抜けない
+  }
+  if(_type === "deco"){
+    // ショットいろいろ
+    if(command.hasOwnProperty("speed")){ unit.shotSpeed = command.speed; }
+    if(command.hasOwnProperty("direction")){ unit.shotDirection = command.direction; }
+    if(command.hasOwnProperty("color")){ unit.shotColor = entity.drawColor[command.color]; }
+    if(command.hasOwnProperty("shape")){ unit.shotShape = entity.drawShape[command.shape]; }
+    unit.actionIndex++;
+    return true;
+  }
   if(_type === "signal"){
     if(command.mode === "vanish"){
-      // parentのvanishFlagを参照してfalseならそのまま抜けるがtrueなら次へ進む
-      if(unit.parent.vanishFlag){
+      // parentのvanishを参照してfalseならそのまま抜けるがtrueなら次へ進む
+      if(unit.parent.vanish){
         unit.actionIndex++;
         // follow===trueなら親の位置に移動する
         if(command.follow){ unit.setPosition(unit.parent.position.x, unit.parent.position.y); }
@@ -2485,6 +2278,7 @@ function execute(unit, command){
       }
     }
   }
+  if(_type === "catch"){ unit.actionIndex++; return true; } // いわゆるスルー
 }
 
 // 反射
