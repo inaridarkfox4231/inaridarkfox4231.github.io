@@ -149,6 +149,10 @@ class System{
 		this.player.update();
     this.unitArray.loop("update");
     this.particleArray.loopReverse("update");
+    // 処理をこっちに移植する
+    this.collisionCheck();
+    this.execute();
+    this.eject();
 	}
   collisionCheck(){
     //return;
@@ -275,6 +279,7 @@ class System{
     this.particleArray.loopReverse("eject");
   }
 	draw(){
+    background(this.backgroundColor); // こっちで背景色設定
 		this.player.draw();
     Object.keys(this.drawGroup).forEach((name) => {
       //if(name !== "laser"){ fill(this.drawColor[name]); }
