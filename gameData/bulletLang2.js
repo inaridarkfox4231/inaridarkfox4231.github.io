@@ -406,7 +406,6 @@ class SelfUnit{
   prepareWeapon(weaponData){
     for(let i = 0; i < weaponData.length; i++){
       const myPtn = parsePatternSeed(weaponData[i]);
-      console.log(myPtn);
       this.ptnArray.push(myPtn);
     }
     // shiftKeyで変更。
