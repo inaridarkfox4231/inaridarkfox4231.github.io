@@ -1,6 +1,6 @@
 // 以下のアドレスはhttps://から始まるものにしないとだめってことです（クロスオリジンポリシー）
 // もしくはp5.Editor流用してもいいかもしれない
-import * as THREE from 'https://inaridarkfox4231.github.io/myThree/three.js-master/build/three.min.js';
+import * as THREE from 'https://inaridarkfox4231.github.io/myThree/three.js-master/build/three.module.js';
 
 import Stats from 'https://inaridarkfox4231.github.io/myThree/three.js-master/examples/jsm/libs/stats.module.js';
 import { GUI } from 'https://inaridarkfox4231.github.io/myThree/three.js-master/examples/jsm/libs/lil-gui.module.min.js';
