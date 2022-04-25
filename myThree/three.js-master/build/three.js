@@ -6326,7 +6326,7 @@
 
 				return element.uuid;
 			}
-
+      // colorオブジェクトが渡されたりテクスチャオブジェクトが渡されたりするのでそれに応じて処理を分岐させています
 			if (this.isScene) {
 				if (this.background) {
 					if (this.background.isColor) {
