@@ -5,7 +5,7 @@ import {
 } from '../../../build/three.module.js';
 
 class CSS2DObject extends Object3D {
-
+	// css専用の2Dレンダリングのためのスクリプトのようです！
 	constructor( element = document.createElement( 'div' ) ) {
 
 		super();

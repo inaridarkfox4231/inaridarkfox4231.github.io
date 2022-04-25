@@ -20,6 +20,8 @@
 			import Stats from 'https://inaridarkfox4231.github.io/myThree/three.js-master/examples/jsm/libs/stats.module.js';
 			import { GUI } from 'https://inaridarkfox4231.github.io/myThree/three.js-master/examples/jsm/libs/lil-gui.module.min.js';
 
+      import { OrbitControls } from 'https://inaridarkfox4231.github.io/myThree/three.js-master/examples/jsm/controls/OrbitControls.js';
+
 			import { GLTFLoader } from 'https://inaridarkfox4231.github.io/myThree/three.js-master/examples/jsm/loaders/GLTFLoader.js';
 
 			let scene, renderer, camera, stats;
@@ -116,6 +118,7 @@
 
 			  } );
 
+        // これのdomElementでいいのかなぁ
 			  renderer = new THREE.WebGLRenderer( { antialias: true } );
 			  renderer.setPixelRatio( window.devicePixelRatio );
 			  renderer.setSize( window.innerWidth, window.innerHeight );
@@ -125,6 +128,13 @@
 
 			  stats = new Stats();
 			  container.appendChild( stats.dom );
+
+        // orbitControl動くかなぁ
+				// できました。renderer.domElementでOKのようです。やったね～
+				// こんな感じで動かしていくしかないんじゃろうね...
+				const controls = new OrbitControls( camera, renderer.domElement ); // 引数大事！
+				controls.minDistance = 5;
+				controls.maxDistance = 100;
 
 			  window.addEventListener( 'resize', onWindowResize );
 

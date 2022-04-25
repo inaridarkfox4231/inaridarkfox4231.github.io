@@ -16,23 +16,11 @@
 		</style>
 	</head>
 	<body>
-		<div id="info"><a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> css2d - label</div>
-
-		<!-- Import maps polyfill -->
-		<!-- Remove this when import maps will be widely supported -->
-    <!--
-		<script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
-
-		<script type="importmap">
-			{
-				"imports": {
-					"three": "../build/three.module.js"
-				}
-			}
-		</script>
-    -->
-
 		<script type="module">
+		  // ラベルのサンプルですね。
+			// これ使えばbmwalkerのあれもきれいにできそう、とはいえあれlabelに存在価値がないんだよね...
+			// でもこの手法は学んでおいて損はない、やっぱwebglはthree.jsが一番。
+			// あれはあれでしょ、2Dの範囲でいろいろ遊ぼうって話だから。そういうことでしょ。
 
 			import * as THREE from 'https://inaridarkfox4231.github.io/myThree/three.js-master/build/three.module.js';
 
@@ -45,6 +33,9 @@
 
 			let camera, scene, renderer, labelRenderer;
 
+      // いわゆるgui関連処理。こういうのは書き方統一してほしいわね...
+			// layerって何だろ、ひとまとまり、みたいな？そういうことかも。で、toggle(0)とかすると、
+			// その0に属しているものだけ描画されるとかそういうことかもだね。
 			const layers = {
 
 				'Toggle Name': function () {
@@ -76,6 +67,7 @@
 
 			let moon;
 
+			// メインメソッドこんだけ
 			init();
 			animate();
 
@@ -83,13 +75,14 @@
 
 				const EARTH_RADIUS = 1;
 				const MOON_RADIUS = 0.27;
-
+        // 透視投影のカメラ、視野角45°.p5jsで60°になってるやつだと思う。aspectはw/hで...
+				// p5jsだったら600,480で600/480. あとはnearとfarですね。
 				camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 200 );
-				camera.position.set( 10, 5, 20 );
-				camera.layers.enableAll();
+				camera.position.set( 10, 5, 20 ); // カメラの空間内での位置
+				camera.layers.enableAll(); // カメラが属しているlayerとかそういうことみたい。
 				camera.layers.toggle( 1 );
 
-				scene = new THREE.Scene();
+				scene = new THREE.Scene(); // シーンを用意
 
 				const dirLight = new THREE.DirectionalLight( 0xffffff );
 				dirLight.position.set( 0, 0, 1 );
@@ -133,7 +126,7 @@
 				earthDiv.style.marginTop = '-1em';
 				const earthLabel = new CSS2DObject( earthDiv );
 				earthLabel.position.set( 0, EARTH_RADIUS, 0 );
-				earth.add( earthLabel );
+				earth.add( earthLabel ); // メッシュにラベルを付与...？
 				earthLabel.layers.set( 0 );
 
 				const earthMassDiv = document.createElement( 'div' );
@@ -151,7 +144,7 @@
 				moonDiv.style.marginTop = '-1em';
 				const moonLabel = new CSS2DObject( moonDiv );
 				moonLabel.position.set( 0, MOON_RADIUS, 0 );
-				moon.add( moonLabel );
+				moon.add( moonLabel ); // どうやらラベルを付与することで表示しているっぽいね
 				moonLabel.layers.set( 0 );
 
 				const moonMassDiv = document.createElement( 'div' );
@@ -176,11 +169,16 @@
 				labelRenderer.domElement.style.top = '0px';
 				document.body.appendChild( labelRenderer.domElement );
 
+        // オビコンの使い方も気になるところ...
+				// どうもlabelのrendererからアクセスできるdomElementを指定することでそっちにも適用される仕組みらしい
 				const controls = new OrbitControls( camera, labelRenderer.domElement );
 				controls.minDistance = 5;
 				controls.maxDistance = 100;
+				// minとmax定義しておわり？ですね...これだけで、動くの？
+				// なんかdomElement省略できないみたい。しかし何を入れるんだろ...
 
-				//
+				// リサイズ処理がこんだけなのよ...p5でいろいろめんどうなことをせざるをえなかったオレの苦労ががが
+				// まあそんなもんよね
 
 				window.addEventListener( 'resize', onWindowResize );
 
@@ -189,13 +187,15 @@
 			}
 
 			function onWindowResize() {
+				// リサイズの内容はおそらく使い回しだと思う...あー、最初の3つ？は同じ。ソルジャーと。
 
-				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.aspect = window.innerWidth / window.innerHeight; // カメラ関連
 
-				camera.updateProjectionMatrix();
+				camera.updateProjectionMatrix(); // 射影行列関連
 
-				renderer.setSize( window.innerWidth, window.innerHeight );
+				renderer.setSize( window.innerWidth, window.innerHeight ); // ウィンドウサイズ関連
 
+				// ラベルに関するここの処理だけ新しいわね。てかlabel専用のレンダラーがあるんかい
 				labelRenderer.setSize( window.innerWidth, window.innerHeight );
 
 			}
@@ -214,7 +214,11 @@
 
 			}
 
-			//
+			// あーGUIここで作ってるのか。統一性ないな...
+			// ここのlayersっていうのはあっちのsettingsと同じですね。
+			// lilではあるんですけど、datと定義の仕方あんま変わんないみたいですね。いいことです。？？
+			// てかimport使えばOpenProcessingでもlil使えるんだよな...でもそれやっちゃうとサムネが付かないから駄目なのよね
+			// まあいいや
 
 			function initGui() {
 
