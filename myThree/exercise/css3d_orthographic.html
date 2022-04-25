@@ -4,7 +4,7 @@
 		<title>three.js css3d - orthographic</title>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-		<link type="text/css" rel="stylesheet" href="main.css">
+		<!--<link type="text/css" rel="stylesheet" href="main.css">-->
 		<style>
 			body {
 				background-color: #f0f0f0;
@@ -45,11 +45,12 @@
 
 			const frustumSize = 500;
 
+      // メインこれだけ。基本これだけみたいな感じなんかね
 			init();
 			animate();
 
 			function init() {
-
+        // 平行投影なので指定の仕方も独特だし難しい...
 				const aspect = window.innerWidth / window.innerHeight;
 				camera = new THREE.OrthographicCamera( frustumSize * aspect / - 2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / - 2, 1, 1000 );
 
