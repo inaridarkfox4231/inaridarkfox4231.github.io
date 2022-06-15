@@ -115,7 +115,7 @@
 				moon = new THREE.Mesh( moonGeometry, moonMaterial );
 				scene.add( moon );
 
-				//
+				// 
 
 				earth.layers.enableAll();
 				moon.layers.enableAll();
@@ -160,7 +160,12 @@
 
 				renderer = new THREE.WebGLRenderer();
 				renderer.setPixelRatio( window.devicePixelRatio );
+				// サイズはここで決めてますね。
 				renderer.setSize( window.innerWidth, window.innerHeight );
+				// ここでbodyのchildにします、ってやってるので、bodyの下に入るというわけね。
+				// renderer.domElementって要するにcanvas要素なんですよね。ということはですね。
+				// このrenderer.domElementをたとえば配置したいdivタグのChildに設定すれば
+				// p5.jsと同じようにそこに入るというわけですね。簡単！のはず...
 				document.body.appendChild( renderer.domElement );
 
 				labelRenderer = new CSS2DRenderer();
@@ -169,7 +174,7 @@
 				labelRenderer.domElement.style.top = '0px';
 				document.body.appendChild( labelRenderer.domElement );
 
-        // オビコンの使い方も気になるところ...
+                // オビコンの使い方も気になるところ...
 				// どうもlabelのrendererからアクセスできるdomElementを指定することでそっちにも適用される仕組みらしい
 				const controls = new OrbitControls( camera, labelRenderer.domElement );
 				controls.minDistance = 5;
