@@ -75,46 +75,6 @@ let foxParse = (function(){
     if(newval > right){ return right; }
     return newval;
   }
-  function easeInOutBack(x){
-    const c1 = 1.70158;
-    const c2 = c1 * 1.525;
-    return (x < 0.5 ? (Math.pow(2 * x, 2) * ((c2 + 1) * 2 * x - c2)) / 2 : (Math.pow(2 * x - 2, 2) * ((c2 + 1) * (x * 2 - 2) + c2) + 2) / 2);
-  }
-  function easeInElastic(x){
-    if(x>0 && x<1){
-      const c4 = (2 * Math.PI) / 3;
-      return -Math.pow(2, 10 * x - 10) * Math.sin((x * 10 - 10.75) * c4);
-    }
-    if(x>0){
-      return 1;
-    }
-    return 0;
-  }
-  function easeOutElastic(x){
-    return 1 - easeInElastic(1-x);
-  }
-  function easeInOutElastic(x){
-    return (x < 0.5 ? 0.5 * easeInElastic(2*x) : 0.5 * (2-easeInElastic(2-2*x)));
-  }
-  function easeOutBounce(x){
-    // https://easings.net/ja#easeOutBounce thanks!
-    const n1 = 7.5625;
-    const d1 = 2.75;
-    if(x < 1 / d1){
-      return n1 * x * x;
-    }else if (x < 2 / d1){
-      return n1 * (x -= 1.5 / d1) * x + 0.75;
-    }else if (x < 2.5 / d1){
-      return n1 * (x -= 2.25 / d1) * x + 0.9375;
-    }
-    return n1 * (x -= 2.625 / d1) * x + 0.984375;
-  }
-  function easeInBounce(x){
-    return 1-easeOutBounce(1-x);
-  }
-  function easeInOutBounce(x){
-    return (x < 0.5 ? (1 - easeOutBounce(1 - 2 * x)) / 2 : (1 + easeOutBounce(2 * x - 1)) / 2);
-  }
 
   // CrossReferenceArray.
   class CrossReferenceArray extends Array{
@@ -212,7 +172,6 @@ let foxParse = (function(){
           }
         }
         _result.count = _command.count;
-        //_result.easing = (_command.easing !== undefined ? _command.easing : "linear");
       }
       // targetsの内容を同じ名前のプロパティにセットする。
       // countがある場合はeasingで変化させる。
@@ -369,40 +328,62 @@ let foxParse = (function(){
       });
     }
     registDefaultEasing(){
-      this.registEasing("linear", x => x);
-      this.registEasing("easeInSine", x => 1-Math.cos(0.5*Math.PI*x));
-      this.registEasing("easeOutSine", x => Math.sin(0.5*Math.PI*x));
-      this.registEasing("easeInOutSine", x => 0.5*(1-Math.cos(Math.PI*x)));
-      this.registEasing("easeInQuad", x => x*x);
-      this.registEasing("easeOutQuad", x => 1-(1-x)*(1-x) );
-      this.registEasing("easeInOutQuad", x => (x < 0.5 ? 2*x*x : 1-0.5*Math.pow(2-2*x,2)));
-      this.registEasing("easeInCubic", x => x*x*x);
-      this.registEasing("easeOutCubic", x => 1-Math.pow(1-x,3));
-      this.registEasing("easeInOutCubic", x => (x < 0.5 ? 4*x*x*x : 1-0.5*Math.pow(2-2*x,3)));
-      this.registEasing("easeInQuart", x => x*x*x*x);
-      this.registEasing("easeOutQuart", x => 1-Math.pow(1-x,4));
-      this.registEasing("easeInOutQuart", x => (x < 0.5 ? 8*x*x*x*x : 1-0.5*Math.pow(2-2*x,4)));
-      this.registEasing("easeInQuint", x => x*x*x*x*x);
-      this.registEasing("easeOutQuint", x => 1-Math.pow(1-x,5));
-      this.registEasing("easeInOutQuint", x => (x < 0.5 ? 16*x*x*x*x*x : 1-0.5*Math.pow(2-2*x,5)));
-      this.registEasing("easeInExpo", x => (x > 0 ? Math.pow(2, 10*(x-1)) : 0)); // 2のべきなのね
-      this.registEasing("easeOutExpo", x => (x < 1 ? 1-Math.pow(2, -10*x) : 1));
-      this.registEasing("easeInOutExpo", x => (x < 1 ? (x > 0 ? (x < 0.5 ? 0.5*Math.pow(2, 20*x-10) : 0.5*(2-Math.pow(2, 10-20*x)) ) : 0) : 1));
-      this.registEasing("easeInCirc", x => 1-Math.sqrt(1-x*x));
-      this.registEasing("easeOutCirc", x => Math.sqrt(1-Math.pow(1-x,2)));
-      this.registEasing("easeInOutCirc", x => (x < 0.5 ? 0.5*(1-Math.sqrt(1-4*x*x)) : 0.5*(1+Math.sqrt(1-4*Math.pow(1-x,2)))));
-      // チートシートから...
-      // reference:https://easings.net/ja
-      this.registEasing("easeInBack", x => 2.70158*x*x*x - 1.70158*x*x);
-      this.registEasing("easeOutBack", x => 1 - 2.70158*Math.pow(1-x,3) + 1.70158*Math.pow(1-x,2));
-      this.registEasing("easeInOutBack", easeInOutBack);
-      this.registEasing("easeInElastic", easeInElastic);
-      this.registEasing("easeOutElastic", easeOutElastic);
-      this.registEasing("easeInOutElastic", easeInOutElastic);
-      this.registEasing("easeInBounce", easeInBounce);
-      this.registEasing("easeOutBounce", easeOutBounce);
-      this.registEasing("easeInOutBounce", easeInOutBounce);
-
+      const funcs = {};
+      const baseFuncs = {};
+      // まずSineとかQuadのInバージョンを作り...
+      // funcs.easeIn~~~はそのまま
+      // funcs.easeOut~~~はそれを加工
+      // funcs.easeInOut~~~も別の手法で加工
+      // 一通りできたらそれをさらに加工してRevを作る流れ。
+      funcs.linear = x => x; // これは特別。
+      baseFuncs.Sine = x => 1-Math.cos(0.5*Math.PI*x);
+      baseFuncs.Quad = x => x*x;
+      baseFuncs.Cubic = x => x*x*x;
+      baseFuncs.Quart = x => x*x*x*x;
+      baseFuncs.Quint = x => x*x*x*x*x;
+      baseFuncs.Expo = x => (x > 0 ? Math.pow(2, 10*(x-1)) : 0);
+      baseFuncs.Circ = x => 1-Math.sqrt(1-x*x);
+      baseFuncs.Back = x => 2.7*x*x*x - 1.7*x*x;
+      baseFuncs.Elastic = x => {
+        if(x>0 && x<1){
+          const c4 = (2 * Math.PI) / 3;
+          return -Math.pow(2, 10 * x - 10) * Math.sin((x * 10 - 10.75) * c4);
+        }
+        if(x>0){ return 1; }
+        return 0;
+      }
+      const easeOutBounce = x => {
+        const n1 = 7.5625;
+        const d1 = 2.75;
+        if(x < 1 / d1){
+          return n1 * x * x;
+        }else if (x < 2 / d1){
+          return n1 * (x -= 1.5 / d1) * x + 0.75;
+        }else if (x < 2.5 / d1){
+          return n1 * (x -= 2.25 / d1) * x + 0.9375;
+        }
+        return n1 * (x -= 2.625 / d1) * x + 0.984375;
+      }
+      baseFuncs.Bounce = x => 1-easeOutBounce(1-x);
+      let names = ["linear"];
+      for(let funcName of Object.keys(baseFuncs)){
+        const f = baseFuncs[funcName];
+        funcs["easeIn"+funcName] = f;
+        funcs["easeOut"+funcName] = (x => 1-f(1-x));
+        funcs["easeInOut"+funcName] = (x => (x < 0.5 ? 0.5*f(2*x) : 1-0.5*f(2*(1-x))));
+        names.push(...["easeIn"+funcName,"easeOut"+funcName,"easeInOut"+funcName]);
+      }
+      // Reverse:0.5の間に1まで行って1で0に戻る
+      let revs = [];
+      for(let name of names){
+        const f = funcs[name];
+        funcs[name+"Rev"] = (x => (x < 0.5 ? f(2*x) : f(2*(1-x))));
+        revs.push(name+"Rev");
+      }
+      names.push(...revs);
+      for(let name of names){
+        this.registEasing(name, funcs[name]);
+      }
     }
     parsePatternSeed(seed){
       // globalについてはそのまま移植でいいと思うとりあえずは
