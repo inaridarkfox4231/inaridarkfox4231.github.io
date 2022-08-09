@@ -12,6 +12,11 @@
 // relもイージング作った。
 // 20220808
 // イージング増やしたよ
+// 20220809
+// イージング周りを整理。Revを追加。
+// 20220810
+// Unitのinitializeにthis.action=ptn.actionを記述
+// 最低でもそれくらいはやってほしいのです
 
 let foxParse = (function(){
 
@@ -618,6 +623,7 @@ let foxParse = (function(){
     }
     initialize(ptn){
       // ptnの内容に応じて初期化
+      this.action = ptn.action; // 最低限。
     }
     execute(){
       if(this.action.length > 0 && this.actionIndex < this.action.length){
