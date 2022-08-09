@@ -17,6 +17,8 @@
 // 20220810
 // Unitのinitializeにthis.action=ptn.actionを記述
 // 最低でもそれくらいはやってほしいのです
+// expandFunctionのデフォルトとしてchoicesを実装
+// これで分岐処理が簡潔に書けるようになった
 
 let foxParse = (function(){
 
@@ -128,6 +130,8 @@ let foxParse = (function(){
       this.registDefaultParser(); // wait,catch,loopは備え付け...
       this.registDefaultExecutor(); // set,add,wait,catch,loopです
       this.registDefaultEasing(); // linearなどいろいろ
+      this.registDefaultExpansion(); // デフォルト展開関数
+      this.exId = 0; // expand用の通し番号
     }
     registParser(_key, func){
       this.parseFunction[_key] = func;
@@ -390,6 +394,31 @@ let foxParse = (function(){
         this.registEasing(name, funcs[name]);
       }
     }
+    registDefaultExpansion(){
+      // デフォルトマクロとしてchoicesを実装する
+      // 内容としてはいずれかのactionを実行する感じ
+      // data[アクション名]でそこまでに完成したactionを
+      // 参照できる仕組み
+      this.registExpansion("choices", (seed, data) => {
+        // seed.choicesは配列でそれらを...
+        let result = [];
+        let jumpIds = [];
+        const actionNames = seed.choices;
+        const L = actionNames.length;
+        for(let i=0; i<L; i++){
+          jumpIds.push("extend" + (this.exId++));
+        }
+        const escapeId = "extend" + this.exId++;
+        result.push({jump:jumpIds});
+        for(let i=0; i<L; i++){
+          result.push({catch:jumpIds[i]});
+          result.push(...data[actionNames[i]]);
+          result.push({jump:escapeId});
+        }
+        result.push({catch:escapeId});
+        return result;
+      });
+    }
     parsePatternSeed(seed){
       // globalについてはそのまま移植でいいと思うとりあえずは
       let ptn = {};
@@ -488,25 +517,17 @@ let foxParse = (function(){
     expandPatternData(preData, seedArray){
       // いわゆるマクロ
       // action:"uuu" で preData.uuuを放り込むような場合にpreDataが役に立つイメージ。
-      // $記法を使おう。たとえば{$line:{~~~}}とかそんな感じ
-      // {$line:{~~~}}ならexpandFunction["line"]が使われる...とか。
       // 言葉の乱用がひどい（
       let result = [];
       for(let i = 0; i < seedArray.length; i++){
         const seed = seedArray[i];
-        const name = getTopKey(seed); // $かどうか見る
-        if(name[0] == "$"){
-          // たとえば略記では{$line:~~~}となる場合、
-          // 格納されているのはlineのところだからして、
-          // sliceを使うが、nameは変更されない、
-          // そして情報はseed.nameに入っているので問題なしってわけ。
-          const expanded = this.expandFunction[name.slice(1)](name, seed, preData);
-          result.push(...expanded);
+        const name = getTopKey(seed);
+        // nameが特定の予約語の場合に展開関数を使う
+        if(this.expandFunction[name] !== undefined){
+          result.push(...this.expandFunction[name](seed, preData));
         }else{
           result.push(seed);
         }
-        //result.push(seed); // とりあえずこれでいいよ...
-        // 場合によってはマクロでいじる。
       }
       return result;
     }
