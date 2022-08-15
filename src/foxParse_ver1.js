@@ -80,6 +80,41 @@
 // 誤作動してた。まじか....
 // 気を付けよう...
 
+// たとえばorbitと組み合わせるとか
+// orbitは位置を与える関数
+// unitがxとかyを持つことを前提とする感じで。
+// orbit:{func:~~,prop:[],count:~~,easing:~~}
+// countがInfinityの場合は永久周回ですね。たぶん。
+// ならないよ。
+// なりません...
+// propの長さの分だけfuncが0～1のtに対して一定の長さの
+// 配列を返すわけですけどそれに対して[]の中のpropertyを
+// それがunitが持っててそれに対応させることで汎用性を
+// 実現するという作戦なのです。OK？
+// だから色とかでも使えるってわけ。どう使うのか知らないけど。
+// 0～1オンリーでは柔軟性が皆無なので、
+// startとstopを定義できるようにしました。
+// たとえば0～TAUをPI/4刻みで8段階とかできますね。
+
+// さらにunitの何かに対して...
+// たとえばrel:"parent"とすることで
+// parent[target]を足した値にするなど。できるね。
+
+// 親を中心として円形軌道とかそういうことができる...はず...
+// 親が動いてる場合とかね...
+// はぁ、やっと。
+
+// nextも実装できたよ。
+// orbitと並んでさらに汎用性が高くなった。
+// あるいはそうね、jumpとconditionを組み合わせるなど。
+// ただそれに関してはある程度需要が高まるのを
+// 待った方がいいわね。
+
+// addSled, orbit, next.
+// これでも汎用性が保たれている...
+// cloneとかは汎用性を考えるのが難しいのよね。
+// だってジェネレータの場合もあるでしょうし。難しいのよね。
+
 const foxParse = (function(){
 
   // utility.
@@ -284,6 +319,24 @@ const foxParse = (function(){
       this.registParser("addSled", (data, command) => {
         return {name:"addSled", action:data[command.addSled]};
       });
+      // orbit.関数で軌道を制御。色とかにも使用可能。
+      // startとstopで端っこを自由に指定（デフォ0～1）
+      // targetsで変化させたいプロパティ名を指定
+      // もちろん3次元でも4次元でもいくらでも。
+      this.registParser("orbit", (data, command) => {
+        const _easing = (command.easing === undefined ? "linear" : command.easing);
+        const _start = (command.start === undefined ? 0 : command.start);
+        const _stop = (command.stop === undefined ? 1 : command.stop);
+        return {name:"orbit", func:command.orbit, count:command.count, targets:command.targets, easing:_easing, start:_start, stop:_stop, rel:command.rel};
+      });
+      // next.
+      // conditionがfalseである限り沈黙し続ける。
+      // trueになった時にすべてのsledを消去したうえで
+      // 登録されたactionから生成されたsledを
+      // 単独で用意させる感じですね。
+      this.registParser("next", (data, command) => {
+        return {name:"next", action:data[command.next], condition:command.condition};
+      });
     }
     registDefaultExecutor(){
       // set,add,relで配列指定の場合はcountやeasingと
@@ -407,6 +460,49 @@ const foxParse = (function(){
         unit.addSled(command.action);
         sled.step();
         return true;
+      });
+      // orbit.というか関数。
+      // 複数の値を持つ配列を返す形で、それに応じて
+      // unitのpropertyを変化させる。なので位置だけで
+      // なくrgbとかいろんなものを複雑に変化させる
+      // ことができる...はず。
+      this.registExecutor("orbit", (unit, command, sled) => {
+        let indexAdvanceFlag = true; // 進めるかどうか
+        const cc = sled.getLoopCount();
+        const ease = this.easingFunction[command.easing];
+        const N = command.targets.length;
+        let t = ease(cc/command.count);
+        t = command.start + t * (command.stop - command.start);
+        const value = command.func(t);
+        for(let i = 0; i < N; i++){
+          const target = command.targets[i];
+          const offset = (command.rel === undefined ? 0 : unit[command.rel][target]);
+          unit[target] = offset + value[i];
+        }
+        indexAdvanceFlag = sled.loopCheck(command.count);
+        // 進める
+        if(indexAdvanceFlag){ sled.step(); }
+        return indexAdvanceFlag;
+      });
+      // next.
+      // これ、sledsを置き換えちゃうから、一番最初に
+      // 登録しないとやばいね。
+      // 常に最後に評価されるようにしないとだね。
+      // もしくは「nextは1つまで」という規約を
+      // 設けたうえで最初に持ってくるとか。
+      // バリエーションとしては複数のconditionを用意して
+      // unionとかcapで評価するなど。
+      this.registExecutor("next", (unit, command, sled) => {
+        const flag = command.condition(unit);
+        if(!flag){ return false; }
+        unit.sleds = [];
+        unit.addSled(command.action);
+        // この時点ではまだ本来のsledにいる
+        // unit.sledsを空にしたからと言ってなくなるわけでは
+        // ないしloopを抜けなければ次の処理に行けない。
+        sled.step();
+        // 常に抜ける。
+        return false;
       });
     }
     registDefaultEasing(){
@@ -744,29 +840,27 @@ const foxParse = (function(){
       // sledの追加。
       // 具体的にはexecutorのデフォルトを増やして、
       // 今まで通りパターン内のactionに追加する形で、{parallel:"アクション名"}で単純に追加、でいいんじゃないかなと。
-      // 終わったら勝手に削除されるから削除する方は特に用意しなくていいかな。
-      this.sleds.push(new Sled(action));
+      const newSled = new Sled(action);
+      this.sleds.push(newSled);
     }
     execute(){
       const L = this.sleds.length;
       for(let i=L-1; i>=0; i--){
         const currentSled = this.sleds[i];
+        // ここのタイミングでcurrentSled.currentCommand.name==="next"かどうかを見る
+        // 見たうえでrunningがfalseになるならばそれはnextが発動したということなので
+        // そこでこの処理を終了させる。
+        // isNextはrunning中でないと取得できない！
         if(currentSled.running){
+          const isNext = (currentSled.currentCommand.name === "next");
           currentSled.execute(this);
+          // ここ。
+          // sledsが書き換えられたのならそれ以上の処理は行わない。
+          if(isNext && !currentSled.running){ break; }
           continue;
         }
         this.sleds.splice(i, 1); // 終わったスレッドを排除
       }
-      /*
-      if(this.action.length > 0 && this.actionIndex < this.action.length){
-        let continueFlag = true;
-        while(continueFlag){
-          const command = this.action[this.actionIndex];
-          continueFlag = command.execute(this, command); // flagがfalseを返すときに抜ける
-          if(this.actionIndex === this.action.length){ break; }
-        }
-      }
-      */
     }
   }
 
