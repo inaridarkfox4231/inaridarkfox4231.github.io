@@ -155,6 +155,14 @@ ObjectPoolのuseでgrowするときに
 バグってたのを
 直しました。
 */
+/*
+killを実装
+バリエーションは勝手に作ってね(condition次第でkillするなど)
+まあconditionだけ用意するか(pauseとか)
+あと
+setDurationCountで非整数を許さないように仕様変更
+これが一番手っ取り早いので
+*/
 
 const foxParse = (function(){
 
@@ -316,6 +324,12 @@ const foxParse = (function(){
     getUseIndex(){
       return this.useIndex;
     }
+    getCapacity(){
+      return this.capacity;
+    }
+    isEmpty(){
+      return this.useIndex === this.capacity;
+    }
     loop(methodName,arg=[]){
       for(let i=0;i<this.capacity;i++){
         const _poolable = this.pool[i];
@@ -450,8 +464,12 @@ const foxParse = (function(){
         return {name:"wait", durationCount:command.wait};
       });
       this.registParser("pause", (data, command) => {
+        let _func = command.pause;
         // conditionに関数を設定し、それがtrueを返す間処理を止める。
-        return {name:"pause", condition:command.condition};
+        if(typeof(_func) !== "function"){
+          _func = (unit) => true; // ずっと停止がデフォ
+        }
+        return {name:"pause", condition:_func};
       });
       this.registParser("catch", (data, command) => {
         return {name:"catch"};
@@ -462,6 +480,14 @@ const foxParse = (function(){
       // command.jumpとcommand.probはすでに配列化してある
       this.registParser("jump", (data, command) => {
         return {name:"jump", jump:command.jump, prob:command.prob};
+      });
+      // kill. 関数を引数に取り、trueを返すならばkillする。
+      this.registParser("kill", (data, command) => {
+        let _func = command.kill;
+        if(typeof(_func) !== "function"){
+          _func = (unit) => true;
+        }
+        return {name:"kill", condition:_func};
       });
 
       // addSledこうする
@@ -483,9 +509,6 @@ const foxParse = (function(){
         const _stop = (command.stop === undefined ? 1 : command.stop);
         return {name:"orbit", func:command.orbit, durationCount:command.count, targets:command.targets, easing:_easing, start:_start, stop:_stop};
       });
-
-      // next.
-      // next一旦廃止
     }
     registDefaultExecutor(){
       // set,add,relで配列指定の場合はdurationCountやeasingと
@@ -635,6 +658,13 @@ const foxParse = (function(){
             break;
           }
         }
+        return true;
+      });
+
+      // 周回条件ですね。何度も通り過ぎる。立ち止まらない。
+      // pauseで内容をいじれば立ち止まるkillも作れるけど。
+      this.registExecutor("kill", (unit, command, sled) => {
+        if(command.condition(unit)){ unit.kill(); sled.step(); }
         return true;
       });
 
@@ -1203,7 +1233,8 @@ const foxParse = (function(){
       this.count = 0;
     }
     setDurationCount(n){
-      this.durationCount = n;
+      // 非整数は許さない
+      this.durationCount = Math.floor(n);
     }
     stepCount(){
       this.count++;
