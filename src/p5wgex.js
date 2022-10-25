@@ -148,6 +148,21 @@ const p5wgex = (function(){
       }
       return window.performance.now() - this.timers[keyName].stump;
     }
+    getDeltaDiscrete(keyName, interval = 1000, modulo = 1){
+      // deltaをintervalで割ってfloorした結果を返す。
+      // moduloが1より大きい場合はそれで%を取る。1の場合はそのまま整数を返す。
+      // たとえば250であれば0,1,2,3,...と1秒に4増えるし、moduloを4にすれば0,1,2,3,0,1,2,3,...となるわけ。
+      if(this.timers[keyName] === undefined){
+        window.alert("getDeltaDiscrete failure: invalid name");
+        return null;
+      }
+      const _delta = window.performance.now() - this.timers[keyName].stump;
+      const n = Math.floor(_delta / interval);
+      if(modulo > 1){
+        return n % modulo;
+      }
+      return n;
+    }
     check(keyName, nextDuration){
       // durationを経過時間が越えたらstumpを更新する
       // nextDurationは未定義なら同じ値を継続
@@ -1030,6 +1045,8 @@ const p5wgex = (function(){
       const s = 1 - Math.cos(theta);
       const t = Math.cos(theta);
       const u = Math.sin(theta);
+      // GLSL内部の計算に準拠して0,1,2で左、3,4,5で中央、6,7,8で右の列。それを自身を列ベクトルとみなして
+      // それに掛けているイメージですね。迷ったらvを(0,0,1)にしましょう。理屈はちゃんとあります（クォータニオン）
       this.multMat([
         s*a*a + t,   s*a*b + u*c, s*a*c - u*b,
         s*a*b - u*c, s*b*b + t,   s*b*c + u*a,
@@ -1081,7 +1098,7 @@ const p5wgex = (function(){
       if(b === undefined){ b = a; }
       if(c === undefined){ c = b; }
       r.x = a; r.y = b; r.z = c;
-    }else if(Array.isArray(a)){
+    }else if(a instanceof Array || a instanceof Float32Array || a instanceof Uint8Array){
       if(a[0] === undefined){ a[0] = _default; }
       if(a[1] === undefined){ a[1] = a[0]; }
       if(a[2] === undefined){ a[2] = a[1]; }
@@ -1711,14 +1728,15 @@ const p5wgex = (function(){
       }
       return this;
     }
-    bufferSubData(attrName, targetName, srcData, srcOffset = 0){
+    bufferSubData(attrName, targetName, dstByteOffset, srcData, srcOffset = 0){
       // いわゆる動的更新。currentFigureに対し、それがもつ属性の名前と放り込む際に使う配列を渡して更新させる。
-      // srcOffsetは何処から読むか、ということのようです。
       // targetNameは array_buf: ARRAY_BUFFER で element_buf: ELEMENT_ARRAY_BUFFER ということですね。OK!
+      // srcOffsetは常に0でいいですね。dstByteOffseyは何処のバイトから書き換えるか。srcDataのデータでそれを
+      // 置き換える。たとえばfloat vec4で1番を置き換えるなら16を指定する。
       const vbos = this.currentFigure.getVBOs();
       const vbo = vbos[attrName];
       this.gl.bindBuffer(this.dict[targetName], vbo.buf);
-      this.gl.bufferSubData(this.dict[targetName], 0, srcData, srcOffset); // srcDataはFloat32Arrayの何か
+      this.gl.bufferSubData(this.dict[targetName], dstByteOffset, srcData, srcOffset); // srcDataはFloat32Arrayの何か
       return this;
     }
     setTexture2D(name, _texture){
@@ -1999,6 +2017,47 @@ const p5wgex = (function(){
       const data = getTranspose4x4(this.m);
       this.set(data);
     }
+    apply(v, transpose = true, copy = false){
+      // Vec3型のvに掛け算。ただし転置して左上の3x3を適用する。
+      // 基本転置したものを適用する。falseの場合はそうではない。
+      // copyがtrueの場合はvを変化させずに新しいVec3を返す。転置がデフォなのはGLSLの都合。
+      let w;
+      if(copy){
+        w = new Vec3();
+      }else{
+        w = v;
+      }
+      const {x, y, z} = v;
+      const m = this.m;
+      if(transpose){
+        w.set(m[0]*x + m[4]*y + m[8]*z, m[1]*x + m[5]*y + m[9]*z, m[2]*x + m[6]*y + m[10]*z);
+      }else{
+        w.set(m[0]*x + m[1]*y + m[2]*z, m[4]*x + m[5]*y + m[6]*z, m[8]*x + m[9]*y + m[10]*z);
+      }
+      return w;
+    }
+    applyProj(v, transpose = true, copy = false){
+      // Vec3型の行列に対し、[v.x, v.y, v.z, 1]としてVec4を作りそれに適用した結果を第4成分で割って、
+      // 残りの成分としてのVec3を返す。copyがtrueの場合はvを変化させずに元のやつを返す。転置がデフォなのは(ry
+      let w;
+      if(copy){
+        w = new Vec3();
+      }else{
+        w = v;
+      }
+      const {x, y, z} = v;
+      const m = this.m;
+      let divider = 0;
+      if(transpose){
+        w.set(m[0]*x + m[4]*y + m[8]*z + m[12],  m[1]*x + m[5]*y + m[9]*z + m[13], m[2]*x + m[6]*y + m[10]*z + m[14]);
+        divider = m[3]*x + m[7]*y + m[11]*z + m[15];
+      }else{
+        w.set(m[0]*x + m[1]*y + m[2]*z + m[3],   m[4]*x + m[5]*y + m[6]*z + m[7], m[8]*x + m[9]*y + m[10]*z + m[11]);
+        divider = m[12]*x + m[13]*y + m[14]*z + m[15];
+      }
+      w.divide(divider); // dividerで割る
+      return w;
+    }
     rotateX(t){
       // x軸の周りにtラジアン回転の行列を掛ける
       const data = getRotX(t);
@@ -2227,6 +2286,43 @@ const p5wgex = (function(){
 
   // 新カメラ。
   // infoの指定の仕方、topは常に正規化、Vec3で統一、ローカル軸の名称変更、動かすメソッド追加, etc...
+
+  // バリデーション忘れてた。ごめん。
+  function _validateForPersProj(w, h, info = {}){
+    // 基本pers. nearとfarはdistanceに対する比率
+    if(info.fov === undefined){ info.fov = Math.PI/3; }
+    if(info.aspect === undefined){ info.aspect = w/h; }
+    if(info.near === undefined){ info.near = 0.1; }
+    if(info.far === undefined){ info.far = 10; }
+  }
+
+  function _validateForOrthoProj(w, h, info = {}){
+    // farは一応distanceの4倍くらいで。
+    if(info.left === undefined){ info.left = -w/2; }
+    if(info.right === undefined){ info.right = w/2; }
+    if(info.bottom === undefined){ info.bottom = -h/2; }
+    if(info.top === undefined){ info.top = h/2; }
+    if(info.near === undefined){ info.near = 0.01; }
+    if(info.far === undefined){ info.far = 4; }
+  }
+
+  function _validateForFrustumProj(w, h, info = {}){
+    const h0 = Math.tan(Math.PI/6) * 0.1; // distanceの値に対する比率
+    const w0 = h0 * w/h; // そこにaspect比を掛ける
+    if(info.left === undefined){ info.left = -w0; }
+    if(info.right === undefined){ info.right = w0; }
+    if(info.bottom === undefined){ info.bottom = -h0; }
+    if(info.top === undefined){ info.top = h0; }
+    if(info.near === undefined){ info.near = 0.1; }
+    if(info.far === undefined){ info.far = 10; }
+  }
+
+  // ユーティリティを追加します
+  // まずgetViewPosition(p): これは設定されたカメラの情報を元にglobalのpからview座標を出す
+  // getNDC(p): これはglobalのpから正規化デバイスの座標を出す（ついでに-1～1の深度も出す）
+  // getViewFromNDC(x, y): これはNDCのx,yからz座標が1であるようなビュー座標を出す
+  // getParallelPosition(p, x, y): これはglobalのpに対してそれと同じビュー座標におけるzを持ち
+  // さらにNDCがx,yであるようなグローバルポジションを返す。以上。
   class CameraEx{
     constructor(info = {}){
       this.eye = new Vec3();
@@ -2268,25 +2364,18 @@ const p5wgex = (function(){
       // topとは概念が異なる。これらはtopに常に制約を受ける。具体的にはtopを越えることが許されない（ゆえに「top」）.
       this.calcViewMat();
       // ------ projection part ------ //
-      if(info.pers === undefined){
-        // 基本pers. nearとfarはdistanceに対する比率
-        this.projData.pers = {fov:Math.PI/3, aspect:w/h, near:0.1, far:10};
-      }else{
-        this.projData.pers = info.pers;
-      }
-      if(info.ortho === undefined){
-        // farは一応distanceの4倍くらいで。
-        this.projData.ortho = {left:-w/2, right:w/2, bottom:-h/2, top:h/2, near:0, far:4};
-      }else{
-        this.projData.ortho = info.ortho;
-      }
-      if(info.frustum === undefined){
-        const h0 = Math.tan(Math.PI/6) * 0.1; // distanceの値に対する比率
-        const w0 = h0 * w/h; // そこにaspect比を掛ける
-        this.projData.frustum = {left:-w0, right:w0, bottom:-h0, top:h0, near:0.1, far:10};
-      }else{
-        this.projData.frustum = info.frustum;
-      }
+      if(info.pers === undefined){ info.pers = {}; }
+      _validateForPersProj(w, h, info.pers);
+      this.projData.pers = info.pers;
+
+      if(info.ortho === undefined){ info.ortho = {}; }
+      _validateForOrthoProj(w, h, info.ortho);
+      this.projData.ortho = info.ortho;
+
+      if(info.frustum === undefined){ info.frustum = {}; }
+      _validateForFrustumProj(w, h, info.frustum);
+      this.projData.frustum = info.frustum;
+
       this.calcPersMat();
       this.calcOrthoMat();
       this.calcFrustumMat();
@@ -2569,6 +2658,50 @@ const p5wgex = (function(){
       this.calcDistance();
       this.calcViewMat();
     }
+    getViewPosition(p){
+      // pはVec3です。View座標を出します。eyeを引いてviewMatをapplyするだけ！
+      p.sub(this.eye);
+      return this.viewMat.apply(p);
+    }
+    getNDC(p){
+      // pはVec3です。NDC出します。
+      const q = this.getViewPosition(p);
+      return this.getProjMat().applyProj(q);
+    }
+    getViewFromNDC(x, y, z = 1){
+      // NDCからView座標を算出する。z値はこっちで決める。デフォの場合、結果はz値が1の時のものとなる。
+      // って思ったけどよく考えたらOrthoの場合は錐体じゃないからこの方法だと簡単に外に出てしまうね
+      // OrthoってViewにおける座標、x,yだけなんよ。zによらないのです。だからzを掛けちゃいけないのよ。
+      const m = this.getProjMat().m;
+      // projのモードで場合分け。疎行列なので計算はとても簡単なのです。
+      let u, v;
+      switch(this.projData.mode){
+        case "pers":
+          u = -x/m[0]; v = -y/m[5]; break;
+        case "ortho":
+          u = (x-m[12])/m[0]; v = (y-m[13])/m[5]; break;
+        case "frustum":
+          u = (-m[8]-x)/m[0]; v = (-m[9]-y)/m[5]; break;
+      }
+      const result = new Vec3(u, v, 1);
+      if(this.projData.mode === "ortho"){
+        result.z = z;   // orthoの場合はz成分をzにするだけ
+      }else{
+        result.mult(z); // pers, frustumの場合はzが比例定数になる
+      }
+      return result;
+    }
+    getParallelPosition(p, x, y){
+      // グローバルのpに対し正規化デバイス座標が(x,y)であるようなグローバルの点qを返す。これは一意のはずである。
+      // はじめにpのviewを出して。
+      const pView = this.getViewPosition(p);
+      // それのzを持つView空間の点を求めて
+      const q = this.getViewFromNDC(x, y, pView.z);
+      // 引き戻す。それにはviewMatをtransposeを適用せずに掛けてeyeを足せばいい...はず。
+      this.viewMat.apply(q, false);
+      q.add(this.eye);
+      return q;
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
@@ -2680,6 +2813,7 @@ const p5wgex = (function(){
   // axisHelper（座標軸を長さ指定して可視化）
   // cameraHelper（種類に応じてfrustumを可視化）
   // customRectHelper（自由に直方体を指定して辺描画で位置を可視化）
+  // data格納用のシェーダ欲しいですね...欲しい...めんどくさい...
   ex.copyPainter = copyPainter;
 
   return ex;
