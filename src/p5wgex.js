@@ -1218,9 +1218,23 @@ const p5wgex = (function(){
     // view.
     if(info.view === undefined){
       info.view = {x:0, y:0, w:1, h:1};
+    }else if(Array.isArray(info.view)){
+      // 配列でも指定できた方がいいよねぇ
+      info.view = {x:info.view[0], y:info.view[1], w:info.view[2], h:info.view[3]};
     }
     // 汎用処理。左下ベースにする。
     _validateForView(info.view, info.align);
+
+    // opacity. sourceColor計算後にaに掛ける。
+    if(info.opacity === undefined){ info.opacity = 1; }
+    // uvShift. uvをずらしたい場合。textureはmirrorやrepeatを付けておかないとね。
+    if(info.uvShift === undefined){ info.uvShift = [0,0]; }
+    // gradationStart. グラデーションのスタート。デフォは(0,0,0,0,0).
+    // (u,v,r,g,b)で、(u,v)が起点となる。(r,g,b)から変化していく。
+    // gradationStop. グラデーションのストップ。デフォは(1,1,0,0,0).
+    // (u,v,r,g,b)で、(u,v)が終点となる。(r,g,b)で終わる。smoothstepを使う。
+    if(info.gradationStart === undefined){ info.gradationStart = [0,0,0,0,0,0]; }
+    if(info.gradationStop === undefined){ info.gradationStop = [0,0,0,0,0,0]; }
 
     // attachとcolorはfbの場合。indexはMRTの場合。
     if(info.type === "fb"){
@@ -1234,7 +1248,7 @@ const p5wgex = (function(){
 
   function _validateForCopy(info = {}){
     if(info.dst === undefined){
-      info.dst = {type:null, swap:false};
+      info.dst = {type:null};
     }
     if(info.dst.type === "fb" && info.dst.name === undefined){
       window.alert("validateForCopy error: invalid fbo name.");
@@ -1276,12 +1290,22 @@ const p5wgex = (function(){
     in vec2 aUv;
     uniform bool uFlips[8];
     uniform vec4 uViews[8];
+    uniform float uOpacity[8];
+    uniform vec2 uUvShift[8];
+    uniform vec4 uGradationAnchor[8];
+    uniform vec4 uStartColor[8];
+    uniform vec4 uStopColor[8];
     out vec2 vUv;
-    out float vBoardIndex; // intを渡す場合、flat修飾子が無いとエラーになるようです。
+    out float vBoardIndex; // intを渡すのは修行不足で出来ませんでした。
+    out float vOpacity;
+    out vec4 vGradationAnchor;
+    out vec4 vStartColor;
+    out vec4 vStopColor;
     void main(){
       float boardIndex = floor(aIndex / 4.0);
-      bool flip = uFlips[int(boardIndex)];
-      vec4 view = uViews[int(boardIndex)];
+      int index = int(boardIndex);
+      bool flip = uFlips[index];
+      vec4 view = uViews[index];
       float pointIndex = mod(aIndex, 4.0);
       vec2 p;
       // -1.0～1.0ベースで考えるんだっけね...つまり2倍して1を引く。
@@ -1294,8 +1318,13 @@ const p5wgex = (function(){
       }else{
         vUv = aUv;
       }
+      vUv -= uUvShift[index]; // uvをshiftさせる場合。マイナスするのはいわゆる「平行移動の原理」ってやつ。
       gl_Position = vec4(p, 0.0, 1.0);
       vBoardIndex = boardIndex;
+      vOpacity = uOpacity[index];
+      vGradationAnchor = uGradationAnchor[index];
+      vStartColor = uStartColor[index];
+      vStopColor = uStopColor[index];
     }
     `;
     // テクスチャを配列にするのはめんどくさい処理なので直書きでOKです。
@@ -1304,6 +1333,10 @@ const p5wgex = (function(){
     precision mediump float;
     in vec2 vUv;
     in float vBoardIndex;
+    in float vOpacity;
+    in vec4 vGradationAnchor;
+    in vec4 vStartColor;
+    in vec4 vStopColor;
     uniform sampler2D uTex0;
     uniform sampler2D uTex1;
     uniform sampler2D uTex2;
@@ -1313,16 +1346,32 @@ const p5wgex = (function(){
     uniform sampler2D uTex6;
     uniform sampler2D uTex7;
     out vec4 fragColor;
+    // ちょっとしたポストエフェクト
+    void addGradation(in vec2 p, inout vec4 result){
+      vec2 start = vGradationAnchor.xy;
+      vec2 stop = vGradationAnchor.zw;
+      vec2 n = normalize(stop - start);
+      float ratio = clamp(dot(p-start, n) / length(stop - start), 0.0, 1.0);
+      vec4 gradColor = (1.0-ratio)*vStartColor + ratio*vStopColor;
+      // アルファブレンド。これでいいのかは不明。
+      result += (1.0 - result.a) * gradColor;
+    }
+    // メイン
     void main(){
       float i = vBoardIndex;
-      if(i == 0.0){ fragColor = texture(uTex0, vUv); }
-      if(i == 1.0){ fragColor = texture(uTex1, vUv); }
-      if(i == 2.0){ fragColor = texture(uTex2, vUv); }
-      if(i == 3.0){ fragColor = texture(uTex3, vUv); }
-      if(i == 4.0){ fragColor = texture(uTex4, vUv); }
-      if(i == 5.0){ fragColor = texture(uTex5, vUv); }
-      if(i == 6.0){ fragColor = texture(uTex6, vUv); }
-      if(i == 7.0){ fragColor = texture(uTex7, vUv); }
+      vec4 result;
+      if(i == 0.0){ result = texture(uTex0, vUv); }
+      if(i == 1.0){ result = texture(uTex1, vUv); }
+      if(i == 2.0){ result = texture(uTex2, vUv); }
+      if(i == 3.0){ result = texture(uTex3, vUv); }
+      if(i == 4.0){ result = texture(uTex4, vUv); }
+      if(i == 5.0){ result = texture(uTex5, vUv); }
+      if(i == 6.0){ result = texture(uTex6, vUv); }
+      if(i == 7.0){ result = texture(uTex7, vUv); }
+      result.a *= vOpacity;
+      addGradation(vUv, result);
+      if(result.a < 0.001){ discard; }
+      fragColor = result;
     }
     `;
     return {v:vs, f:fs};
@@ -1369,7 +1418,12 @@ const p5wgex = (function(){
 
     // uniformの準備
     const flips = new Array(8);
-    const views = new Array(8);
+    const views = new Array(4*8);
+    const opacities = new Array(8); // 透明度補正
+    const uvShifts = new Array(2*8); // uvScroll
+    const gradAnchors = new Array(4*8); // グラデーションのアンカー
+    const startColors = new Array(4*8); // 開始色
+    const stopColors = new Array(4*8); // 終了色
     const count = _src.length;
     for(let i=0; i<count; i++){
       const _srcData = _src[i];
@@ -1382,12 +1436,25 @@ const p5wgex = (function(){
         node.setFBOtexture2D("uTex" + i, _srcData.name, _srcData.attach, _srcData.index);
       }
       flips[i] = _srcData.flip;
-      views[i] = [x, y, w, h]; // flatする
+      views[4*i] = x; views[4*i+1] = y; views[4*i+2] = w; views[4*i+3] = h;
+      opacities[i] = _srcData.opacity;
+      uvShifts[2*i] = _srcData.uvShift[0]; uvShifts[2*i+1] = _srcData.uvShift[1];
+      const gs = _srcData.gradationStart;
+      const gp = _srcData.gradationStop;
+      gradAnchors[4*i] = gs[0]; gradAnchors[4*i+1] = gs[1]; gradAnchors[4*i+2] = gp[0]; gradAnchors[4*i+3] = gp[1];
+      startColors[4*i] = gs[2]; startColors[4*i+1] = gs[3]; startColors[4*i+2] = gs[4]; startColors[4*i+3] = gs[5];
+      stopColors[4*i] = gp[2];  stopColors[4*i+1] = gp[3];  stopColors[4*i+2] = gp[4]; stopColors[4*i+3] = gp[5];
     }
     node.setUniform("uFlips", flips);
-    node.setUniform("uViews", views.flat());
+    node.setUniform("uViews", views);
+    node.setUniform("uOpacity", opacities);
+    node.setUniform("uUvShift", uvShifts);
+    node.setUniform("uGradationAnchor", gradAnchors);
+    node.setUniform("uStartColor", startColors);
+    node.setUniform("uStopColor", stopColors);
 
-    node.drawArrays("triangle_strip", 0, _src.length * 4);
+    node.bindIBO("foxIBOForQuads");
+    node.drawElements("triangles");
     // 戻す
     if(info.depthOff){
       node.enable("depth_test");
@@ -1567,6 +1634,8 @@ const p5wgex = (function(){
         aUvArray[8*i+4] = 0; aUvArray[8*i+5] = 1; aUvArray[8*i+6] = 1; aUvArray[8*i+7] = 1;
       }
       this.registFigure("foxQuads", [{size:1, name:"aIndex", data:aIndexArray}, {size:2, name:"aUv", data:aUvArray}]);
+      this.registIBO("foxIBOForQuads", {data:[0,1,2, 2,1,3, 4,5,6, 6,5,7, 8,9,10, 10,9,11, 12,13,14, 14,13,15,
+                                        16,17,18, 18,17,19, 20,21,22, 22,21,23, 24,25,26, 26,25,27, 28,29,30, 30,29,31]});
     }
     clearColor(r, g, b, a){
       // clearに使う色を決めるところ
@@ -1889,7 +1958,7 @@ const p5wgex = (function(){
       this.gl.drawArrays(this.dict[mode], first, count);
       return this;
     }
-    drawElements(mode, count){
+    drawElements(mode){
       // typeとsizeがそのまま使えると思う
       const ibo = this.currentIBO;
       //mode = _parseDrawMode(this.gl, mode);
@@ -2668,10 +2737,12 @@ const p5wgex = (function(){
       const q = this.getViewPosition(p);
       return this.getProjMat().applyProj(q);
     }
-    getViewFromNDC(x, y, z = 1){
+    getViewPositionFromNDC(x, y, z = 1, centerBased = false){
       // NDCからView座標を算出する。z値はこっちで決める。デフォの場合、結果はz値が1の時のものとなる。
       // って思ったけどよく考えたらOrthoの場合は錐体じゃないからこの方法だと簡単に外に出てしまうね
       // OrthoってViewにおける座標、x,yだけなんよ。zによらないのです。だからzを掛けちゃいけないのよ。
+      // centerBasedはこれがtrueの場合zの代わりにz*this.distanceを使う、という意味。
+      // つまりcenterのところの平面におけるViewの位置が出るということ。3Dお絵描きに応用できそう。
       const m = this.getProjMat().m;
       // projのモードで場合分け。疎行列なので計算はとても簡単なのです。
       let u, v;
@@ -2684,6 +2755,7 @@ const p5wgex = (function(){
           u = (-m[8]-x)/m[0]; v = (-m[9]-y)/m[5]; break;
       }
       const result = new Vec3(u, v, 1);
+      if(centerBased){ z *= this.distance; } // centerBasedならzの代わりにz*this.distanceを使う。
       if(this.projData.mode === "ortho"){
         result.z = z;   // orthoの場合はz成分をzにするだけ
       }else{
@@ -2691,12 +2763,20 @@ const p5wgex = (function(){
       }
       return result;
     }
+    getGlobalPositionFromNDC(x, y, z = 1, cenetrBased = false){
+      // NDCが(x,y)でViewにおける深さがzであるようなGlobalの点の位置を取得する。3Dお絵描きに応用できそう。
+      const p = this.getViewPositionFromNDC(x, y, z, centerBased);
+      // viewの3x3部分の逆行列（＝転置）を掛けてeyeを足すだけ。ラクチン。
+      this.viewMat.apply(p, false);
+      p.add(this.eye);
+      return p;
+    }
     getParallelPosition(p, x, y){
       // グローバルのpに対し正規化デバイス座標が(x,y)であるようなグローバルの点qを返す。これは一意のはずである。
       // はじめにpのviewを出して。
       const pView = this.getViewPosition(p);
       // それのzを持つView空間の点を求めて
-      const q = this.getViewFromNDC(x, y, pView.z);
+      const q = this.getViewPositionFromNDC(x, y, pView.z);
       // 引き戻す。それにはviewMatをtransposeを適用せずに掛けてeyeを足せばいい...はず。
       this.viewMat.apply(q, false);
       q.add(this.eye);
