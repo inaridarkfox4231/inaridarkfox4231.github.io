@@ -1227,12 +1227,16 @@ const p5wgex = (function(){
 
     // opacity. sourceColor計算後にaに掛ける。
     if(info.opacity === undefined){ info.opacity = 1; }
+    // tintとambient.
+    if(info.tint === undefined){ info.tint = [1,1,1]; }
+    if(info.ambient === undefined){ info.ambient = [0,0,0]; }
     // uvShift. uvをずらしたい場合。textureはmirrorやrepeatを付けておかないとね。
     if(info.uvShift === undefined){ info.uvShift = [0,0]; }
     // gradationStart. グラデーションのスタート。デフォは(0,0,0,0,0).
     // (u,v,r,g,b)で、(u,v)が起点となる。(r,g,b)から変化していく。
     // gradationStop. グラデーションのストップ。デフォは(1,1,0,0,0).
     // (u,v,r,g,b)で、(u,v)が終点となる。(r,g,b)で終わる。smoothstepを使う。
+    if(info.gradationFlag === undefined){ info.gradationFlag = 0; } // none.
     if(info.gradationStart === undefined){ info.gradationStart = [0,0,0,0,0,0]; }
     if(info.gradationStop === undefined){ info.gradationStop = [0,0,0,0,0,0]; }
 
@@ -1291,19 +1295,25 @@ const p5wgex = (function(){
     uniform bool uFlips[8];
     uniform vec4 uViews[8];
     uniform float uOpacity[8];
+    uniform vec3 uTint[8];
+    uniform vec3 uAmbient[8];
     uniform vec2 uUvShift[8];
+    uniform int uGradationFlag[8];
     uniform vec4 uGradationAnchor[8];
     uniform vec4 uStartColor[8];
     uniform vec4 uStopColor[8];
     out vec2 vUv;
-    out float vBoardIndex; // intを渡すのは修行不足で出来ませんでした。
+    flat out int vIndex; // indexBufferで書き直したらflatでいけました。
     out float vOpacity;
+    out vec3 vTint;
+    out vec3 vAmbient;
+    flat out int vGradationFlag;
     out vec4 vGradationAnchor;
     out vec4 vStartColor;
     out vec4 vStopColor;
     void main(){
-      float boardIndex = floor(aIndex / 4.0);
-      int index = int(boardIndex);
+      int index = int(aIndex / 4.0);
+      //int index = int(boardIndex);
       bool flip = uFlips[index];
       vec4 view = uViews[index];
       float pointIndex = mod(aIndex, 4.0);
@@ -1320,8 +1330,11 @@ const p5wgex = (function(){
       }
       vUv -= uUvShift[index]; // uvをshiftさせる場合。マイナスするのはいわゆる「平行移動の原理」ってやつ。
       gl_Position = vec4(p, 0.0, 1.0);
-      vBoardIndex = boardIndex;
+      vIndex = int(index);
       vOpacity = uOpacity[index];
+      vTint = uTint[index];
+      vAmbient = uAmbient[index];
+      vGradationFlag = uGradationFlag[index];
       vGradationAnchor = uGradationAnchor[index];
       vStartColor = uStartColor[index];
       vStopColor = uStopColor[index];
@@ -1332,11 +1345,16 @@ const p5wgex = (function(){
     `#version 300 es
     precision mediump float;
     in vec2 vUv;
-    in float vBoardIndex;
+    flat in int vIndex;
     in float vOpacity;
+    in vec3 vTint;
+    in vec3 vAmbient;
+    flat in int vGradationFlag;
     in vec4 vGradationAnchor;
     in vec4 vStartColor;
     in vec4 vStopColor;
+    const int LINEAR_GRADIENT = 1;
+    const int RADIAL_GRADIENT = 2;
     uniform sampler2D uTex0;
     uniform sampler2D uTex1;
     uniform sampler2D uTex2;
@@ -1346,8 +1364,8 @@ const p5wgex = (function(){
     uniform sampler2D uTex6;
     uniform sampler2D uTex7;
     out vec4 fragColor;
-    // ちょっとしたポストエフェクト
-    void addGradation(in vec2 p, inout vec4 result){
+    // 線形グラデーション
+    void applyLinearGradient(in vec2 p, inout vec4 result){
       vec2 start = vGradationAnchor.xy;
       vec2 stop = vGradationAnchor.zw;
       vec2 n = normalize(stop - start);
@@ -1356,20 +1374,31 @@ const p5wgex = (function(){
       // アルファブレンド。これでいいのかは不明。
       result += (1.0 - result.a) * gradColor;
     }
+    // 放射状グラデーション
+    void applyRadialGradient(in vec2 p, inout vec4 result){
+      vec2 start = vGradationAnchor.xy;
+      vec2 stop = vGradationAnchor.zw;
+      float ratio = clamp(length(p - start)/length(stop - start), 0.0, 1.0);
+      vec4 gradColor = (1.0-ratio)*vStartColor + ratio*vStopColor;
+      result += (1.0 - result.a) * gradColor;
+    }
     // メイン
     void main(){
-      float i = vBoardIndex;
+      //int i = vBoardIndex;
       vec4 result;
-      if(i == 0.0){ result = texture(uTex0, vUv); }
-      if(i == 1.0){ result = texture(uTex1, vUv); }
-      if(i == 2.0){ result = texture(uTex2, vUv); }
-      if(i == 3.0){ result = texture(uTex3, vUv); }
-      if(i == 4.0){ result = texture(uTex4, vUv); }
-      if(i == 5.0){ result = texture(uTex5, vUv); }
-      if(i == 6.0){ result = texture(uTex6, vUv); }
-      if(i == 7.0){ result = texture(uTex7, vUv); }
+      if(vIndex == 0){ result = texture(uTex0, vUv); }
+      if(vIndex == 1){ result = texture(uTex1, vUv); }
+      if(vIndex == 2){ result = texture(uTex2, vUv); }
+      if(vIndex == 3){ result = texture(uTex3, vUv); }
+      if(vIndex == 4){ result = texture(uTex4, vUv); }
+      if(vIndex == 5){ result = texture(uTex5, vUv); }
+      if(vIndex == 6){ result = texture(uTex6, vUv); }
+      if(vIndex == 7){ result = texture(uTex7, vUv); }
       result.a *= vOpacity;
-      addGradation(vUv, result);
+      if(vGradationFlag == LINEAR_GRADIENT){ applyLinearGradient(vUv, result); }
+      if(vGradationFlag == RADIAL_GRADIENT){ applyRadialGradient(vUv, result); }
+      result.rgb *= vTint;
+      result.rgb += vAmbient;
       if(result.a < 0.001){ discard; }
       fragColor = result;
     }
@@ -1420,7 +1449,10 @@ const p5wgex = (function(){
     const flips = new Array(8);
     const views = new Array(4*8);
     const opacities = new Array(8); // 透明度補正
+    const tints = new Array(3*8); // 乗算
+    const ambients = new Array(3*8); // 加算
     const uvShifts = new Array(2*8); // uvScroll
+    const gradationFlags = new Array(8); // グラデーションフラグ。0:なし、1:線形、2:放射状
     const gradAnchors = new Array(4*8); // グラデーションのアンカー
     const startColors = new Array(4*8); // 開始色
     const stopColors = new Array(4*8); // 終了色
@@ -1438,9 +1470,12 @@ const p5wgex = (function(){
       flips[i] = _srcData.flip;
       views[4*i] = x; views[4*i+1] = y; views[4*i+2] = w; views[4*i+3] = h;
       opacities[i] = _srcData.opacity;
+      tints[3*i] = _srcData.tint[0]; tints[3*i+1] = _srcData.tint[1]; tints[3*i+2] = _srcData.tint[2];
+      ambients[3*i] = _srcData.ambient[0]; ambients[3*i+1] = _srcData.ambient[1]; ambients[3*i+2] = _srcData.ambient[2];
       uvShifts[2*i] = _srcData.uvShift[0]; uvShifts[2*i+1] = _srcData.uvShift[1];
       const gs = _srcData.gradationStart;
       const gp = _srcData.gradationStop;
+      gradationFlags[i] = _srcData.gradationFlag;
       gradAnchors[4*i] = gs[0]; gradAnchors[4*i+1] = gs[1]; gradAnchors[4*i+2] = gp[0]; gradAnchors[4*i+3] = gp[1];
       startColors[4*i] = gs[2]; startColors[4*i+1] = gs[3]; startColors[4*i+2] = gs[4]; startColors[4*i+3] = gs[5];
       stopColors[4*i] = gp[2];  stopColors[4*i+1] = gp[3];  stopColors[4*i+2] = gp[4]; stopColors[4*i+3] = gp[5];
@@ -1448,7 +1483,10 @@ const p5wgex = (function(){
     node.setUniform("uFlips", flips);
     node.setUniform("uViews", views);
     node.setUniform("uOpacity", opacities);
+    node.setUniform("uTint", tints);
+    node.setUniform("uAmbient", ambients);
     node.setUniform("uUvShift", uvShifts);
+    node.setUniform("uGradationFlag", gradationFlags);
     node.setUniform("uGradationAnchor", gradAnchors);
     node.setUniform("uStartColor", startColors);
     node.setUniform("uStopColor", stopColors);
