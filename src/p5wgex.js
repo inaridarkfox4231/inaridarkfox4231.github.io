@@ -100,6 +100,12 @@ const p5wgex = (function(){
   // 関数を設定してもいいんだけどtargetとかfuncNameとか引数とかややこしいので勝手にやってくれって感じ...
   // 従来通り使うなら普通にinitialize(name)でいいしsetで現在時刻登録されるしgetDeltaで秒数、
   // fps欲しいなら1000/60をスケールに設定、そんなところ。
+
+  // なんとポーズ機能が無いことに気付いたので実装します。内容的にはpauseしたタイミングを記録しておいて
+  // 終わったら停止していた時間の分をstumpに加えます。なお停止中に問い合わせがあった場合その時間から
+  // pauseTimeを引いた分をstumpに加算して計算する...と思う。つまりどんなに時間が経過してもその分引く数も
+  // 大きくなることで停止中であることを表現する...というわけ。getDeltaMillisだけ書き換えればいい(pauseで分岐処理)
+  // getDeltaMillisの結果を、pauseの場合にlastPause-stumpにすれば良さそう。
   class Timer{
     constructor(){
       this.timers = {};
@@ -110,53 +116,54 @@ const p5wgex = (function(){
       if(info.scale === undefined){ info.scale = 1000; } // 返すときに何かで割りたいときにどうぞ。未定義の場合は1000.
       // なぜならほとんどの場合秒数として使用するので（メトロノームなどの場合は具体的に指定するだろう）
       // 最後に発火したタイミングと、次の発火までの時間間隔(duration)を設定（Infinityの場合は間隔を用意しない感じで）
-      this.timers[keyName] = {stump:info.stump, duration:info.duration, scale:info.scale};
+      this.timers[keyName] = {stump:info.stump, duration:info.duration, scale:info.scale, pause:false, lastPause:info.stump};
+    }
+    validateKeyName(keyName, methodName){
+      if(this.timers[keyName] === undefined){
+        window.alert(methodName + " failure: invalid name.");
+        return false;
+      }
+      return true;
     }
     set(keyName, duration){
       // 意図的にstumpの値を現在の時刻にすることで、こちらで何かあってからの経過時間を計測する、
-      // 従来の使い方もできるようにしよう。
+      // 従来の使い方もできるようにしよう。また、initializeされてない場合はエラーを返すようにする。
+      if(!this.validateKeyName(keyName, "set")){ return; }
       this.timers[keyName].stump = window.performance.now();
-      // durationを決めることでsetしてからの時間経過を取得。
+      // durationを決めることでcheckで一定時間ごとの処理ができるようになるね。
       if(duration !== undefined){ this.timers[keyName].duration = duration; }
     }
     getDelta(keyName){
       // 最後に発火してからの経過時間をscaleで割った値を返す感じ。
       // こっちの方が基本的に使用されるのでこれをgetDeltaとした。
-      if(this.timers[keyName] === undefined){
-        window.alert("getDelta failure: invalid name");
-        return null;
-      }
-      return (window.performance.now() - this.timers[keyName].stump) / this.timers[keyName].scale;
+      if(!this.validateKeyName(keyName, "getDelta")){ return null; }
+      const _timer = this.timers[keyName];
+      return this.getDeltaMillis(keyName) / _timer.scale;
     }
     getProgress(keyName){
       // stumpからの経過時間をdurationで割ることで進捗を調べるのに使う感じ
-      if(this.timers[keyName] === undefined){
-        window.alert("getProgress failure: invalid name");
-        return null;
-      }
+      if(!this.validateKeyName(keyName, "getProgress")){ return null; }
       const _timer = this.timers[keyName];
       if(_timer.duration > 0){
-        return Math.min(1, (performance.now() - _timer.stump) / _timer.duration);
+        return Math.min(1, this.getDeltaMillis(keyName) / _timer.duration);
       }
       return 1; // durationが0の場合...つまり無限大ということ。
     }
     getDeltaMillis(keyName){
       // 最後に発火してからの経過時間を生のミリ秒表示で取得する。使い道は検討中。
-      if(this.timers[keyName] === undefined){
-        window.alert("getDeltaMillis failure: invalid name");
-        return null;
+      if(!this.validateKeyName(keyName, "getDeltaMillis")){ return null; }
+      const _timer = this.timers[keyName];
+      if(_timer.pause){
+        return _timer.lastPause - _timer.stump; // 最後に停止するまでの時間
       }
-      return window.performance.now() - this.timers[keyName].stump;
+      return window.performance.now() - _timer.stump; // 普通に現在までの時間
     }
     getDeltaDiscrete(keyName, interval = 1000, modulo = 1){
       // deltaをintervalで割ってfloorした結果を返す。
       // moduloが1より大きい場合はそれで%を取る。1の場合はそのまま整数を返す。
       // たとえば250であれば0,1,2,3,...と1秒に4増えるし、moduloを4にすれば0,1,2,3,0,1,2,3,...となるわけ。
-      if(this.timers[keyName] === undefined){
-        window.alert("getDeltaDiscrete failure: invalid name");
-        return null;
-      }
-      const _delta = window.performance.now() - this.timers[keyName].stump;
+      if(!this.validateKeyName(keyName, "getDeltaDiscrete")){ return null; }
+      const _delta = this.getDeltaMillis(keyName);
       const n = Math.floor(_delta / interval);
       if(modulo > 1){
         return n % modulo;
@@ -167,12 +174,9 @@ const p5wgex = (function(){
       // durationを経過時間が越えたらstumpを更新する
       // nextDurationは未定義なら同じ値を継続
       // 毎回違うでもいい、自由に決められるようにする。
-      if(this.timers[keyName] === undefined){
-        window.alert("check failure: invalid name");
-        return null;
-      }
+      if(!this.validateKeyName(keyName, "check")){ return null; }
       const _timer = this.timers[keyName];
-      const elapsedTime = window.performance.now() - _timer.stump;
+      const elapsedTime = this.getDeltaMillis(keyName);
       if(elapsedTime > _timer.duration){
         _timer.stump += _timer.duration;
         if(nextDuration !== undefined){
@@ -181,6 +185,18 @@ const p5wgex = (function(){
         return true;
       }
       return false;
+    }
+    pause(keyName){
+      if(!this.validateKeyName(keyName, "pause")){ return null; }
+      const _timer = this.timers[keyName];
+      _timer.pause = true;
+      _timer.lastPause = window.performance.now();
+    }
+    reStart(keyName){
+      if(!this.validateKeyName(keyName, "reStart")){ return null; }
+      const _timer = this.timers[keyName];
+      _timer.pause = false;
+      _timer.stump += window.performance.now() - _timer.lastPause;
     }
   }
 
@@ -1371,8 +1387,8 @@ const p5wgex = (function(){
       vec2 n = normalize(stop - start);
       float ratio = clamp(dot(p-start, n) / length(stop - start), 0.0, 1.0);
       vec4 gradColor = (1.0-ratio)*vStartColor + ratio*vStopColor;
-      // アルファブレンド。これでいいのかは不明。
-      result += (1.0 - result.a) * gradColor;
+      // アルファブレンディング、やっぱこっちのが正解っぽいな。テキストが汚くなる。
+      result = result.a * result + (1.0 - result.a) * gradColor;
     }
     // 放射状グラデーション
     void applyRadialGradient(in vec2 p, inout vec4 result){
@@ -1380,7 +1396,7 @@ const p5wgex = (function(){
       vec2 stop = vGradationAnchor.zw;
       float ratio = clamp(length(p - start)/length(stop - start), 0.0, 1.0);
       vec4 gradColor = (1.0-ratio)*vStartColor + ratio*vStopColor;
-      result += (1.0 - result.a) * gradColor;
+      result = result.a * result + (1.0 - result.a) * gradColor;
     }
     // メイン
     void main(){
