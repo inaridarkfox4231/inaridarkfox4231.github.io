@@ -174,7 +174,7 @@ const p5wgex = (function(){
       // durationを経過時間が越えたらstumpを更新する
       // nextDurationは未定義なら同じ値を継続
       // 毎回違うでもいい、自由に決められるようにする。
-      if(!this.validateKeyName(keyName, "check")){ return null; }
+      if(!this.validateKeyName(keyName, "check")){ return false; }
       const _timer = this.timers[keyName];
       const elapsedTime = this.getDeltaMillis(keyName);
       if(elapsedTime > _timer.duration){
@@ -187,14 +187,16 @@ const p5wgex = (function(){
       return false;
     }
     pause(keyName){
-      if(!this.validateKeyName(keyName, "pause")){ return null; }
+      if(!this.validateKeyName(keyName, "pause")){ return; }
       const _timer = this.timers[keyName];
+      if(_timer.pause){ return; } // 重ね掛け回避
       _timer.pause = true;
       _timer.lastPause = window.performance.now();
     }
     reStart(keyName){
-      if(!this.validateKeyName(keyName, "reStart")){ return null; }
+      if(!this.validateKeyName(keyName, "reStart")){ return; }
       const _timer = this.timers[keyName];
+      if(!_timer.pause){ return; } // 重ね掛け回避
       _timer.pause = false;
       _timer.stump += window.performance.now() - _timer.lastPause;
     }
