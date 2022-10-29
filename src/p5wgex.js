@@ -1276,6 +1276,10 @@ const p5wgex = (function(){
       window.alert("validateForCopy error: invalid fbo name.");
       return;
     }
+    // 外側のviewでは描画範囲のviewportを指定する...これもできた方がいいと思うので。
+    if(info.view === undefined){
+      info.view = [0, 0, 1, 1]; // （左上指定）
+    }
     // blendは基本trueでsrc_alphaとone_minus_src_alphaで上から貼り付ける感じで使います
     // falseにする場合もある。floatの場合とか。使うか知らないけど。floatだと切らないといろいろまずい。
     if(info.blend === undefined){
@@ -1460,6 +1464,7 @@ const p5wgex = (function(){
     }else{
       node.bindFBO(_dst.name);
     }
+    node.setViewport(...info.view);
     // painter準備
     node.use("foxCopyPainter", "foxQuads");
 
@@ -1518,12 +1523,8 @@ const p5wgex = (function(){
     if(info.blend){
       node.disable("blend");
     }
-    if(_dst.type === "fb"){
-      const fb = node.getCurrentFBO(_dst.name);
-      if(fb.double){
-        node.swapFBO(_dst.name); // doubleの場合は必ずswapしておく
-      }
-    }
+    // 普通に考えたら「doubleの場合は常にswap」って迷惑でしかない気が...保留。
+    // 呼び出すたびにreadが空になるのおかしいでしょ。
     // 後始末
     node.unbind();
   }
