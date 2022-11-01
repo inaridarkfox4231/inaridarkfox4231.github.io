@@ -1458,6 +1458,10 @@ const p5wgex = (function(){
       node.disable("depth_test");
     }
     const {dst:_dst, src:_src} = info;
+
+    // 終わったらその時のFBOに戻すので
+    const previousFBO = node.getCurrentFBO();
+
     // fboのbind
     if(_dst.type === null){
       node.bindFBO(null);
@@ -1527,6 +1531,9 @@ const p5wgex = (function(){
     // 呼び出すたびにreadが空になるのおかしいでしょ。
     // 後始末
     node.unbind();
+
+    // 元のFBOに戻す
+    node.bindFBO(previousFBO);
   }
 
   // ---------------------------------------------------------------------------------------------- //
