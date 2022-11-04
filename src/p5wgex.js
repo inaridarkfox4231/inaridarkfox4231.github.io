@@ -219,7 +219,9 @@ const p5wgex = (function(){
     d.rgba32f = gl.RGBA32F;
     d.r16f = gl.R16F;
     d.r32f = gl.R32F;
+    d.rg32f = gl.RG32F;
     d.red = gl.RED;
+    d.rg = gl.RG;
     d.short = gl.SHORT;
     d.ushort = gl.UNSIGNED_SHORT;
     d.int = gl.INT;
@@ -584,6 +586,8 @@ const p5wgex = (function(){
   // テクスチャ作る関数も作るつもり。そのうち...
   // r32fとか使ってみたいわね。効率性よさそう
   // これtextureの話しかしてないからこれでいいね？
+  // reference: https://registry.khronos.org/webgl/specs/latest/2.0/#TEXTURE_TYPES_FORMATS_FROM_DOM_ELEMENTS_TABLE
+  // gl.RG32F --- gl.RG --- gl.FLOAT
   // gl.RGBA32F --- gl.RGBA --- gl.FLOAT
   // gl.RGBA16F --- gl.RGBA --- gl.FLOAT
   // gl.RGBA16F --- gl.RGBA --- gl.HALF_FLOAT
@@ -1747,6 +1751,11 @@ const p5wgex = (function(){
     blendFunc(sFactorName, dFactorName){
       // blendFunc. ファクターを一律に決める。
       this.gl.blendFunc(this.dict[sFactorName], this.dict[dFactorName]);
+      return this;
+    }
+    blendFuncSeparate(sRGBFactorName, dRGBFactorName, sAFactorName, dAFactorName){
+      // separate.
+      this.gl.blendFuncSeparate(this.dict[sRGBFactorName], this.dict[dRGBFactorName], this.dict[sAFactorName], this.dict[dAFactorName]);
       return this;
     }
     disable(name){
