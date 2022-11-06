@@ -13,8 +13,7 @@ p5.RendererGL.prototype._setAttributeDefaults = function(pInst) {
     stencil: true,
     antialias: applyAA,
     premultipliedAlpha: false,
-    preserveDrawingBuffer: true,
-    perPixelLighting: true
+    preserveDrawingBuffer: true // perPixelLightingはp5.jsの話だそうなのでカット
   };
 
   if (pInst._glAttributes === null) {
@@ -121,7 +120,7 @@ const p5wgex = (function(){
     validateKeyName(keyName, methodName){
       if(this.timers[keyName] === undefined){
         window.alert(methodName + " failure: invalid name.");
-        return false;
+        return null;
       }
       return true;
     }
@@ -1027,7 +1026,7 @@ const p5wgex = (function(){
       const r = _getValidation(a, b, c, 1); // 割り算のデフォも1でしょう
       if(r.x === 0.0 || r.y === 0.0 || r.z === 0.0){
         window.alert("Vec3 divide: zero division error!");
-        return;
+        return null;
       }
       this.x /= r.x;
       this.y /= r.y;
@@ -1081,7 +1080,7 @@ const p5wgex = (function(){
       const L = this.mag();
       if(L == 0.0){
         window.alert("Vec3 normalize: zero division error!");
-        return this;
+        return null;
       }
       this.divide(L);
       return this;
@@ -1733,7 +1732,7 @@ const p5wgex = (function(){
     enable(name){
       if(this.dict[name] === undefined){
         window.alert("enable failured: invalid name.");
-        return;
+        return null;
       }
       // 有効化指定(cull_face, depth_test, blendなど)
       this.gl.enable(this.dict[name]);
@@ -1742,7 +1741,7 @@ const p5wgex = (function(){
     cullFace(mode){
       if(this.dict[mode] === undefined){
         window.alert("cullFace failured: invalid mode name.");
-        return;
+        return null;
       }
       // デフォルトはBACK（上から見て反時計回り）
       this.gl.cullFace(this.dict[mode]); // default: back.
@@ -1761,7 +1760,7 @@ const p5wgex = (function(){
     disable(name){
       if(this.dict[name] === undefined){
         window.alert("disable failured: invalid name.");
-        return;
+        return null;
       }
       // 非有効化(cull_face, depth_test, blend)
       this.gl.disable(this.dict[name]);
@@ -1795,6 +1794,7 @@ const p5wgex = (function(){
       const newFBO = _createFBO(this.gl, info, this.dict);
       if(newFBO === undefined){
         window.alert("failure to create framebuffer.");
+        return null;
       }
       this.fbos[name] = newFBO;
       return this;
@@ -1806,6 +1806,7 @@ const p5wgex = (function(){
       this.fbos[name] = newFBO;
       if(newFBO === undefined){
         window.alert("failure to create doubleFramebuffer.");
+        return null;
       }
       return this;
     }
@@ -1903,6 +1904,7 @@ const p5wgex = (function(){
         window.alert("setUniform method error!. " + name);
         console.log(error.message);
         console.log(error.stack);
+        return null;
       }
       return this;
     }
@@ -1932,7 +1934,7 @@ const p5wgex = (function(){
         if(!fbo){
           // fboが無い場合の警告
           window.alert("bind failure: The corresponding framebuffer does not exist.");
-          return this;
+          return null;
         }
         if(fbo.double){
           // doubleの場合はwriteをbind
@@ -1979,13 +1981,13 @@ const p5wgex = (function(){
       if(fboName === undefined || (typeof fboName !== 'string')){
         // 指定の仕方に問題がある場合
         window.alert("setFBOtexture2D failure: Inappropriate name setting.");
-        return this;
+        return null;
       }
       let fbo = this.fbos[fboName];
       if(!fbo){
         // fboが無い場合の警告
         window.alert("setFBOtexture2D failure: The corresponding framebuffer does not exist.");
-        return this;
+        return null;
       }
       if(fbo.double){
         // doubleの場合はreadをセットする
@@ -2007,7 +2009,7 @@ const p5wgex = (function(){
       if(!fbo){
         // fboが無い場合の警告
         window.alert("The corresponding framebuffer does not exist.");
-        return this;
+        return null;
       }
       if(fbo.read && fbo.write){ fbo.swap(); }
       return this;
@@ -2089,11 +2091,11 @@ const p5wgex = (function(){
       if(!fbo){
         // fboが無い場合の警告
         window.alert("drawBuffers failure: The corresponding framebuffer does not exist.");
-        return this;
+        return null;
       }else if(!fbo.MRT){
         // MRTでない場合は適用されない
         window.alert("drawBuffers failure: The corresponding framebuffer is not for MRT.");
-        return this;
+        return null;
       }
       const N = fbo.color.length; // 色only.
       const commandArray = new Array(N);
