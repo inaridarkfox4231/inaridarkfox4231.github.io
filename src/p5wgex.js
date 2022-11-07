@@ -199,6 +199,16 @@ const p5wgex = (function(){
       _timer.pause = false;
       _timer.stump += window.performance.now() - _timer.lastPause;
     }
+    pauseAll(){
+      for(let keyName of Object.keys(this.timers)){
+        this.pause(keyName);
+      }
+    }
+    reStartAll(){
+      for(let keyName of Object.keys(this.timers)){
+        this.reStart(keyName);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
