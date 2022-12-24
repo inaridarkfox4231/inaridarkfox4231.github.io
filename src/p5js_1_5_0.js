@@ -101975,7 +101975,7 @@
                 u /= this._tex.width;
                 v /= this._tex.height;
               }
-            } else if (this._tex === null && arguments.length >= 4) {
+            } else if (!this.isProcessingVertices && this._tex === null && arguments.length >= 4) {
               // Only throw this warning if custom uv's have  been provided
               console.warn('You must first call texture() before using' + ' vertex() with image based u and v coordinates');
             }
@@ -102018,7 +102018,9 @@
             this._drawPoints(this.immediateMode.geometry.vertices, this.immediateMode.buffers.point);
             return this;
           }
-          this._processVertices.apply(this, arguments);
+          this.isProcessingVertices = true;
+          this._processVertices(...arguments);
+          this.isProcessingVertices = false;
           if (this._doFill) {
             if (this.immediateMode.geometry.vertices.length > 1) {
               this._drawImmediateFill();
@@ -103054,6 +103056,8 @@
           ]; // current curveDetail in the Bezier lookUpTable
           this._lutBezierDetail = 0; // current curveDetail in the Quadratic lookUpTable
           this._lutQuadraticDetail = 0;
+          // Used to distinguish between user calls to vertex() and internal calls
+          this.isProcessingVertices = false;
           this._tessy = this._initTessy();
           this.fontInfos = {
           };
