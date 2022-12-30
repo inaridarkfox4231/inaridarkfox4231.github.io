@@ -95186,6 +95186,7 @@
             let w_y = [];
             let w_z = [];
             let t, _x, _y, _z, i, k, m;
+            // variable i for bezierPoints, k for components, and m for anchor points.
             const argLength = args.length;
 
             t = 0;
@@ -95250,22 +95251,15 @@
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                _x = _y = 0;
                 for (m = 0; m < 4; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableBezier[i][m] * fillColors[m][k];
                   }
+                  _x += w_x[m] * this._lookUpTableBezier[i][m];
+                  _y += w_y[m] * this._lookUpTableBezier[i][m];
                 }
-                _x =
-                  w_x[0] * this._lookUpTableBezier[i][0] +
-                  w_x[1] * this._lookUpTableBezier[i][1] +
-                  w_x[2] * this._lookUpTableBezier[i][2] +
-                  w_x[3] * this._lookUpTableBezier[i][3];
-                _y =
-                  w_y[0] * this._lookUpTableBezier[i][0] +
-                  w_y[1] * this._lookUpTableBezier[i][1] +
-                  w_y[2] * this._lookUpTableBezier[i][2] +
-                  w_y[3] * this._lookUpTableBezier[i][3];
                 this.vertex(_x, _y);
               }
               // so that we leave curFillColor with the last value the user set it to
@@ -95297,27 +95291,16 @@
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                _x = _y = _z = 0;
                 for (m = 0; m < 4; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableBezier[i][m] * fillColors[m][k];
                   }
+                  _x += w_x[m] * this._lookUpTableBezier[i][m];
+                  _y += w_y[m] * this._lookUpTableBezier[i][m];
+                  _z += w_z[m] * this._lookUpTableBezier[i][m];
                 }
-                _x =
-                  w_x[0] * this._lookUpTableBezier[i][0] +
-                  w_x[1] * this._lookUpTableBezier[i][1] +
-                  w_x[2] * this._lookUpTableBezier[i][2] +
-                  w_x[3] * this._lookUpTableBezier[i][3];
-                _y =
-                  w_y[0] * this._lookUpTableBezier[i][0] +
-                  w_y[1] * this._lookUpTableBezier[i][1] +
-                  w_y[2] * this._lookUpTableBezier[i][2] +
-                  w_y[3] * this._lookUpTableBezier[i][3];
-                _z =
-                  w_z[0] * this._lookUpTableBezier[i][0] +
-                  w_z[1] * this._lookUpTableBezier[i][1] +
-                  w_z[2] * this._lookUpTableBezier[i][2] +
-                  w_z[3] * this._lookUpTableBezier[i][3];
                 this.vertex(_x, _y, _z);
               }
               // so that we leave curFillColor with the last value the user set it to
@@ -95336,6 +95319,7 @@
             let w_y = [];
             let w_z = [];
             let t, _x, _y, _z, i, k, m;
+            // variable i for bezierPoints, k for components, and m for anchor points.
             const argLength = args.length;
 
             t = 0;
@@ -95381,8 +95365,8 @@
               w_x = [this.immediateMode._quadraticVertex[0], args[0], args[2]];
               w_y = [this.immediateMode._quadraticVertex[1], args[1], args[3]];
 
-              // The ratio of the distance between the start point, the two control-
-              // points, and the end point determines the intermediate color.
+              // The ratio of the distance between the start point, the control-
+              // point, and the end point determines the intermediate color.
               let d0 = Math.hypot(w_x[0]-w_x[1], w_y[0]-w_y[1]);
               let d1 = Math.hypot(w_x[1]-w_x[2], w_y[1]-w_y[2]);
               const totalLength = d0 + d1;
@@ -95396,20 +95380,15 @@
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                _x = _y = 0;
                 for (m = 0; m < 3; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableQuadratic[i][m] * fillColors[m][k];
                   }
+                  _x += w_x[m] * this._lookUpTableQuadratic[i][m];
+                  _y += w_y[m] * this._lookUpTableQuadratic[i][m];
                 }
-                _x =
-                  w_x[0] * this._lookUpTableQuadratic[i][0] +
-                  w_x[1] * this._lookUpTableQuadratic[i][1] +
-                  w_x[2] * this._lookUpTableQuadratic[i][2];
-                _y =
-                  w_y[0] * this._lookUpTableQuadratic[i][0] +
-                  w_y[1] * this._lookUpTableQuadratic[i][1] +
-                  w_y[2] * this._lookUpTableQuadratic[i][2];
                 this.vertex(_x, _y);
               }
 
@@ -95424,8 +95403,8 @@
               w_y = [this.immediateMode._quadraticVertex[1], args[1], args[4]];
               w_z = [this.immediateMode._quadraticVertex[2], args[2], args[5]];
 
-              // The ratio of the distance between the start point, the two control-
-              // points, and the end point determines the intermediate color.
+              // The ratio of the distance between the start point, the control-
+              // point, and the end point determines the intermediate color.
               let d0 = Math.hypot(w_x[0]-w_x[1], w_y[0]-w_y[1], w_z[0]-w_z[1]);
               let d1 = Math.hypot(w_x[1]-w_x[2], w_y[1]-w_y[2], w_z[1]-w_z[2]);
               const totalLength = d0 + d1;
@@ -95439,24 +95418,16 @@
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                _x = _y = _z = 0;
                 for (m = 0; m < 3; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableQuadratic[i][m] * fillColors[m][k];
                   }
+                  _x += w_x[m] * this._lookUpTableQuadratic[i][m];
+                  _y += w_y[m] * this._lookUpTableQuadratic[i][m];
+                  _z += w_z[m] * this._lookUpTableQuadratic[i][m];
                 }
-                _x =
-                  w_x[0] * this._lookUpTableQuadratic[i][0] +
-                  w_x[1] * this._lookUpTableQuadratic[i][1] +
-                  w_x[2] * this._lookUpTableQuadratic[i][2];
-                _y =
-                  w_y[0] * this._lookUpTableQuadratic[i][0] +
-                  w_y[1] * this._lookUpTableQuadratic[i][1] +
-                  w_y[2] * this._lookUpTableQuadratic[i][2];
-                _z =
-                  w_z[0] * this._lookUpTableQuadratic[i][0] +
-                  w_z[1] * this._lookUpTableQuadratic[i][1] +
-                  w_z[2] * this._lookUpTableQuadratic[i][2];
                 this.vertex(_x, _y, _z);
               }
 
