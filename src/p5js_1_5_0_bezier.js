@@ -95178,6 +95178,7 @@
         // レビュー4: 4つも異なる配列用意するよりまとめてひとつの配列にしちゃった方が良さそう : OK!
         // レビュー5: 最後にfinalFillColorに戻してるけどここのコメントもわかりやすいほうがいいね、以上！
         // sliceは非破壊なのでそのまま適用できるはず
+        // 線の色の補間？？lineVertexColors使うんだよ。多分。
         _main.default.RendererGL.prototype.bezierVertex = function(...args) {
           if (this.immediateMode._bezierVertex.length === 0) {
             throw Error('vertex() must be used once before calling bezierVertex()');
@@ -95219,12 +95220,18 @@
             const LUTLength = this._lookUpTableBezier.length;
 
             // fillColors[0]: start point color
-            // fillColors[1],[2]: intermediate point color
+            // fillColors[1],[2]: control point color
             // fillColors[3]: end point color
             const fillColors = [];
             for (m = 0; m < 4; m++) fillColors.push([]);
             fillColors[0] = this.immediateMode.geometry.vertexColors.slice(-4);
             fillColors[3] = this.curFillColor.slice();
+
+            // Do the same for strokeColor.
+            const strokeColors = [];
+            for (m = 0; m < 4; m++) strokeColors.push([]);
+            strokeColors[0] = this.immediateMode.geometry.lineVertexColors.slice(-4);
+            strokeColors[3] = this.curStrokeColor.slice();
 
             if (argLength === 6) {
               this.isBezier = true;
@@ -95246,24 +95253,34 @@
                 fillColors[2].push(
                   fillColors[0][k] * d2 + fillColors[3][k] * (1-d2)
                 );
+                strokeColors[1].push(
+                  strokeColors[0][k] * (1-d0) + strokeColors[3][k] * d0
+                );
+                strokeColors[2].push(
+                  strokeColors[0][k] * d2 + strokeColors[3][k] * (1-d2)
+                );
               }
 
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                this.curStrokeColor = [0, 0, 0, 0];
                 _x = _y = 0;
                 for (m = 0; m < 4; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableBezier[i][m] * fillColors[m][k];
+                    this.curStrokeColor[k] +=
+                      this._lookUpTableBezier[i][m] * strokeColors[m][k];
                   }
                   _x += w_x[m] * this._lookUpTableBezier[i][m];
                   _y += w_y[m] * this._lookUpTableBezier[i][m];
                 }
                 this.vertex(_x, _y);
               }
-              // so that we leave curFillColor with the last value the user set it to
+              // so that we leave currentColor with the last value the user set it to
               this.curFillColor = fillColors[3];
+              this.curStrokeColor = strokeColors[3];
               this.immediateMode._bezierVertex[0] = args[4];
               this.immediateMode._bezierVertex[1] = args[5];
             } else if (argLength === 9) {
@@ -95287,15 +95304,24 @@
                 fillColors[2].push(
                   fillColors[0][k] * d2 + fillColors[3][k] * (1-d2)
                 );
+                strokeColors[1].push(
+                  strokeColors[0][k] * (1-d0) + strokeColors[3][k] * d0
+                );
+                strokeColors[2].push(
+                  strokeColors[0][k] * d2 + strokeColors[3][k] * (1-d2)
+                );
               }
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                this.curStrokeColor = [0, 0, 0, 0];
                 _x = _y = _z = 0;
                 for (m = 0; m < 4; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableBezier[i][m] * fillColors[m][k];
+                    this.curStrokeColor[k] +=
+                      this._lookUpTableBezier[i][m] * strokeColors[m][k];
                   }
                   _x += w_x[m] * this._lookUpTableBezier[i][m];
                   _y += w_y[m] * this._lookUpTableBezier[i][m];
@@ -95303,8 +95329,9 @@
                 }
                 this.vertex(_x, _y, _z);
               }
-              // so that we leave curFillColor with the last value the user set it to
+              // so that we leave currentColor with the last value the user set it to
               this.curFillColor = fillColors[3];
+              this.curStrokeColor = strokeColors[3];
               this.immediateMode._bezierVertex[0] = args[6];
               this.immediateMode._bezierVertex[1] = args[7];
               this.immediateMode._bezierVertex[2] = args[8];
@@ -95352,12 +95379,18 @@
             const LUTLength = this._lookUpTableQuadratic.length;
 
             // fillColors[0]: start point color
-            // fillColors[1]: intermediate point color
+            // fillColors[1]: control point color
             // fillColors[2]: end point color
             const fillColors = [];
             for (m = 0; m < 3; m++) fillColors.push([]);
             fillColors[0] = this.immediateMode.geometry.vertexColors.slice(-4);
             fillColors[2] = this.curFillColor.slice();
+
+            // Do the same for strokeColor.
+            const strokeColors = [];
+            for (m = 0; m < 3; m++) strokeColors.push([]);
+            strokeColors[0] = this.immediateMode.geometry.lineVertexColors.slice(-4);
+            strokeColors[2] = this.curStrokeColor.slice();
 
             if (argLength === 4) {
               this.isQuadratic = true;
@@ -95375,16 +95408,22 @@
                 fillColors[1].push(
                   fillColors[0][k] * (1-d0) + fillColors[2][k] * d0
                 );
+                strokeColors[1].push(
+                  strokeColors[0][k] * (1-d0) + strokeColors[2][k] * d0
+                );
               }
 
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                this.curStrokeColor = [0, 0, 0, 0];
                 _x = _y = 0;
                 for (m = 0; m < 3; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableQuadratic[i][m] * fillColors[m][k];
+                    this.curStrokeColor[k] +=
+                      this._lookUpTableQuadratic[i][m] * strokeColors[m][k];
                   }
                   _x += w_x[m] * this._lookUpTableQuadratic[i][m];
                   _y += w_y[m] * this._lookUpTableQuadratic[i][m];
@@ -95392,8 +95431,9 @@
                 this.vertex(_x, _y);
               }
 
-              // so that we leave curFillColor with the last value the user set it to
+              // so that we leave currentColor with the last value the user set it to
               this.curFillColor = fillColors[2];
+              this.curStrokeColor = strokeColors[2];
               this.immediateMode._quadraticVertex[0] = args[2];
               this.immediateMode._quadraticVertex[1] = args[3];
             } else if (argLength === 6) {
@@ -95413,16 +95453,22 @@
                 fillColors[1].push(
                   fillColors[0][k] * (1-d0) + fillColors[2][k] * d0
                 );
+                strokeColors[1].push(
+                  strokeColors[0][k] * (1-d0) + strokeColors[2][k] * d0
+                );
               }
 
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
+                this.curStrokeColor = [0, 0, 0, 0];
                 _x = _y = _z = 0;
                 for (m = 0; m < 3; m++) {
                   for (k = 0; k < 4; k++) {
                     this.curFillColor[k] +=
                       this._lookUpTableQuadratic[i][m] * fillColors[m][k];
+                    this.curStrokeColor[k] +=
+                      this._lookUpTableQuadratic[i][m] * strokeColors[m][k];
                   }
                   _x += w_x[m] * this._lookUpTableQuadratic[i][m];
                   _y += w_y[m] * this._lookUpTableQuadratic[i][m];
@@ -95431,8 +95477,9 @@
                 this.vertex(_x, _y, _z);
               }
 
-              // so that we leave curFillColor with the last value the user set it to
+              // so that we leave currentColor with the last value the user set it to
               this.curFillColor = fillColors[2];
+              this.curStrokeColor = strokeColors[2];
               this.immediateMode._quadraticVertex[0] = args[3];
               this.immediateMode._quadraticVertex[1] = args[4];
               this.immediateMode._quadraticVertex[2] = args[5];
