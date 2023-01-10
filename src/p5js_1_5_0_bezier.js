@@ -63908,7 +63908,7 @@
             this.drawingContext.closePath();
           }
           if (this._doFill) {
-            this.drawingContext.fill();
+            this.drawingContext.fill("evenodd");
           }
           if (this._doStroke) {
             this.drawingContext.stroke();
@@ -95233,6 +95233,12 @@
             strokeColors[0] = this.immediateMode.geometry.lineVertexColors.slice(-4);
             strokeColors[3] = this.curStrokeColor.slice();
 
+            const texCoords = [];
+            for (m = 0; m < 4; m++) texCoords.push([]);
+            texCoords[0] = this.immediateMode.geometry.uvs.slice(-2);
+            texCoords[3].push(this._currentTexCoord.x);
+            texCoords[3].push(this._currentTexCoord.y);
+
             if (argLength === 6) {
               this.isBezier = true;
 
@@ -95259,12 +95265,21 @@
                 strokeColors[2].push(
                   strokeColors[0][k] * d2 + strokeColors[3][k] * (1-d2)
                 );
+                if (k < 2) {
+                  texCoords[1].push(
+                    texCoords[0][k] * (1-d0) + texCoords[3][k] * d0
+                  );
+                  texCoords[2].push(
+                    texCoords[0][k] * d2 + texCoords[3][k] * (1-d2)
+                  );
+                }
               }
 
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
                 this.curStrokeColor = [0, 0, 0, 0];
+                this._currentTexCoord.set(0, 0);
                 _x = _y = 0;
                 for (m = 0; m < 4; m++) {
                   for (k = 0; k < 4; k++) {
@@ -95273,6 +95288,10 @@
                     this.curStrokeColor[k] +=
                       this._lookUpTableBezier[i][m] * strokeColors[m][k];
                   }
+                  this._currentTexCoord.x +=
+                    this._lookUpTableBezier[i][m] * texCoords[m][0];
+                  this._currentTexCoord.y +=
+                    this._lookUpTableBezier[i][m] * texCoords[m][1];
                   _x += w_x[m] * this._lookUpTableBezier[i][m];
                   _y += w_y[m] * this._lookUpTableBezier[i][m];
                 }
@@ -95281,6 +95300,7 @@
               // so that we leave currentColor with the last value the user set it to
               this.curFillColor = fillColors[3];
               this.curStrokeColor = strokeColors[3];
+              this._currentTexCoord.set(texCoords[3][0], texCoords[3][1]);
               this.immediateMode._bezierVertex[0] = args[4];
               this.immediateMode._bezierVertex[1] = args[5];
             } else if (argLength === 9) {
@@ -95310,11 +95330,20 @@
                 strokeColors[2].push(
                   strokeColors[0][k] * d2 + strokeColors[3][k] * (1-d2)
                 );
+                if (k < 2) {
+                  texCoords[1].push(
+                    texCoords[0][k] * (1-d0) + texCoords[3][k] * d0
+                  );
+                  texCoords[2].push(
+                    texCoords[0][k] * d2 + texCoords[3][k] * (1-d2)
+                  );
+                }
               }
               for (i = 0; i < LUTLength; i++) {
                 // Interpolate colors using control points
                 this.curFillColor = [0, 0, 0, 0];
                 this.curStrokeColor = [0, 0, 0, 0];
+                this._currentTexCoord.set(0, 0);
                 _x = _y = _z = 0;
                 for (m = 0; m < 4; m++) {
                   for (k = 0; k < 4; k++) {
@@ -95323,6 +95352,10 @@
                     this.curStrokeColor[k] +=
                       this._lookUpTableBezier[i][m] * strokeColors[m][k];
                   }
+                  this._currentTexCoord.x +=
+                    this._lookUpTableBezier[i][m] * texCoords[m][0];
+                  this._currentTexCoord.y +=
+                    this._lookUpTableBezier[i][m] * texCoords[m][1];
                   _x += w_x[m] * this._lookUpTableBezier[i][m];
                   _y += w_y[m] * this._lookUpTableBezier[i][m];
                   _z += w_z[m] * this._lookUpTableBezier[i][m];
@@ -95332,6 +95365,7 @@
               // so that we leave currentColor with the last value the user set it to
               this.curFillColor = fillColors[3];
               this.curStrokeColor = strokeColors[3];
+              this._currentTexCoord.set(texCoords[3][0], texCoords[3][1]);
               this.immediateMode._bezierVertex[0] = args[6];
               this.immediateMode._bezierVertex[1] = args[7];
               this.immediateMode._bezierVertex[2] = args[8];
@@ -102111,7 +102145,11 @@
           var z,
           u,
           v; // default to (x, y) mode: all other arguments assumed to be 0.
-          z = u = v = 0;
+          //z = u = v = 0;
+          z = 0;
+          // uとvは引数が4つ以上の場合上書きされる形
+          u = this._currentTexCoord.x;
+          v = this._currentTexCoord.y;
           if (arguments.length === 3) {
             // (x, y, z) mode: (u, v) assumed to be 0.
             z = arguments[2];
@@ -103158,6 +103196,7 @@
           this.uPMatrix = new _main.default.Matrix();
           this.uNMatrix = new _main.default.Matrix('mat3'); // Current vertex normal
           this._currentNormal = new _main.default.Vector(0, 0, 1); // Camera
+          this._currentTexCoord = new _main.default.Vector(0, 0);
           this._curCamera = new _main.default.Camera(this);
           this._curCamera._computeCameraDefaultSettings();
           this._curCamera._setDefaultCamera();
@@ -103924,6 +103963,7 @@
           properties._tex = this._tex;
           properties.drawMode = this.drawMode;
           properties._currentNormal = this._currentNormal;
+          properties._currentTexCoord = this._currentTexCoord;
           properties.curBlendMode = this.curBlendMode;
           return style;
         };
