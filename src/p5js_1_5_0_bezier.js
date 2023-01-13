@@ -95666,12 +95666,24 @@
           if (sy + sHeight <= img.height) {
             v1 = (sy + sHeight) / img.height;
           }
+          const gl = this.GL;
+          const depthTestIsEnable = gl.getParameter(gl.DEPTH_TEST);
+          const cullFaceIsEnable = gl.getParameter(gl.CULL_FACE);
+
+          gl.disable(gl.DEPTH_TEST);
+          gl.disable(gl.CULL_FACE);
+
+          this._curCamera._setDefaultCamera();
           this.beginShape();
           this.vertex(dx, dy, 0, u0, v0);
           this.vertex(dx + dWidth, dy, 0, u1, v0);
           this.vertex(dx + dWidth, dy + dHeight, 0, u1, v1);
           this.vertex(dx, dy + dHeight, 0, u0, v1);
           this.endShape(constants.CLOSE);
+
+          if (depthTestIsEnable) { gl.enable(gl.DEPTH_TEST); }
+          if (cullFaceIsEnable) { gl.enable(gl.CULL_FACE); }
+
           this._pInst.pop();
           if (this._isErasing) {
             this.blendMode(constants.REMOVE);
@@ -100426,7 +100438,8 @@
             local.z[1] * z,
             local.z[2] * z
           ];
-          this.camera(this.eyeX + dx[0] + dy[0] + dz[0], this.eyeY + dx[1] + dy[1] + dz[1], this.eyeZ + dx[2] + dy[2] + dz[2], this.centerX + dx[0] + dy[0] + dz[0], this.centerY + dx[1] + dy[1] + dz[1], this.centerZ + dx[2] + dy[2] + dz[2], 0, 1, 0);
+          // ここが(0, 1, 0)になってたのを、upX, upY, upZに直しました。
+          this.camera(this.eyeX + dx[0] + dy[0] + dz[0], this.eyeY + dx[1] + dy[1] + dz[1], this.eyeZ + dx[2] + dy[2] + dz[2], this.centerX + dx[0] + dy[0] + dz[0], this.centerY + dx[1] + dy[1] + dz[1], this.centerZ + dx[2] + dy[2] + dz[2], this.upX, this.upY, this.upZ);
         };
         /**
  * Set camera position in world-space while maintaining current camera
@@ -100476,7 +100489,7 @@
           var diffX = x - this.eyeX;
           var diffY = y - this.eyeY;
           var diffZ = z - this.eyeZ;
-          this.camera(x, y, z, this.centerX + diffX, this.centerY + diffY, this.centerZ + diffZ, 0, 1, 0);
+          this.camera(x, y, z, this.centerX + diffX, this.centerY + diffY, this.centerZ + diffZ, this.upX, this.upY, this.upZ);
         }; ////////////////////////////////////////////////////////////////////////////////
         // Camera Helper Methods
         ////////////////////////////////////////////////////////////////////////////////
@@ -100542,6 +100555,7 @@
           _cam.cameraType = this.cameraType;
           _cam.cameraMatrix = this.cameraMatrix.copy();
           _cam.projMatrix = this.projMatrix.copy();
+          _cam._computeCameraDefaultSettings();
           return _cam;
         };
         /**
