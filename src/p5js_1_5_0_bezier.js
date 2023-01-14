@@ -95666,14 +95666,14 @@
           if (sy + sHeight <= img.height) {
             v1 = (sy + sHeight) / img.height;
           }
-          const gl = this.GL;
-          const depthTestIsEnable = gl.getParameter(gl.DEPTH_TEST);
-          const cullFaceIsEnable = gl.getParameter(gl.CULL_FACE);
+          //const gl = this.GL;
+          //const depthTestIsEnable = gl.getParameter(gl.DEPTH_TEST);
+          //const cullFaceIsEnable = gl.getParameter(gl.CULL_FACE);
 
-          gl.disable(gl.DEPTH_TEST);
-          gl.disable(gl.CULL_FACE);
+          //gl.disable(gl.DEPTH_TEST);
+          //gl.disable(gl.CULL_FACE);
 
-          this._curCamera._setDefaultCamera();
+          //this._curCamera._setDefaultCamera();
           this.beginShape();
           this.vertex(dx, dy, 0, u0, v0);
           this.vertex(dx + dWidth, dy, 0, u1, v0);
@@ -95681,8 +95681,8 @@
           this.vertex(dx, dy + dHeight, 0, u0, v1);
           this.endShape(constants.CLOSE);
 
-          if (depthTestIsEnable) { gl.enable(gl.DEPTH_TEST); }
-          if (cullFaceIsEnable) { gl.enable(gl.CULL_FACE); }
+          //if (depthTestIsEnable) { gl.enable(gl.DEPTH_TEST); }
+          //if (cullFaceIsEnable) { gl.enable(gl.CULL_FACE); }
 
           this._pInst.pop();
           if (this._isErasing) {
@@ -100735,6 +100735,7 @@
  */
         _main.default.prototype.setCamera = function (cam) {
           this._renderer._curCamera = cam; // set the projection matrix (which is not normally updated each frame)
+          this._renderer.uMVMatrix.set(cam.cameraMatrix.mat4[0], cam.cameraMatrix.mat4[1], cam.cameraMatrix.mat4[2], cam.cameraMatrix.mat4[3], cam.cameraMatrix.mat4[4], cam.cameraMatrix.mat4[5], cam.cameraMatrix.mat4[6], cam.cameraMatrix.mat4[7], cam.cameraMatrix.mat4[8], cam.cameraMatrix.mat4[9], cam.cameraMatrix.mat4[10], cam.cameraMatrix.mat4[11], cam.cameraMatrix.mat4[12], cam.cameraMatrix.mat4[13], cam.cameraMatrix.mat4[14], cam.cameraMatrix.mat4[15]);
           this._renderer.uPMatrix.set(cam.projMatrix.mat4[0], cam.projMatrix.mat4[1], cam.projMatrix.mat4[2], cam.projMatrix.mat4[3], cam.projMatrix.mat4[4], cam.projMatrix.mat4[5], cam.projMatrix.mat4[6], cam.projMatrix.mat4[7], cam.projMatrix.mat4[8], cam.projMatrix.mat4[9], cam.projMatrix.mat4[10], cam.projMatrix.mat4[11], cam.projMatrix.mat4[12], cam.projMatrix.mat4[13], cam.projMatrix.mat4[14], cam.projMatrix.mat4[15]);
         };
         var _default = _main.default.Camera;
