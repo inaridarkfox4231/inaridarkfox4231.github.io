@@ -103302,7 +103302,7 @@
           // See issue #3850, safer to enable AA in Safari
           var applyAA = navigator.userAgent.toLowerCase().includes('safari');
           var defaults = {
-            alpha: false,
+            alpha: true,
             depth: true,
             stencil: true,
             antialias: applyAA,
