@@ -103983,7 +103983,24 @@
           return style;
         };
         _main.default.RendererGL.prototype.resetMatrix = function () {
-          this.uMVMatrix = _main.default.Matrix.identity(this._pInst);
+          this.uMVMatrix.set(
+            this._curCamera.cameraMatrix.mat4[0],
+            this._curCamera.cameraMatrix.mat4[1],
+            this._curCamera.cameraMatrix.mat4[2],
+            this._curCamera.cameraMatrix.mat4[3],
+            this._curCamera.cameraMatrix.mat4[4],
+            this._curCamera.cameraMatrix.mat4[5],
+            this._curCamera.cameraMatrix.mat4[6],
+            this._curCamera.cameraMatrix.mat4[7],
+            this._curCamera.cameraMatrix.mat4[8],
+            this._curCamera.cameraMatrix.mat4[9],
+            this._curCamera.cameraMatrix.mat4[10],
+            this._curCamera.cameraMatrix.mat4[11],
+            this._curCamera.cameraMatrix.mat4[12],
+            this._curCamera.cameraMatrix.mat4[13],
+            this._curCamera.cameraMatrix.mat4[14],
+            this._curCamera.cameraMatrix.mat4[15]
+          );
           return this;
         }; //////////////////////////////////////////////
         // SHADER
