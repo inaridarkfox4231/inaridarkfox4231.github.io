@@ -102586,16 +102586,19 @@
           }
           if (this._doFill) {
             // こっち！
+            /*
+            this._useVertexColor = true;
             if (geometry.model.vertexColors.length > 0) {
-              this._useVertexColor = true;
+              //this._useVertexColor = true;
             } else {
-              this._useVertexColor = true;
+              //this._useVertexColor = true;
               for (let i = 0; i < geometry.model.vertices.length; i++) {
                 geometry.model.vertexColors.push(...this.curFillColor);
               }
             }
+            */
             // こうするの？？とりあえずこれで試してみる。
-            //this._useVertexColor = (geometry.model.vertexColors.length > 0);
+            this._useVertexColor = (geometry.model.vertexColors.length > 0);
             var fillShader = this._getRetainedFillShader();
             this._setFillUniforms(fillShader);
             var _iteratorNormalCompletion3 = true;

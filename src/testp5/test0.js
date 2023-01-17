@@ -182,7 +182,7 @@ function draw(){
 	// vertexColorsに何も入っていないgeometry.
 	// 描画されません。仮説は正しいようです。
 	translate(200, 200, 0);
-	fill(42, 255, 42);
+	fill(42, 128 - 128*cos(t), 128 + 128*cos(t));
 	rotateX(t);
 	model(myGeom3);
 	rotateX(-t);
