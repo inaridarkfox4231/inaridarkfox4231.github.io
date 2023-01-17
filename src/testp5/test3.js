@@ -12,6 +12,26 @@
 // もう直ってるね
 // となると線のグラデーション以降か。どのファイルだっけ...
 
+// stroke gradationはあとで仕様が変わったんですよね。
+// やることは一緒です。あの、こっちが変えたところとあのpull requestで変えたところだけに
+// focusすればいいのよ。まずは...
+
+// --- p5.Geometry.js ---
+//   p5.Geometry
+//   _edgesToVertices
+// --- Immediate.js ---
+//   vertex
+//   _drawImmediateStroke
+// --- Retained.js ---
+//   drawBuffers
+// --- RendererGL.js ---
+//   RendererGL
+//   _setStrokeUniforms
+// --- line.frag, line.vert ---
+// unit testは省略
+// その後修正が入り...
+// shader以外すべて修正入ってますね。まとめましょう、後で。
+
 function setup() {
   createCanvas(400, 400, WEBGL);
 

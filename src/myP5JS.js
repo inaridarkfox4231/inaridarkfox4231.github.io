@@ -100611,7 +100611,14 @@
           ];
           this.vertexColors = [
           ];
-          this.lineVertexColors = []; // 線の頂点色用
+
+          // One color per vertex representing the stroke color at that vertex
+          this.vertexStrokeColors = []; // 格納用
+
+          // One color per line vertex, generated automatically based on
+          // vertexStrokeColors in _edgesToVertices()
+          this.lineVertexColors = []; // shaderに送る用
+
           this.detailX = detailX !== undefined ? detailX : 1;
           this.detailY = detailY !== undefined ? detailY : 1;
           this.dirtyFlags = {
@@ -100783,37 +100790,48 @@
  * @chainable
  */
         _main.default.Geometry.prototype._edgesToVertices = function () {
-          // つまり、一旦この中身を別のところに避難させておいて、書き換える...とか？？
-          // それでいけるか？？
-          // 4*i, 4*i+1, 4*i+2, 4*i+3 でOKです！！
-          const data = this.lineVertexColors.slice();
-          this.lineVertexColors.length = 0;
+          const lineColorData = [];
           this.lineVertices.length = 0;
           this.lineNormals.length = 0;
-          for (var i = 0; i < this.edges.length; i++) {
-            const e0 = this.edges[i][0];
-            const e1 = this.edges[i][1];
-            var begin = this.vertices[this.edges[i][0]];
-            var end = this.vertices[this.edges[i][1]];
-            var dir = end.copy().sub(begin).normalize();
-            var a = begin.array();
-            var b = begin.array();
-            var c = end.array();
-            var d = end.array();
-            var dirAdd = dir.array();
-            var dirSub = dir.array(); // below is used to displace the pair of vertices at beginning and end
+
+          for (let i = 0; i < this.edges.length; i++) {
+            const endIndex0 = this.edges[i][0];
+            const endIndex1 = this.edges[i][1];
+            const begin = this.vertices[endIndex0];
+            const end = this.vertices[endIndex1];
+            const fromColor = this.vertexStrokeColors.length > 0
+              ? this.vertexStrokeColors.slice(
+                endIndex0 * 4,
+                (endIndex0 + 1) * 4
+              )
+              : [0, 0, 0, 0];
+            const toColor = this.vertexStrokeColors.length > 0
+              ? this.vertexStrokeColors.slice(
+                endIndex1 * 4,
+                (endIndex1 + 1) * 4
+              )
+              : [0, 0, 0, 0];
+            const dir = end
+              .copy()
+              .sub(begin)
+              .normalize();
+            const a = begin.array();
+            const b = begin.array();
+            const c = end.array();
+            const d = end.array();
+            const dirAdd = dir.array();
+            const dirSub = dir.array();
+            // below is used to displace the pair of vertices at beginning and end
             // in opposite directions
             dirAdd.push(1);
-            dirSub.push( - 1);
-            if(data.length > 0){
-              var beginColor = [data[4*e0], data[4*e0+1], data[4*e0+2], data[4*e0+3]];
-              var endColor = [data[4*e1], data[4*e1+1], data[4*e1+2], data[4*e1+3]];
-              this.lineVertexColors.push(beginColor, beginColor, endColor, endColor, beginColor, endColor); // これでいい。
-            }
+            dirSub.push(-1);
             this.lineNormals.push(dirAdd, dirSub, dirAdd, dirAdd, dirSub, dirSub);
             this.lineVertices.push(a, b, c, c, b, d);
-            // ここで色入れちゃえ
+            lineColorData.push(
+              fromColor, fromColor, toColor, toColor, fromColor, toColor
+            );
           }
+          this.lineVertexColors = lineColorData;
           return this;
         };
         /**
@@ -101911,14 +101929,17 @@
  */
 
         _main.default.RendererGL.prototype.beginShape = function (mode) {
-          this.immediateMode.shapeMode = mode !== undefined ? mode : constants.TRIANGLE_FAN;
+          // TESSがデフォになりました
+          this.immediateMode.shapeMode = mode !== undefined ? mode : constants.TESS;
           //this.immediateMode.geometry.reset();
           return this;
         };
+        // なるほど、頂点色のバッファ用にこれ追加する必要あったか...
         var immediateBufferStrides = {
           vertices: 1,
           vertexNormals: 1,
           vertexColors: 4,
+          vertexStrokeColors: 4,
           uvs: 2
         };
         /**
@@ -101944,17 +101965,25 @@
             // 1--2     1--2   4
             // When vertex index 3 is being added, add the necessary duplicates.
             if (this.immediateMode.geometry.vertices.length % 6 === 3) {
-              for (var key in immediateBufferStrides) {
-                var stride = immediateBufferStrides[key];
-                var buffer = this.immediateMode.geometry[key];
-                buffer.push.apply(buffer, _toConsumableArray(buffer.slice(buffer.length - 3 * stride, buffer.length - 2 * stride)).concat(_toConsumableArray(buffer.slice(buffer.length - stride, buffer.length))));
+              for (const key in immediateBufferStrides) {
+                const stride = immediateBufferStrides[key];
+                const buffer = this.immediateMode.geometry[key];
+                buffer.push(
+                  ...buffer.slice(
+                    buffer.length - 3 * stride,
+                    buffer.length - 2 * stride
+                  ),
+                  ...buffer.slice(buffer.length - stride, buffer.length)
+                );
               }
             }
           }
-          var z,
-          u,
-          v; // default to (x, y) mode: all other arguments assumed to be 0.
+
+          let z, u, v;
+
+          // default to (x, y) mode: all other arguments assumed to be 0.
           z = u = v = 0;
+
           if (arguments.length === 3) {
             // (x, y, z) mode: (u, v) assumed to be 0.
             z = arguments[2];
@@ -101968,36 +101997,53 @@
             u = arguments[3];
             v = arguments[4];
           }
-          var vert = new _main.default.Vector(x, y, z);
+          const vert = new p5.Vector(x, y, z);
           this.immediateMode.geometry.vertices.push(vert);
           this.immediateMode.geometry.vertexNormals.push(this._currentNormal);
-          var vertexColor = this.curFillColor || [
-            0.5,
-            0.5,
-            0.5,
-            1
-          ];
-          this.immediateMode.geometry.vertexColors.push(vertexColor[0], vertexColor[1], vertexColor[2], vertexColor[3]);
+          const vertexColor = this.curFillColor || [0.5, 0.5, 0.5, 1.0];
+          this.immediateMode.geometry.vertexColors.push(
+            vertexColor[0],
+            vertexColor[1],
+            vertexColor[2],
+            vertexColor[3]
+          );
           var lineVertexColor = this.curStrokeColor || [0.5, 0.5, 0.5, 1];
-          this.immediateMode.geometry.lineVertexColors.push(lineVertexColor[0], lineVertexColor[1], lineVertexColor[2], lineVertexColor[3]);
+          this.immediateMode.geometry.vertexStrokeColors.push(
+            lineVertexColor[0],
+            lineVertexColor[1],
+            lineVertexColor[2],
+            lineVertexColor[3]
+          );
+
           if (this.textureMode === constants.IMAGE) {
             if (this._tex !== null) {
               if (this._tex.width > 0 && this._tex.height > 0) {
                 u /= this._tex.width;
                 v /= this._tex.height;
               }
-            } else if (this._tex === null && arguments.length >= 4) {
+            } else if (
+              !this.isProcessingVertices &&
+              this._tex === null &&
+              arguments.length >= 4
+            ) {
               // Only throw this warning if custom uv's have  been provided
-              console.warn('You must first call texture() before using' + ' vertex() with image based u and v coordinates');
+              console.warn(
+                'You must first call texture() before using' +
+                  ' vertex() with image based u and v coordinates'
+              );
             }
           }
+
           this.immediateMode.geometry.uvs.push(u, v);
+
           this.immediateMode._bezierVertex[0] = x;
           this.immediateMode._bezierVertex[1] = y;
           this.immediateMode._bezierVertex[2] = z;
+
           this.immediateMode._quadraticVertex[0] = x;
           this.immediateMode._quadraticVertex[1] = y;
           this.immediateMode._quadraticVertex[2] = z;
+
           return this;
         };
         /**
@@ -102029,7 +102075,9 @@
             this._drawPoints(this.immediateMode.geometry.vertices, this.immediateMode.buffers.point);
             return this;
           }
-          this._processVertices.apply(this, arguments);
+          this.isProcessingVertices = true;
+          this._processVertices(...arguments);
+          this.isProcessingVertices = false;
           if (this._doFill) {
             if (this.immediateMode.geometry.vertices.length > 1) {
               this._drawImmediateFill();
@@ -102037,7 +102085,6 @@
           }
           if (this._doStroke) {
             if (this.immediateMode.geometry.lineVertices.length > 1) {
-              console.log(this.immediateMode.geometry.lineVertexColors);
               this._drawImmediateStroke();
             }
           }
@@ -102250,6 +102297,7 @@
         _main.default.RendererGL.prototype._drawImmediateStroke = function () {
           var gl = this.GL;
           var shader = this._getImmediateStrokeShader();
+          this._useLineColor = (this.immediateMode.geometry.vertexStrokeColors.length > 0);
           this._setStrokeUniforms(shader);
           var _iteratorNormalCompletion2 = true;
           var _didIteratorError2 = false;
@@ -102508,6 +102556,7 @@
           var geometry = this.retainedMode.geometry[gId];
           if (this._doStroke && geometry.lineVertexCount > 0) {
             var strokeShader = this._getRetainedStrokeShader();
+            this._useLineColor = (geometry.model.vertexStrokeColors.length > 0);
             this._setStrokeUniforms(strokeShader);
             var _iteratorNormalCompletion2 = true;
             var _didIteratorError2 = false;
@@ -102879,8 +102928,8 @@
           phongFrag: lightingShader + '// include lighting.glsl\nprecision highp float;\nprecision highp int;\n\nuniform vec4 uSpecularMatColor;\nuniform vec4 uAmbientMatColor;\nuniform vec4 uEmissiveMatColor;\n\nuniform vec4 uMaterialColor;\nuniform vec4 uTint;\nuniform sampler2D uSampler;\nuniform bool isTexture;\n\nvarying vec3 vNormal;\nvarying vec2 vTexCoord;\nvarying vec3 vViewPosition;\nvarying vec3 vAmbientColor;\n\nvoid main(void) {\n\n  vec3 diffuse;\n  vec3 specular;\n  totalLight(vViewPosition, normalize(vNormal), diffuse, specular);\n\n  // Calculating final color as result of all lights (plus emissive term).\n\n  gl_FragColor = isTexture ? texture2D(uSampler, vTexCoord) * (uTint / vec4(255, 255, 255, 255)) : uMaterialColor;\n  gl_FragColor.rgb = diffuse * gl_FragColor.rgb + \n                    vAmbientColor * uAmbientMatColor.rgb + \n                    specular * uSpecularMatColor.rgb + \n                    uEmissiveMatColor.rgb;\n}',
           fontVert: 'precision mediump float;\n\nattribute vec3 aPosition;\nattribute vec2 aTexCoord;\nuniform mat4 uModelViewMatrix;\nuniform mat4 uProjectionMatrix;\n\nuniform vec4 uGlyphRect;\nuniform float uGlyphOffset;\n\nvarying vec2 vTexCoord;\nvarying float w;\n\nvoid main() {\n  vec4 positionVec4 = vec4(aPosition, 1.0);\n\n  // scale by the size of the glyph\'s rectangle\n  positionVec4.xy *= uGlyphRect.zw - uGlyphRect.xy;\n\n  // move to the corner of the glyph\n  positionVec4.xy += uGlyphRect.xy;\n\n  // move to the letter\'s line offset\n  positionVec4.x += uGlyphOffset;\n  \n  gl_Position = uProjectionMatrix * uModelViewMatrix * positionVec4;\n  vTexCoord = aTexCoord;\n  w = gl_Position.w;\n}\n',
           fontFrag: '#extension GL_OES_standard_derivatives : enable\nprecision mediump float;\n\n#if 0\n  // simulate integer math using floats\n\t#define int float\n\t#define ivec2 vec2\n\t#define INT(x) float(x)\n\n\tint ifloor(float v) { return floor(v); }\n\tivec2 ifloor(vec2 v) { return floor(v); }\n\n#else\n  // use native integer math\n\tprecision highp int;\n\t#define INT(x) x\n\n\tint ifloor(float v) { return int(v); }\n\tint ifloor(int v) { return v; }\n\tivec2 ifloor(vec2 v) { return ivec2(v); }\n\n#endif\n\nuniform sampler2D uSamplerStrokes;\nuniform sampler2D uSamplerRowStrokes;\nuniform sampler2D uSamplerRows;\nuniform sampler2D uSamplerColStrokes;\nuniform sampler2D uSamplerCols;\n\nuniform ivec2 uStrokeImageSize;\nuniform ivec2 uCellsImageSize;\nuniform ivec2 uGridImageSize;\n\nuniform ivec2 uGridOffset;\nuniform ivec2 uGridSize;\nuniform vec4 uMaterialColor;\n\nvarying vec2 vTexCoord;\n\n// some helper functions\nint round(float v) { return ifloor(v + 0.5); }\nivec2 round(vec2 v) { return ifloor(v + 0.5); }\nfloat saturate(float v) { return clamp(v, 0.0, 1.0); }\nvec2 saturate(vec2 v) { return clamp(v, 0.0, 1.0); }\n\nint mul(float v1, int v2) {\n  return ifloor(v1 * float(v2));\n}\n\nivec2 mul(vec2 v1, ivec2 v2) {\n  return ifloor(v1 * vec2(v2) + 0.5);\n}\n\n// unpack a 16-bit integer from a float vec2\nint getInt16(vec2 v) {\n  ivec2 iv = round(v * 255.0);\n  return iv.x * INT(128) + iv.y;\n}\n\nvec2 pixelScale;\nvec2 coverage = vec2(0.0);\nvec2 weight = vec2(0.5);\nconst float minDistance = 1.0/8192.0;\nconst float hardness = 1.05; // amount of antialias\n\n// the maximum number of curves in a glyph\nconst int N = INT(250);\n\n// retrieves an indexed pixel from a sampler\nvec4 getTexel(sampler2D sampler, int pos, ivec2 size) {\n  int width = size.x;\n  int y = ifloor(pos / width);\n  int x = pos - y * width;  // pos % width\n\n  return texture2D(sampler, (vec2(x, y) + 0.5) / vec2(size));\n}\n\nvoid calulateCrossings(vec2 p0, vec2 p1, vec2 p2, out vec2 C1, out vec2 C2) {\n\n  // get the coefficients of the quadratic in t\n  vec2 a = p0 - p1 * 2.0 + p2;\n  vec2 b = p0 - p1;\n  vec2 c = p0 - vTexCoord;\n\n  // found out which values of \'t\' it crosses the axes\n  vec2 surd = sqrt(max(vec2(0.0), b * b - a * c));\n  vec2 t1 = ((b - surd) / a).yx;\n  vec2 t2 = ((b + surd) / a).yx;\n\n  // approximate straight lines to avoid rounding errors\n  if (abs(a.y) < 0.001)\n    t1.x = t2.x = c.y / (2.0 * b.y);\n\n  if (abs(a.x) < 0.001)\n    t1.y = t2.y = c.x / (2.0 * b.x);\n\n  // plug into quadratic formula to find the corrdinates of the crossings\n  C1 = ((a * t1 - b * 2.0) * t1 + c) * pixelScale;\n  C2 = ((a * t2 - b * 2.0) * t2 + c) * pixelScale;\n}\n\nvoid coverageX(vec2 p0, vec2 p1, vec2 p2) {\n\n  vec2 C1, C2;\n  calulateCrossings(p0, p1, p2, C1, C2);\n\n  // determine on which side of the x-axis the points lie\n  bool y0 = p0.y > vTexCoord.y;\n  bool y1 = p1.y > vTexCoord.y;\n  bool y2 = p2.y > vTexCoord.y;\n\n  // could web be under the curve (after t1)?\n  if (y1 ? !y2 : y0) {\n    // add the coverage for t1\n    coverage.x += saturate(C1.x + 0.5);\n    // calculate the anti-aliasing for t1\n    weight.x = min(weight.x, abs(C1.x));\n  }\n\n  // are we outside the curve (after t2)?\n  if (y1 ? !y0 : y2) {\n    // subtract the coverage for t2\n    coverage.x -= saturate(C2.x + 0.5);\n    // calculate the anti-aliasing for t2\n    weight.x = min(weight.x, abs(C2.x));\n  }\n}\n\n// this is essentially the same as coverageX, but with the axes swapped\nvoid coverageY(vec2 p0, vec2 p1, vec2 p2) {\n\n  vec2 C1, C2;\n  calulateCrossings(p0, p1, p2, C1, C2);\n\n  bool x0 = p0.x > vTexCoord.x;\n  bool x1 = p1.x > vTexCoord.x;\n  bool x2 = p2.x > vTexCoord.x;\n\n  if (x1 ? !x2 : x0) {\n    coverage.y -= saturate(C1.y + 0.5);\n    weight.y = min(weight.y, abs(C1.y));\n  }\n\n  if (x1 ? !x0 : x2) {\n    coverage.y += saturate(C2.y + 0.5);\n    weight.y = min(weight.y, abs(C2.y));\n  }\n}\n\nvoid main() {\n\n  // calculate the pixel scale based on screen-coordinates\n  pixelScale = hardness / fwidth(vTexCoord);\n\n  // which grid cell is this pixel in?\n  ivec2 gridCoord = ifloor(vTexCoord * vec2(uGridSize));\n\n  // intersect curves in this row\n  {\n    // the index into the row info bitmap\n    int rowIndex = gridCoord.y + uGridOffset.y;\n    // fetch the info texel\n    vec4 rowInfo = getTexel(uSamplerRows, rowIndex, uGridImageSize);\n    // unpack the rowInfo\n    int rowStrokeIndex = getInt16(rowInfo.xy);\n    int rowStrokeCount = getInt16(rowInfo.zw);\n\n    for (int iRowStroke = INT(0); iRowStroke < N; iRowStroke++) {\n      if (iRowStroke >= rowStrokeCount)\n        break;\n\n      // each stroke is made up of 3 points: the start and control point\n      // and the start of the next curve.\n      // fetch the indices of this pair of strokes:\n      vec4 strokeIndices = getTexel(uSamplerRowStrokes, rowStrokeIndex++, uCellsImageSize);\n\n      // unpack the stroke index\n      int strokePos = getInt16(strokeIndices.xy);\n\n      // fetch the two strokes\n      vec4 stroke0 = getTexel(uSamplerStrokes, strokePos + INT(0), uStrokeImageSize);\n      vec4 stroke1 = getTexel(uSamplerStrokes, strokePos + INT(1), uStrokeImageSize);\n\n      // calculate the coverage\n      coverageX(stroke0.xy, stroke0.zw, stroke1.xy);\n    }\n  }\n\n  // intersect curves in this column\n  {\n    int colIndex = gridCoord.x + uGridOffset.x;\n    vec4 colInfo = getTexel(uSamplerCols, colIndex, uGridImageSize);\n    int colStrokeIndex = getInt16(colInfo.xy);\n    int colStrokeCount = getInt16(colInfo.zw);\n    \n    for (int iColStroke = INT(0); iColStroke < N; iColStroke++) {\n      if (iColStroke >= colStrokeCount)\n        break;\n\n      vec4 strokeIndices = getTexel(uSamplerColStrokes, colStrokeIndex++, uCellsImageSize);\n\n      int strokePos = getInt16(strokeIndices.xy);\n      vec4 stroke0 = getTexel(uSamplerStrokes, strokePos + INT(0), uStrokeImageSize);\n      vec4 stroke1 = getTexel(uSamplerStrokes, strokePos + INT(1), uStrokeImageSize);\n      coverageY(stroke0.xy, stroke0.zw, stroke1.xy);\n    }\n  }\n\n  weight = saturate(1.0 - weight * 2.0);\n  float distance = max(weight.x + weight.y, minDistance); // manhattan approx.\n  float antialias = abs(dot(coverage, weight) / distance);\n  float cover = min(abs(coverage.x), abs(coverage.y));\n  gl_FragColor = uMaterialColor;\n  gl_FragColor.a *= saturate(max(antialias, cover));\n}',
-          lineVert: '/*\n  Part of the Processing project - http://processing.org\n  Copyright (c) 2012-15 The Processing Foundation\n  Copyright (c) 2004-12 Ben Fry and Casey Reas\n  Copyright (c) 2001-04 Massachusetts Institute of Technology\n  This library is free software; you can redistribute it and/or\n  modify it under the terms of the GNU Lesser General Public\n  License as published by the Free Software Foundation, version 2.1.\n  This library is distributed in the hope that it will be useful,\n  but WITHOUT ANY WARRANTY; without even the implied warranty of\n  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU\n  Lesser General Public License for more details.\n  You should have received a copy of the GNU Lesser General\n  Public License along with this library; if not, write to the\n  Free Software Foundation, Inc., 59 Temple Place, Suite 330,\n  Boston, MA  02111-1307  USA\n*/\n\n#define PROCESSING_LINE_SHADER\n\nuniform mat4 uModelViewMatrix;\nuniform mat4 uProjectionMatrix;\nuniform float uStrokeWeight;\n\nuniform vec4 uViewport;\nuniform int uPerspective;\n\nattribute vec4 aPosition;\nattribute vec4 aDirection;\n  \nvoid main() {\n  // using a scale <1 moves the lines towards the camera\n  // in order to prevent popping effects due to half of\n  // the line disappearing behind the geometry faces.\n  vec3 scale = vec3(0.9995);\n\n  vec4 posp = uModelViewMatrix * aPosition;\n  vec4 posq = uModelViewMatrix * (aPosition + vec4(aDirection.xyz, 0));\n\n  // Moving vertices slightly toward the camera\n  // to avoid depth-fighting with the fill triangles.\n  // Discussed here:\n  // http://www.opengl.org/discussion_boards/ubbthreads.php?ubb=showflat&Number=252848  \n  posp.xyz = posp.xyz * scale;\n  posq.xyz = posq.xyz * scale;\n\n  vec4 p = uProjectionMatrix * posp;\n  vec4 q = uProjectionMatrix * posq;\n\n  // formula to convert from clip space (range -1..1) to screen space (range 0..[width or height])\n  // screen_p = (p.xy/p.w + <1,1>) * 0.5 * uViewport.zw\n\n  // prevent division by W by transforming the tangent formula (div by 0 causes\n  // the line to disappear, see https://github.com/processing/processing/issues/5183)\n  // t = screen_q - screen_p\n  //\n  // tangent is normalized and we don\'t care which aDirection it points to (+-)\n  // t = +- normalize( screen_q - screen_p )\n  // t = +- normalize( (q.xy/q.w+<1,1>)*0.5*uViewport.zw - (p.xy/p.w+<1,1>)*0.5*uViewport.zw )\n  //\n  // extract common factor, <1,1> - <1,1> cancels out\n  // t = +- normalize( (q.xy/q.w - p.xy/p.w) * 0.5 * uViewport.zw )\n  //\n  // convert to common divisor\n  // t = +- normalize( ((q.xy*p.w - p.xy*q.w) / (p.w*q.w)) * 0.5 * uViewport.zw )\n  //\n  // remove the common scalar divisor/factor, not needed due to normalize and +-\n  // (keep uViewport - can\'t remove because it has different components for x and y\n  //  and corrects for aspect ratio, see https://github.com/processing/processing/issues/5181)\n  // t = +- normalize( (q.xy*p.w - p.xy*q.w) * uViewport.zw )\n\n  vec2 tangent = normalize((q.xy*p.w - p.xy*q.w) * uViewport.zw);\n\n  // flip tangent to normal (it\'s already normalized)\n  vec2 normal = vec2(tangent.y, -tangent.x);\n\n  float thickness = aDirection.w * uStrokeWeight;\n  vec2 offset = normal * thickness / 2.0;\n\n  vec2 curPerspScale;\n\n  if(uPerspective == 1) {\n    // Perspective ---\n    // convert from world to clip by multiplying with projection scaling factor\n    // to get the right thickness (see https://github.com/processing/processing/issues/5182)\n    // invert Y, projections in Processing invert Y\n    curPerspScale = (uProjectionMatrix * vec4(1, -1, 0, 0)).xy;\n  } else {\n    // No Perspective ---\n    // multiply by W (to cancel out division by W later in the pipeline) and\n    // convert from screen to clip (derived from clip to screen above)\n    curPerspScale = p.w / (0.5 * uViewport.zw);\n  }\n\n  gl_Position.xy = p.xy + offset.xy * curPerspScale;\n  gl_Position.zw = p.zw;\n}\n',
-          lineFrag: 'precision mediump float;\nprecision mediump int;\n\nuniform vec4 uMaterialColor;\n\nvoid main() {\n  gl_FragColor = uMaterialColor;\n}',
+          lineVert: '/*\n  Part of the Processing project - http://processing.org\n  Copyright (c) 2012-15 The Processing Foundation\n  Copyright (c) 2004-12 Ben Fry and Casey Reas\n  Copyright (c) 2001-04 Massachusetts Institute of Technology\n  This library is free software; you can redistribute it and/or\n  modify it under the terms of the GNU Lesser General Public\n  License as published by the Free Software Foundation, version 2.1.\n  This library is distributed in the hope that it will be useful,\n  but WITHOUT ANY WARRANTY; without even the implied warranty of\n  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU\n  Lesser General Public License for more details.\n  You should have received a copy of the GNU Lesser General\n  Public License along with this library; if not, write to the\n  Free Software Foundation, Inc., 59 Temple Place, Suite 330,\n  Boston, MA  02111-1307  USA\n*/\n\n#define PROCESSING_LINE_SHADER\n\nuniform mat4 uModelViewMatrix;\nuniform mat4 uProjectionMatrix;\nuniform float uStrokeWeight;\n\nuniform bool uUseLineColor;\nuniform vec4 uMaterialColor;\n\nuniform vec4 uViewport;\nuniform int uPerspective;\n\nattribute vec4 aPosition;\nattribute vec4 aVertexColor;\nattribute vec4 aDirection;\nvarying vec4 vColor;\n  \nvoid main() {\n  // using a scale <1 moves the lines towards the camera\n  // in order to prevent popping effects due to half of\n  // the line disappearing behind the geometry faces.\n  vec3 scale = vec3(0.9995);\n\n  vec4 posp = uModelViewMatrix * aPosition;\n  vec4 posq = uModelViewMatrix * (aPosition + vec4(aDirection.xyz, 0));\n\n  // Moving vertices slightly toward the camera\n  // to avoid depth-fighting with the fill triangles.\n  // Discussed here:\n  // http://www.opengl.org/discussion_boards/ubbthreads.php?ubb=showflat&Number=252848  \n  posp.xyz = posp.xyz * scale;\n  posq.xyz = posq.xyz * scale;\n\n  vec4 p = uProjectionMatrix * posp;\n  vec4 q = uProjectionMatrix * posq;\n\n  // formula to convert from clip space (range -1..1) to screen space (range 0..[width or height])\n  // screen_p = (p.xy/p.w + <1,1>) * 0.5 * uViewport.zw\n\n  // prevent division by W by transforming the tangent formula (div by 0 causes\n  // the line to disappear, see https://github.com/processing/processing/issues/5183)\n  // t = screen_q - screen_p\n  //\n  // tangent is normalized and we don\'t care which aDirection it points to (+-)\n  // t = +- normalize( screen_q - screen_p )\n  // t = +- normalize( (q.xy/q.w+<1,1>)*0.5*uViewport.zw - (p.xy/p.w+<1,1>)*0.5*uViewport.zw )\n  //\n  // extract common factor, <1,1> - <1,1> cancels out\n  // t = +- normalize( (q.xy/q.w - p.xy/p.w) * 0.5 * uViewport.zw )\n  //\n  // convert to common divisor\n  // t = +- normalize( ((q.xy*p.w - p.xy*q.w) / (p.w*q.w)) * 0.5 * uViewport.zw )\n  //\n  // remove the common scalar divisor/factor, not needed due to normalize and +-\n  // (keep uViewport - can\'t remove because it has different components for x and y\n  //  and corrects for aspect ratio, see https://github.com/processing/processing/issues/5181)\n  // t = +- normalize( (q.xy*p.w - p.xy*q.w) * uViewport.zw )\n\n  vec2 tangent = normalize((q.xy*p.w - p.xy*q.w) * uViewport.zw);\n\n  // flip tangent to normal (it\'s already normalized)\n  vec2 normal = vec2(tangent.y, -tangent.x);\n\n  float thickness = aDirection.w * uStrokeWeight;\n  vec2 offset = normal * thickness / 2.0;\n\n  vec2 curPerspScale;\n\n  if(uPerspective == 1) {\n    // Perspective ---\n    // convert from world to clip by multiplying with projection scaling factor\n    // to get the right thickness (see https://github.com/processing/processing/issues/5182)\n    // invert Y, projections in Processing invert Y\n    curPerspScale = (uProjectionMatrix * vec4(1, -1, 0, 0)).xy;\n  } else {\n    // No Perspective ---\n    // multiply by W (to cancel out division by W later in the pipeline) and\n    // convert from screen to clip (derived from clip to screen above)\n    curPerspScale = p.w / (0.5 * uViewport.zw);\n  }\n\n  gl_Position.xy = p.xy + offset.xy * curPerspScale;\n  gl_Position.zw = p.zw;\n\nvColor = (uUseLineColor ? aVertexColor : uMaterialColor);\n}\n',
+          lineFrag: 'precision mediump float;\nprecision mediump int;\n\nvarying vec4 vColor;\n\nvoid main() {\n  gl_FragColor = vec4(vColor.rgb, 1.) * vColor.a;\n}',
           lineColorVert: '/*\n  Part of the Processing project - http://processing.org\n  Copyright (c) 2012-15 The Processing Foundation\n  Copyright (c) 2004-12 Ben Fry and Casey Reas\n  Copyright (c) 2001-04 Massachusetts Institute of Technology\n  This library is free software; you can redistribute it and/or\n  modify it under the terms of the GNU Lesser General Public\n  License as published by the Free Software Foundation, version 2.1.\n  This library is distributed in the hope that it will be useful,\n  but WITHOUT ANY WARRANTY; without even the implied warranty of\n  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU\n  Lesser General Public License for more details.\n  You should have received a copy of the GNU Lesser General\n  Public License along with this library; if not, write to the\n  Free Software Foundation, Inc., 59 Temple Place, Suite 330,\n  Boston, MA  02111-1307  USA\n*/\n\n#define PROCESSING_LINE_SHADER\n\nuniform mat4 uModelViewMatrix;\nuniform mat4 uProjectionMatrix;\nuniform float uStrokeWeight;\n\nuniform vec4 uViewport;\nuniform int uPerspective;\n\nattribute vec4 aPosition;\nattribute vec4 aDirection;\nattribute vec4 aVertexColor;\nvarying vec4 vColor;\n  \nvoid main() {\n  // using a scale <1 moves the lines towards the camera\n  // in order to prevent popping effects due to half of\n  // the line disappearing behind the geometry faces.\n  vec3 scale = vec3(0.9995);\n\n  vec4 posp = uModelViewMatrix * aPosition;\n  vec4 posq = uModelViewMatrix * (aPosition + vec4(aDirection.xyz, 0));\n\n vColor = aVertexColor; \n\n  // Moving vertices slightly toward the camera\n  // to avoid depth-fighting with the fill triangles.\n  // Discussed here:\n  // http://www.opengl.org/discussion_boards/ubbthreads.php?ubb=showflat&Number=252848  \n  posp.xyz = posp.xyz * scale;\n  posq.xyz = posq.xyz * scale;\n\n  vec4 p = uProjectionMatrix * posp;\n  vec4 q = uProjectionMatrix * posq;\n\n  // formula to convert from clip space (range -1..1) to screen space (range 0..[width or height])\n  // screen_p = (p.xy/p.w + <1,1>) * 0.5 * uViewport.zw\n\n  // prevent division by W by transforming the tangent formula (div by 0 causes\n  // the line to disappear, see https://github.com/processing/processing/issues/5183)\n  // t = screen_q - screen_p\n  //\n  // tangent is normalized and we don\'t care which aDirection it points to (+-)\n  // t = +- normalize( screen_q - screen_p )\n  // t = +- normalize( (q.xy/q.w+<1,1>)*0.5*uViewport.zw - (p.xy/p.w+<1,1>)*0.5*uViewport.zw )\n  //\n  // extract common factor, <1,1> - <1,1> cancels out\n  // t = +- normalize( (q.xy/q.w - p.xy/p.w) * 0.5 * uViewport.zw )\n  //\n  // convert to common divisor\n  // t = +- normalize( ((q.xy*p.w - p.xy*q.w) / (p.w*q.w)) * 0.5 * uViewport.zw )\n  //\n  // remove the common scalar divisor/factor, not needed due to normalize and +-\n  // (keep uViewport - can\'t remove because it has different components for x and y\n  //  and corrects for aspect ratio, see https://github.com/processing/processing/issues/5181)\n  // t = +- normalize( (q.xy*p.w - p.xy*q.w) * uViewport.zw )\n\n  vec2 tangent = normalize((q.xy*p.w - p.xy*q.w) * uViewport.zw);\n\n  // flip tangent to normal (it\'s already normalized)\n  vec2 normal = vec2(tangent.y, -tangent.x);\n\n  float thickness = aDirection.w * uStrokeWeight;\n  vec2 offset = normal * thickness / 2.0;\n\n  vec2 curPerspScale;\n\n  if(uPerspective == 1) {\n    // Perspective ---\n    // convert from world to clip by multiplying with projection scaling factor\n    // to get the right thickness (see https://github.com/processing/processing/issues/5182)\n    // invert Y, projections in Processing invert Y\n    curPerspScale = (uProjectionMatrix * vec4(1, -1, 0, 0)).xy;\n  } else {\n    // No Perspective ---\n    // multiply by W (to cancel out division by W later in the pipeline) and\n    // convert from screen to clip (derived from clip to screen above)\n    curPerspScale = p.w / (0.5 * uViewport.zw);\n  }\n\n  gl_Position.xy = p.xy + offset.xy * curPerspScale;\n  gl_Position.zw = p.zw;\n}\n',
           lineColorFrag: 'precision mediump float;\nprecision mediump int;\n\nvarying vec4 vColor;\n\nvoid main() {\n  gl_FragColor = vColor;\n}',
           pointVert: 'attribute vec3 aPosition;\nuniform float uPointSize;\nvarying float vStrokeWeight;\nuniform mat4 uModelViewMatrix;\nuniform mat4 uProjectionMatrix;\nvoid main() {\n\tvec4 positionVec4 =  vec4(aPosition, 1.0);\n\tgl_Position = uProjectionMatrix * uModelViewMatrix * positionVec4;\n\tgl_PointSize = uPointSize;\n\tvStrokeWeight = uPointSize;\n}',
@@ -102998,19 +103047,19 @@
           this._curCamera._setDefaultCamera();
           this._defaultLightShader = undefined;
           this._defaultImmediateModeShader = undefined;
-          this._defaultStrokeColorShader = undefined; // 追加
           this._defaultNormalShader = undefined;
           this._defaultColorShader = undefined;
           this._defaultPointShader = undefined;
           this.userFillShader = undefined;
           this.userStrokeShader = undefined;
-          this.userPointShader = undefined; // Default drawing is done in Retained Mode
-          // Geometry and Material hashes stored here
+          this.userPointShader = undefined;
+          // Default drawing is done in Retained Mode Geometry and Material hashes stored here
           this.retainedMode = {
             geometry: {
             },
             buffers: {
               stroke: [
+                new _main.default.RenderBuffer(4, 'lineVertexColors', 'lineColorBuffer', 'aVertexColor', this, this._flatten),
                 new _main.default.RenderBuffer(3, 'lineVertices', 'lineVertexBuffer', 'aPosition', this, this._flatten),
                 new _main.default.RenderBuffer(4, 'lineNormals', 'lineNormalBuffer', 'aDirection', this, this._flatten)
               ],
@@ -103047,10 +103096,6 @@
               ],
               stroke: [
                 new _main.default.RenderBuffer(4, 'lineVertexColors', 'lineColorBuffer', 'aVertexColor', this, this._flatten),
-                // 違うか。線の方で、頂点色にするか個別にするか選べるといい...のか？違う。あの、頂点色の場合にだ。
-                // begin～endShapeでしか現在、頂点彩色してないんだから、その場合には選に関しても頂点別に色がついてもいいはずでしょ。だから、その...
-                // ああでもあれか、6つか。あれ、か。んー...じゃああそこで色を、決める。その、shaderで。lineVertの中でaVertexColorとvColorを定義...
-                // すればいいと思う。
                 new _main.default.RenderBuffer(3, 'lineVertices', 'lineVertexBuffer', 'aPosition', this, this._flatten),
                 new _main.default.RenderBuffer(4, 'lineNormals', 'lineNormalBuffer', 'aDirection', this, this._flatten)
               ],
@@ -103072,6 +103117,10 @@
           ]; // current curveDetail in the Bezier lookUpTable
           this._lutBezierDetail = 0; // current curveDetail in the Quadratic lookUpTable
           this._lutQuadraticDetail = 0;
+
+          // Used to distinguish between user calls to vertex() and internal calls
+          this.isProcessingVertices = false;
+
           this._tessy = this._initTessy();
           this.fontInfos = {
           };
@@ -103966,6 +104015,7 @@
         };
         _main.default.RendererGL.prototype._setStrokeUniforms = function (strokeShader) {
           strokeShader.bindShader(); // set the uniform values
+          strokeShader.setUniform('uUseLineColor', this._useLineColor);
           strokeShader.setUniform('uMaterialColor', this.curStrokeColor);
           strokeShader.setUniform('uStrokeWeight', this.curStrokeWeight);
         };
