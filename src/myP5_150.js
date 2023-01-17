@@ -95676,11 +95676,11 @@
           this._curCamera._setDefaultCamera();
 
           // 即席でgeometry作る。そのように書き直す。
-          const geom = new this.pInst.Geometry();
-          geom.vertices = [this.pInst.createVector(dx, dy, 0),
-        									 this.pInst.createVector(dx + dWidth, dy, 0),
-        									 this.pInst.createVector(dx + dWidth, dy + dHeight, 0),
-        									 this.pInst.createVector(dx, dy + dHeight, 0)];
+          const geom = new _main.default.Geometry();
+          geom.vertices = [this._pInst.createVector(dx, dy, 0),
+        									 this._pInst.createVector(dx + dWidth, dy, 0),
+        									 this._pInst.createVector(dx + dWidth, dy + dHeight, 0),
+        									 this._pInst.createVector(dx, dy + dHeight, 0)];
         	geom.faces = [[0, 1, 2], [0, 2, 3]];
         	geom.uvs = [u0, v0, u1, v0, u1, v1, u0, v1];
         	this.createBuffers("image", geom);
