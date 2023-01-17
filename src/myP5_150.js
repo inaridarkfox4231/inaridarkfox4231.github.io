@@ -95674,13 +95674,26 @@
           gl.disable(gl.CULL_FACE);
 
           this._curCamera._setDefaultCamera();
+
+          // 即席でgeometry作る。そのように書き直す。
+          const geom = new this.pInst.Geometry();
+          geom.vertices = [this.pInst.createVector(dx, dy, 0),
+        									 this.pInst.createVector(dx + dWidth, dy, 0),
+        									 this.pInst.createVector(dx + dWidth, dy + dHeight, 0),
+        									 this.pInst.createVector(dx, dy + dHeight, 0)];
+        	geom.faces = [[0, 1, 2], [0, 2, 3]];
+        	geom.uvs = [u0, v0, u1, v0, u1, v1, u0, v1];
+        	this.createBuffers("image", geom);
+        	this.drawBuffers("image");
+
+/*
           this.beginShape();
           this.vertex(dx, dy, 0, u0, v0);
           this.vertex(dx + dWidth, dy, 0, u1, v0);
           this.vertex(dx + dWidth, dy + dHeight, 0, u1, v1);
           this.vertex(dx, dy + dHeight, 0, u0, v1);
           this.endShape(constants.CLOSE);
-
+*/
           if (depthTestIsEnable) { gl.enable(gl.DEPTH_TEST); }
           if (cullFaceIsEnable) { gl.enable(gl.CULL_FACE); }
 
