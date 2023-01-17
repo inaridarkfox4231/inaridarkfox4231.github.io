@@ -100362,6 +100362,7 @@
           _cam.cameraType = this.cameraType;
           _cam.cameraMatrix = this.cameraMatrix.copy();
           _cam.projMatrix = this.projMatrix.copy();
+          _cam._computeCameraDefaultSettings();
           return _cam;
         };
         /**
