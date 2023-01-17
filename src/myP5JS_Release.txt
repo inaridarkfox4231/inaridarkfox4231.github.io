@@ -134,3 +134,21 @@ imageが悪いのではなくてその中で...ん？
 問題が生じているのは今のところ「RetainedModeのvertexColorsがすっからかんのジオメトリー」ですので。
 だからあそこで「0の場合は単色で埋める」ってやれば問題ない？？どっち？Retainedだけ。
 strokeでも同じ問題が生じてそうで怖い
+
+というわけでdrawBuffersのdoFillのときの処理を
+
+if (geometry.model.vertexColors.length > 0) {
+  this._useVertexColor = true;
+} else {
+  this._useVertexColor = false;
+  for (let i = 0; i < geometry.model.vertices.length; i++) {
+    geometry.model.vertexColors.push(...this.curFillColor);
+  }
+}
+// こうするの？？とりあえずこれで試してみる。
+//this._useVertexColor = (geometry.model.vertexColors.length > 0);
+
+こうしました。結果、意図的にvertexColorsの中身を空にしたgeometry以外はすべて描画されました。スマホでも。
+しかしあれの場合は...
+
+vertexColorsの中身が空のgeometryに対してはなぜかこの方法でもだめでした。なぜ？？？？

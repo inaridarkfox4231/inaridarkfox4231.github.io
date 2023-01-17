@@ -102513,12 +102513,9 @@
  * @param  {p5.Geometry}  model contains geometry data
  */
         _main.default.RendererGL.prototype.createBuffers = function (gId, model) {
-          var gl = this.GL; //initialize the gl buffers for our geom groups
+          var gl = this.GL;
+          //initialize the gl buffers for our geom groups
           var buffers = this._initBufferDefaults(gId);
-          // ここですね。ここでmodelに放り込んでいる。
-          // そしてbuffersは戻り値（モドリッチ）ですから、ごめんこのときワールドカップ2022やってたので
-          // どうでもいいわ！！！
-          // 戻り値ですから、必然的に.model.vertices, .model.edges, ... ってなるわけ。
           buffers.model = model;
           var indexBuffer = buffers.indexBuffer;
           if (model.faces.length) {
@@ -102592,7 +102589,7 @@
             if (geometry.model.vertexColors.length > 0) {
               this._useVertexColor = true;
             } else {
-              this._useVertexColor = false;
+              this._useVertexColor = true;
               for (let i = 0; i < geometry.model.vertices.length; i++) {
                 geometry.model.vertexColors.push(...this.curFillColor);
               }
