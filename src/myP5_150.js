@@ -103294,6 +103294,7 @@
           this.fontInfos = {
           };
           this._curShader = undefined;
+          this._curShaderName = "";
           return this;
         };
         _main.default.RendererGL.prototype = Object.create(_main.default.Renderer.prototype); //////////////////////////////////////////////
@@ -104017,6 +104018,7 @@
           if (!stroke || !stroke.isStrokeShader()) {
             return this._getLineShader();
           }
+          this._curShaderName = "userStrokeShader";
           return stroke;
         };
         _main.default.RendererGL.prototype._getRetainedStrokeShader = _main.default.RendererGL.prototype._getImmediateStrokeShader;
@@ -104041,8 +104043,10 @@
             }
           } else if (!fill          /*|| !fill.isColorShader()*/
           ) {
+            this._curShaderName = "immediateModeShader";
             return this._getImmediateModeShader();
           }
+          this._curShaderName = "userFillShader";
           return fill;
         };
         /*
@@ -104085,36 +104089,46 @@
               this._defaultLightShader = new _main.default.Shader(this, defaultShaders.lightVert, defaultShaders.lightTextureFrag);
             }
           }
+          if (this._pInst._glAttributes.perPixelLighting) {
+            this._curShaderName = "PhongLightingShader";
+          } else {
+            this._curShaderName = "GourangLightingShader";
+          }
           return this._defaultLightShader;
         };
         _main.default.RendererGL.prototype._getImmediateModeShader = function () {
           if (!this._defaultImmediateModeShader) {
             this._defaultImmediateModeShader = new _main.default.Shader(this, defaultShaders.immediateVert, defaultShaders.vertexColorFrag);
           }
+          this._curShaderName = "immediateModeShader";
           return this._defaultImmediateModeShader;
         };
         _main.default.RendererGL.prototype._getNormalShader = function () {
           if (!this._defaultNormalShader) {
             this._defaultNormalShader = new _main.default.Shader(this, defaultShaders.normalVert, defaultShaders.normalFrag);
           }
+          this._curShaderName = "normalShader";
           return this._defaultNormalShader;
         };
         _main.default.RendererGL.prototype._getColorShader = function () {
           if (!this._defaultColorShader) {
             this._defaultColorShader = new _main.default.Shader(this, defaultShaders.normalVert, defaultShaders.basicFrag);
           }
+          this._curShaderName = "colorShader";
           return this._defaultColorShader;
         };
         _main.default.RendererGL.prototype._getPointShader = function () {
           if (!this._defaultPointShader) {
             this._defaultPointShader = new _main.default.Shader(this, defaultShaders.pointVert, defaultShaders.pointFrag);
           }
+          this._curShaderName = "pointShader";
           return this._defaultPointShader;
         };
         _main.default.RendererGL.prototype._getLineShader = function () {
           if (!this._defaultLineShader) {
             this._defaultLineShader = new _main.default.Shader(this, defaultShaders.lineVert, defaultShaders.lineFrag);
           }
+          this._curShaderName = "lineShader";
           return this._defaultLineShader;
         };
         _main.default.RendererGL.prototype._getFontShader = function () {
@@ -104122,6 +104136,7 @@
             this.GL.getExtension('OES_standard_derivatives');
             this._defaultFontShader = new _main.default.Shader(this, defaultShaders.fontVert, defaultShaders.fontFrag);
           }
+          this._curShaderName = "fontShader";
           return this._defaultFontShader;
         };
         _main.default.RendererGL.prototype._getEmptyTexture = function () {
