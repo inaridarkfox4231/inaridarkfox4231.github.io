@@ -43,38 +43,38 @@
 // ここの例↓ https://github.com/processing/p5.js/pull/5928
 
 function setup() {
-  createCanvas(400, 400, WEBGL)
+  createCanvas(400, 400, WEBGL);
 }
 
 function draw() {
-  orbitControl()
-  push()
-  background(255)
-  stroke(0)
-  fill(200)
+  orbitControl();
+  push();
+  background(255);
+  stroke(0);
+  fill(200);
 
-  push()
-  translate(-100, 0)
-  sphere(50)
-  pop()
+  push();
+  translate(-100, 0);
+  sphere(50);
+  pop();
 
-  push()
-  translate(100, -100)
-  beginShape(QUAD_STRIP)
-  vertex(-20, -20)
-  vertex(-20, 20)
-  vertex(20, -20)
-  vertex(20, 20)
-  endShape()
-  pop()
+  push();
+  translate(100, -100);
+  beginShape(QUAD_STRIP);
+  vertex(-20, -20);
+  vertex(-20, 20);
+  vertex(20, -20);
+  vertex(20, 20);
+  endShape();
+  pop();
 
-  push()
-  translate(100, 100)
-  beginShape()
+  push();
+  translate(100, 100);
+  beginShape();
   for (let i = 0; i < 30; i++) {
-    const t = i/30
-    vertex(20*cos(t*TWO_PI), 20*sin(t*TWO_PI))
+    const t = i/30;
+    vertex(20*cos(t*TWO_PI), 20*sin(t*TWO_PI));
   }
-  endShape(CLOSE)
-  pop()
+  endShape(CLOSE);
+  pop();
 }
