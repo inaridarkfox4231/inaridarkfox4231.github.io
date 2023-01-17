@@ -100631,14 +100631,16 @@
         _main.default.Geometry.prototype.reset = function () {
           this.lineVertices.length = 0;
           this.lineNormals.length = 0;
+
           this.vertices.length = 0;
           this.edges.length = 0;
           this.vertexColors.length = 0;
+          this.vertexStrokeColors.length = 0; // 追加
           this.lineVertexColors.length = 0; // 追加
           this.vertexNormals.length = 0;
           this.uvs.length = 0;
-          this.dirtyFlags = {
-          };
+
+          this.dirtyFlags = {};
         };
         /**
  * computes faces for geometry objects based on the vertices.
@@ -102586,7 +102588,17 @@
             strokeShader.unbindShader();
           }
           if (this._doFill) {
-            this._useVertexColor = (geometry.model.vertexColors.length > 0);
+            // こっち！
+            if (geometry.model.vertexColors.length > 0) {
+              this._useVertexColor = true;
+            } else {
+              this._useVertexColor = false;
+              for (let i = 0; i < geometry.model.vertices.length; i++) {
+                geometry.model.vertexColors.push(...this.curFillColor);
+              }
+            }
+            // こうするの？？とりあえずこれで試してみる。
+            //this._useVertexColor = (geometry.model.vertexColors.length > 0);
             var fillShader = this._getRetainedFillShader();
             this._setFillUniforms(fillShader);
             var _iteratorNormalCompletion3 = true;
@@ -103855,37 +103867,18 @@
  */
         _main.default.RendererGL.prototype._getImmediateStrokeShader = function () {
           // select the stroke shader to use
-          var stroke = this.userStrokeShader;
+          const stroke = this.userStrokeShader;
           if (!stroke || !stroke.isStrokeShader()) {
-            // immediateModeShaderはあるのに！immediateStrokeShaderがない！
-            // というかimmediate"Fill"Shaderの方が適切だと思うんだよね。で、immediateStrokeShaderを作る。
-            // なぜimmediateFillShaderがいいかというとimmediateModeShaderがFillでしか使われてなくて命名不適切。
-            // で、immediateStrokeShaderはlineVertでaVertexColorとvColorを追加したものにするんだけど...lineVertの改造でいいんじゃないかと。
-            // lineVertでは現在色を決めておらず、vertexに色を持たせる処理はあそこをいじればいいから、もう線の彩色については頂点色オンリーにする。
-            // lineFragを改造しよう。？
-            // 改造するなら改名要らないか...どこ見るんだっけ、あの、geometryのやつ！_edgesToVerticesだ！あそこで
-            // 対応する頂点の色を入れちゃえばいいんだよ。
-
-            // lineVertexColorsが空っぽの場合はthis._getLineShader();でいいよ。
-            // retainedを別の関数にすればこれ要らなくなるんだよな。
-            if(this.immediateMode.geometry.lineVertexColors.length === 0){
-              return this._getLineShader();
-            }
-
-            if (!this._defaultStrokeColorShader) {
-              this._defaultStrokeColorShader = new _main.default.Shader(this, defaultShaders.lineColorVert, defaultShaders.lineColorFrag);
-            }
-            return this._defaultStrokeColorShader;
-            //return this._getLineShader();
+            return this._getLineShader();
           }
           return stroke;
         };
         // ここをいじる？
         _main.default.RendererGL.prototype._getRetainedStrokeShader = _main.default.RendererGL.prototype._getImmediateStrokeShader;
         /*
- * selects which fill shader should be used based on renderer state,
- * for use with begin/endShape and immediate vertex mode.
- */
+         * selects which fill shader should be used based on renderer state,
+         * for use with begin/endShape and immediate vertex mode.
+        */
         _main.default.RendererGL.prototype._getImmediateFillShader = function () {
           var fill = this.userFillShader;
           if (this._useNormalMaterial) {
