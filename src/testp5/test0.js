@@ -49,12 +49,14 @@ function setup() {
 		this.vertices.push(createVector(-64, 64));
 		this.faces.push([0, 1, 2]);
 		this.faces.push([0, 2, 3]);
+		/*
 		this.vertexColors.push(
 			200/255, 0, 0, 1,
 			200/255, 0, 0, 1,
 			0, 0, 200/255, 1,
 			0, 0, 200/255, 1
 		);
+		*/
 		this.computeNormals();
 	});
 
@@ -66,10 +68,12 @@ function setup() {
     this.vertices.push(setV(-1,-1,1),setV(1,-1,1),setV(1,1,1),setV(-1,1,1),
                        setV(-1,-1,-1),setV(1,-1,-1),setV(1,1,-1),setV(-1,1,-1)
     );
+		/*
     this.vertexColors.push(
       0,0,1,1, 0,1,0,1, 1,0,0,1, 1,1,1,1,
       1,1,0,1, 1,0,1,1, 0,1,1,1, 1,1,1,1
     );
+		*/
     this.faces.push([0,1,2],[0,2,3],[4,7,6],[4,6,5],
                     [3,2,6],[3,6,7],[0,3,7],[0,7,4],
                     [2,1,5],[2,5,6],[1,0,4],[1,4,5]
