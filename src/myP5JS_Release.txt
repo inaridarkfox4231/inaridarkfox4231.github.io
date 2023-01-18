@@ -202,3 +202,21 @@ ImmediateとRetainedは同じshaderを使っている。Immediateではフラグ
 verexColorPhongVert
 vertexColorPhongFrag
 あと2種についても同様に
+
+shaderいじったら単色プリミティブすべてOKになったんですけど
+あっちの方はmodelが変なことになってますね
+
+あれtextureのbox以外全部phongVert--phongFragで描いてるからすべてに影響が出てるんですけど
+まずいみたいですね
+
+というわけでもう一度、今度はフラグも折ってみるか
+もうひとつ
+phongVertからuniform bool uUseVertexC
+
+bool？？？
+そういえばboolまずいんだっけか
+・・・
+uniform bool uUseVertexColor外してみる
+今使ってないし
+boolはあれ、まずいのは配列だったと思う。確か。
+これで様子を見る...
