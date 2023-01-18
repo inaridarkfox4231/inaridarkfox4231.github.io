@@ -182,3 +182,23 @@ modelの場合、頂点色が入っててもだめみたいです。だからあ
 メモリ不足ではなく機種依存バグです。間違いなく。
 
 Retainedの方のフラグを折ってみる。
+
+フラグ折りましたが影響消えなかったです。falseにしてgeometryの方vertexColorsが反映されないようにしても
+それ以降の単色プリミティブは見事に消えてしまいました。何で？しかもスマホ限定で。はぁ？？？
+
+ImmediateとRetainedは同じshaderを使っている。Immediateではフラグへの代入はendShapeでしかやっていない。
+同じshaderを使ってるせいで問題が生じている？違う。だって今回immediateは不使用。となると...
+仕様変更でphongVertの方、vColorをuMaterialColorにしたら問題が消えた（もちろん頂点色も消えた）
+あれで問題が消えるの冷静に考えたらおかしい
+おかしいんだよ。
+いっそaVertexColor限定にする？か？
+
+もしくは
+
+頂点色＆ライティングの場合だけ違うshaderを使う...？フラグで分岐させるのではなくshader自体違うものにしてしまえばいい？
+
+とりあえず再びuMaterialColorにして様子を見る...
+
+verexColorPhongVert
+vertexColorPhongFrag
+あと2種についても同様に
