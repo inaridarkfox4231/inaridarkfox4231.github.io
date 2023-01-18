@@ -220,3 +220,6 @@ uniform bool uUseVertexColor外してみる
 今使ってないし
 boolはあれ、まずいのは配列だったと思う。確か。
 これで様子を見る...
+
+だめですね。
+setUniformもなくすか。それでまた様子を見る。

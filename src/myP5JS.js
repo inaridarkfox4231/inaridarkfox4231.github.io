@@ -104014,7 +104014,7 @@
         _main.default.RendererGL.prototype._setFillUniforms = function (fillShader) {
           fillShader.bindShader();
           // TODO: optimize
-          fillShader.setUniform('uUseVertexColor', this._useVertexColor);
+          //fillShader.setUniform('uUseVertexColor', this._useVertexColor);
           fillShader.setUniform('uMaterialColor', this.curFillColor);
           fillShader.setUniform('isTexture', !!this._tex);
           if (this._tex) {
