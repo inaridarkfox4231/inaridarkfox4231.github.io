@@ -95213,6 +95213,10 @@
               }
             }
             var LUTLength = this._lookUpTableBezier.length;
+
+            const startColor = this.immediateMode.geometry.vertexColors.slice(-4);
+            const endColor = this.curFillColor.slice();
+
             if (argLength === 6) {
               this.isBezier = true;
               w_x = [
@@ -95228,10 +95232,20 @@
                 arguments.length <= 5 ? undefined : arguments[5]
               ];
               for (i = 0; i < LUTLength; i++) {
+                const ratio = i / LUTLength;
+
+                this.curFillColor = [
+                  startColor[0] * (1-ratio) + endColor[0] * ratio,
+                  startColor[1] * (1-ratio) + endColor[1] * ratio,
+                  startColor[2] * (1-ratio) + endColor[2] * ratio,
+                  startColor[3] * (1-ratio) + endColor[3] * ratio
+                ];
+
                 _x = w_x[0] * this._lookUpTableBezier[i][0] + w_x[1] * this._lookUpTableBezier[i][1] + w_x[2] * this._lookUpTableBezier[i][2] + w_x[3] * this._lookUpTableBezier[i][3];
                 _y = w_y[0] * this._lookUpTableBezier[i][0] + w_y[1] * this._lookUpTableBezier[i][1] + w_y[2] * this._lookUpTableBezier[i][2] + w_y[3] * this._lookUpTableBezier[i][3];
                 this.vertex(_x, _y);
               }
+              this.curFillColor = endColor;
               this.immediateMode._bezierVertex[0] = arguments.length <= 4 ? undefined : arguments[4];
               this.immediateMode._bezierVertex[1] = arguments.length <= 5 ? undefined : arguments[5];
             } else if (argLength === 9) {
@@ -95255,11 +95269,20 @@
                 arguments.length <= 8 ? undefined : arguments[8]
               ];
               for (i = 0; i < LUTLength; i++) {
+                const ratio = i / LUTLength;
+
+                this.curFillColor = [
+                  startColor[0] * (1-ratio) + endColor[0] * ratio,
+                  startColor[1] * (1-ratio) + endColor[1] * ratio,
+                  startColor[2] * (1-ratio) + endColor[2] * ratio,
+                  startColor[3] * (1-ratio) + endColor[3] * ratio
+                ];
                 _x = w_x[0] * this._lookUpTableBezier[i][0] + w_x[1] * this._lookUpTableBezier[i][1] + w_x[2] * this._lookUpTableBezier[i][2] + w_x[3] * this._lookUpTableBezier[i][3];
                 _y = w_y[0] * this._lookUpTableBezier[i][0] + w_y[1] * this._lookUpTableBezier[i][1] + w_y[2] * this._lookUpTableBezier[i][2] + w_y[3] * this._lookUpTableBezier[i][3];
                 _z = w_z[0] * this._lookUpTableBezier[i][0] + w_z[1] * this._lookUpTableBezier[i][1] + w_z[2] * this._lookUpTableBezier[i][2] + w_z[3] * this._lookUpTableBezier[i][3];
                 this.vertex(_x, _y, _z);
               }
+              this.curFillColor = endColor;
               this.immediateMode._bezierVertex[0] = arguments.length <= 6 ? undefined : arguments[6];
               this.immediateMode._bezierVertex[1] = arguments.length <= 7 ? undefined : arguments[7];
               this.immediateMode._bezierVertex[2] = arguments.length <= 8 ? undefined : arguments[8];
