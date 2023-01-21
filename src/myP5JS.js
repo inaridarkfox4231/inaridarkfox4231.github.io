@@ -100614,8 +100614,6 @@
           ];
           this.vertexColors = [
           ];
-          this.vertexStrokeColors = [
-          ];
           this.detailX = detailX !== undefined ? detailX : 1;
           this.detailY = detailY !== undefined ? detailY : 1;
           this.dirtyFlags = {
@@ -101968,8 +101966,6 @@
             1
           ];
           this.immediateMode.geometry.vertexColors.push(vertexColor[0], vertexColor[1], vertexColor[2], vertexColor[3]);
-          //var vertexStrokeColor = this.curStrokeColor || [0.5, 0.5, 0.5, 1];
-          //this.immediateMode.geometry.vertexStrokeColors.push(vertexStrokeColor[0], vertexStrokeColor[1], vertexStrokeColor[2], vertexStrokeColor[3]);
           if (this.textureMode === constants.IMAGE) {
             if (this._tex !== null) {
               if (this._tex.width > 0 && this._tex.height > 0) {
@@ -102992,6 +102988,7 @@
           this._useShininess = 1;
 
           this._useVertexColor = false;
+          this.registerEnabled = []; // レジスタの有効状態
 
           this._tint = [
             255,
@@ -104794,6 +104791,7 @@
               var gl = this._renderer.GL;
               if (!attr.enabled) {
                 gl.enableVertexAttribArray(loc);
+                this._renderer.registerEnabled[loc] = true; // レジスタの有効状態を記録
                 attr.enabled = true;
               }
               this._renderer.GL.vertexAttribPointer(loc, size, type || gl.FLOAT, normalized || false, stride || 0, offset || 0);
@@ -104807,14 +104805,17 @@
           const gl = this._renderer.GL;
           for(const attrName of Object.keys(attributes)){
             const attr = attributes[attrName];
-            if(!attr.enabled){ continue; }
+            const loc = attr.location; // 先にlocationを取得
+            if(!this._renderer.registerEnabled[loc]){ continue; } // レジスタが有効でないならスルー
+            //if(!attr.enabled){ continue; } // shaderが有効にしていなくてもレジスタが有効になってる場合があるので、条件を変える
             // 有効なattrで
             if(!geomAttrNames.includes(attrName)){
               // geometryが持たないものを無効化する。
-              const loc = attr.location;
+              //const loc = attr.location;
               if(loc !== -1){
                 gl.disableVertexAttribArray(loc);
                 attr.enabled = false;
+                this._renderer.registerEnabled[loc] = false; // レジスタの有効状態を記録
               }
             }
           }
