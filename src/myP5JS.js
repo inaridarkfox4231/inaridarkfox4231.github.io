@@ -101747,6 +101747,15 @@
             } // enable the attribute
 
             shader.enableAttrib(attr, this.size);
+          } else {
+            // まず、registerEnabled[loc]が無効なら何もしない
+            const loc = attr.location;
+            if (loc == -1 || !this._renderer.registerEnabled[loc]) { return; }
+            // 有効ならば、無効にする
+            gl.disableVertexAttribArray(loc);
+            attr.enabled = false;
+            this._renderer.registerEnabled[loc] = false; // レジスタの有効状態を記録
+            // これで大丈夫かどうかは、分かりませんが......
           }
         };
         var _default = _main.default.RenderBuffer;
@@ -102487,14 +102496,14 @@
         _main.default.RendererGL.prototype.drawBuffers = function (gId) {
           var gl = this.GL;
           var geometry = this.retainedMode.geometry[gId];
-
+/*
           var _model;
           if (geometry.model) {
             _model = geometry.model;
           } else {
             _model = geometry;
           }
-
+*/
           if (this._doStroke && geometry.lineVertexCount > 0) {
             var strokeShader = this._getRetainedStrokeShader();
             this._setStrokeUniforms(strokeShader);
@@ -102502,16 +102511,16 @@
             var _didIteratorError2 = false;
             var _iteratorError2 = undefined;
 
-            const geomAttrNamesForStroke = []; // geometryがもつattributeの一覧
+            //const geomAttrNamesForStroke = []; // geometryがもつattributeの一覧
 
             try {
               for (var _iterator2 = this.retainedMode.buffers.stroke[Symbol.iterator](), _step2; !(_iteratorNormalCompletion2 = (_step2 = _iterator2.next()).done); _iteratorNormalCompletion2 = true) {
                 var buff = _step2.value;
-
+/*
                 if(!!_model[buff.src] && _model[buff.src].length > 0){
                   geomAttrNamesForStroke.push(buff.attr); // 使われるattrの一覧を作る
                 }
-
+*/
                 buff._prepareBuffer(geometry, strokeShader);
               }
             } catch (err) {
@@ -102529,7 +102538,7 @@
               }
             }
 
-            strokeShader.disableUnnecessaryAttrib(geomAttrNamesForStroke);
+            //strokeShader.disableUnnecessaryAttrib(geomAttrNamesForStroke);
 
             this._applyColorBlend(this.curStrokeColor);
             this._drawArrays(gl.TRIANGLES, gId);
@@ -102543,16 +102552,16 @@
             var _didIteratorError3 = false;
             var _iteratorError3 = undefined;
 
-            const geomAttrNamesForFill = []; // geometryがもつattributeの一覧
+            //const geomAttrNamesForFill = []; // geometryがもつattributeの一覧
 
             try {
               for (var _iterator3 = this.retainedMode.buffers.fill[Symbol.iterator](), _step3; !(_iteratorNormalCompletion3 = (_step3 = _iterator3.next()).done); _iteratorNormalCompletion3 = true) {
                 var _buff = _step3.value;
-
+/*
                 if(!!_model[_buff.src] && _model[_buff.src].length > 0){
                   geomAttrNamesForFill.push(_buff.attr); // 使われるattrの一覧を作る
                 }
-
+*/
                 _buff._prepareBuffer(geometry, fillShader);
               }
             } catch (err) {
@@ -102574,7 +102583,7 @@
               this._bindBuffer(geometry.indexBuffer, gl.ELEMENT_ARRAY_BUFFER);
             }
 
-            fillShader.disableUnnecessaryAttrib(geomAttrNamesForFill);
+            //fillShader.disableUnnecessaryAttrib(geomAttrNamesForFill);
 
             this._applyColorBlend(this.curFillColor);
             this._drawElements(gl.TRIANGLES, gId);
