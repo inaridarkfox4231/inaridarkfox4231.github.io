@@ -104796,10 +104796,10 @@
               console.warn('The attribute "'.concat(attr.name, '"passed to enableAttrib does not belong to this shader.'));
             }
             var loc = attr.location;
-            const isEnabled = this._renderer.registerEnabled[loc]; // 先に有効状態を取得する
+            //const isEnabled = this._renderer.registerEnabled[loc]; // 不要
             if (loc !== - 1) {
               var gl = this._renderer.GL;
-              if (!attr.enabled || !isEnabled) { // レジスタが無効になってる場合も有効化する
+              if (!this._renderer.registerEnabled[loc]) { // レジスタが無効になってる場合は有効化する
                 gl.enableVertexAttribArray(loc);
                 this._renderer.registerEnabled[loc] = true; // レジスタの有効状態を記録
                 attr.enabled = true;

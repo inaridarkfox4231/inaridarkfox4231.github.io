@@ -5,6 +5,7 @@ let gl;
 function setup() {
   createCanvas(640, 640, WEBGL);
 	pixelDensity(1);
+  noStroke();
 
   let geom = new p5.Geometry();
 
@@ -33,17 +34,21 @@ function setup() {
 }
 function draw(){
   background(0);
-	resetMatrix();
-  rotateX(frameCount*TAU/240);
-  rotateY(frameCount*TAU/320);
+	//resetMatrix();
+
   directionalLight(255,255,255,0,0,-1);
   ambientLight(64);
   ambientMaterial(128);
-  noStroke();
+
+  push();
+  rotateX(frameCount*TAU/240);
+  rotateY(frameCount*TAU/320);
+
   fill(255);
   this._renderer.drawBuffersScaled("myCube", 100, 100, 100);
+  pop();
 
-	resetMatrix();
+	//resetMatrix();
 	translate(0, 100, 0);
 	fill(255);
   box(90);
