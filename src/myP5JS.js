@@ -104808,7 +104808,7 @@
           }
           return this;
         };
-
+/*
         _main.default.Shader.prototype.disableUnnecessaryAttrib = function (geomAttrNames) {
           const attributes = this.attributes;
           const gl = this._renderer.GL;
@@ -104829,7 +104829,7 @@
             }
           }
         };
-
+*/
         var _default = _main.default.Shader;
         exports.default = _default;
       },
