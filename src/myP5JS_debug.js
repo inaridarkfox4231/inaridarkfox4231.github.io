@@ -94697,8 +94697,8 @@
               var vertices = [
               ];
               vertices.push(new _main.default.Vector(0, 0, 0));
-              vertices.push(new _main.default.Vector(0, 1, 0));
               vertices.push(new _main.default.Vector(1, 0, 0));
+              vertices.push(new _main.default.Vector(0, 1, 0));
               this.strokeIndices = [
                 [0,
                 1],
@@ -94720,8 +94720,8 @@
               this.uvs = [
                 0,
                 0,
-                0,
                 1,
+                0,
                 1,
                 1
               ];
@@ -101753,7 +101753,7 @@
             if (loc == -1 || !this._renderer.registerEnabled[loc]) { return; }
             // 有効ならば、無効にする
             gl.disableVertexAttribArray(loc);
-            attr.enabled = false;
+            //attr.enabled = false;
             this._renderer.registerEnabled[loc] = false; // レジスタの有効状態を記録
             // これで大丈夫かどうかは、分かりませんが......
           }
@@ -104408,6 +104408,8 @@
             var location = gl.getAttribLocation(this._glProgram, name);
             var attribute = {
             };
+            // enabledが必須ならここで用意するはず。なのに記述が無い。あのプロパティ、後付けなんです。
+            // それもコードの書き方としては不適切なんです。最初から存在してはいけなかったんです。
             attribute.name = name;
             attribute.location = location;
             attribute.index = i;
@@ -104802,7 +104804,7 @@
               if (!this._renderer.registerEnabled[loc]) { // レジスタが無効になってる場合は有効化する
                 gl.enableVertexAttribArray(loc);
                 this._renderer.registerEnabled[loc] = true; // レジスタの有効状態を記録
-                attr.enabled = true;
+                //attr.enabled = true;
               }
               this._renderer.GL.vertexAttribPointer(loc, size, type || gl.FLOAT, normalized || false, stride || 0, offset || 0);
             }
