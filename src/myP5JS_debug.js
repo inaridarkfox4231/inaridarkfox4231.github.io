@@ -103090,6 +103090,7 @@
           this._lutBezierDetail = 0; // current curveDetail in the Quadratic lookUpTable
           this._lutQuadraticDetail = 0;
           this._tessy = this._initTessy();
+          this._normalTessy = this._initNormalTessy();
           this.fontInfos = {
           };
           this._curShader = undefined;
@@ -104108,6 +104109,51 @@
         _main.default.prototype._assert3d = function (name) {
           if (!this._renderer.isP3D) throw new Error(''.concat(name, '() is only supported in WEBGL mode. If you\'d like to use 3D graphics and WebGL, see  https://p5js.org/examples/form-3d-primitives.html for more information.'));
         }; // function to initialize GLU Tesselator
+        _main.default.RendererGL.prototype._initNormalTessy = function initTesselator() {
+          // function called for each vertex of tesselator output
+          function vertexCallback(data, polyVertArray) {
+            polyVertArray[polyVertArray.length] = data[0];
+            polyVertArray[polyVertArray.length] = data[1];
+            polyVertArray[polyVertArray.length] = data[2];
+          }
+
+          function begincallback(type) {
+            if (type !== _libtess.default.primitiveType.GL_TRIANGLES) {
+              console.log('expected TRIANGLES but got type: '.concat(type));
+            }
+          }
+
+          function errorcallback(errno) {
+            console.log('error callback');
+            console.log('error number: '.concat(errno));
+          }
+          // callback for when segments intersect and must be split
+          function combinecallback(coords, data, weight) {
+            return [coords[0], coords[1], coords[2]];
+          }
+
+          function edgeCallback(flag) {
+            // don't really care about the flag, but need no-strip/no-fan behavior
+          }
+
+          var tessy = new _libtess.default.GluTesselator();
+          tessy.gluTessCallback(
+            _libtess.default.gluEnum.GLU_TESS_VERTEX_DATA,
+            vertexCallback
+          );
+          tessy.gluTessCallback(_libtess.default.gluEnum.GLU_TESS_BEGIN, begincallback);
+          tessy.gluTessCallback(_libtess.default.gluEnum.GLU_TESS_ERROR, errorcallback);
+          tessy.gluTessCallback(
+            _libtess.default.gluEnum.GLU_TESS_COMBINE,
+            combinecallback
+          );
+          tessy.gluTessCallback(
+            _libtess.default.gluEnum.GLU_TESS_EDGE_FLAG,
+            edgeCallback
+          );
+
+          return tessy;
+        };
         _main.default.RendererGL.prototype._initTessy = function initTesselator() {
           // function called for each vertex of tesselator output
           function vertexCallback(data, polyVertArray) {
@@ -104157,6 +104203,31 @@
           tessy.gluTessCallback(_libtess.default.gluEnum.GLU_TESS_COMBINE, combinecallback);
           tessy.gluTessCallback(_libtess.default.gluEnum.GLU_TESS_EDGE_FLAG, edgeCallback);
           return tessy;
+        };
+        _main.default.RendererGL.prototype._normalTriangulate = function(contours) {
+          // libtess will take 3d verts and flatten to a plane for tesselation
+          // since only doing 2d tesselation here, provide z=1 normal to skip
+          // iterating over verts only to get the same answer.
+          // comment out to test normal-generation code
+          this._normalTessy.gluTessNormal(0, 0, 1);
+
+          var triangleVerts = [];
+          this._normalTessy.gluTessBeginPolygon(triangleVerts);
+
+          for (var i = 0; i < contours.length; i++) {
+            this._normalTessy.gluTessBeginContour();
+            var contour = contours[i];
+            for (var j = 0; j < contour.length; j += 3) {
+              var coords = [contour[j], contour[j + 1], contour[j + 2]];
+              this._normalTessy.gluTessVertex(coords, coords);
+            }
+            this._normalTessy.gluTessEndContour();
+          }
+
+          // finish polygon
+          this._normalTessy.gluTessEndPolygon();
+
+          return triangleVerts;
         };
         _main.default.RendererGL.prototype._triangulate = function (contours) {
           // libtess will take 3d verts and flatten to a plane for tesselation
