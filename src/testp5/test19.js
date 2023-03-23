@@ -4,6 +4,31 @@
 // sayoさんの作品
 // text3D: https://openprocessing.org/sketch/956215
 
+// fork版
+// p5.jsが1.5.0になった際に
+// _triangulateの仕様が大幅に変更されました
+// その影響で
+// 従来の使い方ができなくなったので
+// 従来の使い方を移植した改造版のp5.jsを用意しました
+// 便利な関数なので
+// 次世代に引き継ぐために
+// このような次第となりました
+
+// _normalTriangulateのテスト
+// いずれ格上げしてもらうつもり
+
+// sayoさんの作品
+// text3D: https://openprocessing.org/sketch/956215
+
+// 更新が遅いんですけど？？？？
+// 20230131
+// 2月になる前に復活させたいところだわね
+// 更新終わりました。
+// しかしどうするかな
+// 格上げ...そう簡単にはいかないと思うけれど
+// 便利だからなー
+// あとから改造するしかないのかもしれない
+
 const str1 = 'p5.js';
 const str2 = 'abcdefghijklmnopqrstuvwxyz1234567890!?';
 const n = 40;
@@ -15,36 +40,65 @@ function preload() {
 	font = loadFont('https://inaridarkfox4231.github.io/assets/KosugiMaru-Regular.ttf');
 }
 
+let bg;
 
 function setup() {
 	createCanvas(windowWidth, windowHeight, WEBGL);
+	bg = createGraphics(width, height, WEBGL);
+	bg.noStroke();
+	bg.beginShape();
+	bg.fill(0, 128, 255);
+	bg.vertex(-width/2, -height/2);
+	bg.vertex(width/2, -height/2);
+	bg.fill(0);
+	bg.vertex(width/2, height/2);
+	bg.vertex(-width/2, height/2);
+	bg.endShape();
 }
 
 
 function draw() {
-	background(250);
-	directionalLight(200, 200, 200, 0.5, 0.5, -1.0);
+	clear();
+	//background(64, 192, 255);
+	const gl = this._renderer.GL;
+	gl.disable(gl.DEPTH_TEST);
+	push();
+	camera(0, 0, height*0.5*sqrt(3), 0, 0, 0, 0, 1, 0);
+	image(bg, -width/2, -height/2);
+	pop();
+	gl.enable(gl.DEPTH_TEST);
+
+	directionalLight(255, 255, 255, 0.5, 0.5, -1.0);
 	ambientLight(64);
   ambientMaterial(255);
 	orbitControl();
 
 	noStroke();
-	fill(255, 50, 100);
-	text3D(font, str1, 200, 50, 5);
+	fill(0, 64, 128);
+	const ry0 = frameCount*TAU/240;
+	rotateY(ry0);
+	text3D(font, str1, 200, 50, 5, 24);
+	rotateY(-ry0);
 
-	fill(255, 150, 200);
+	fill(32, 64, 255);
+	// push～pop嫌いなのでちょっと書き換えます
 	for (let i=0; i<n; i++) {
-		push();
-		translate(width * (noise(i, 0) - 0.5) * 2.0, height * (noise(i, 1) - 0.5) * 2.0, -500);
-		rotateX(millis() / 2000.0 + noise(i, 2) * 10);
-		rotateY(millis() / 2000.0 + noise(i, 3) * 10);
-		text3D(font, str2[i%str2.length], 200, 50, 5);
-		pop();
+		const tx = width * (noise(i, 0) - 0.5) * 2.0;
+		const ty = height * (noise(i, 1) - 0.5) * 2.0;
+		const rx = millis() / 2000.0 + noise(i, 2) * 10;
+		const ry = millis() / 2000.0 + noise(i, 3) * 10;
+		translate(tx, ty, -500);
+		rotateX(rx);
+		rotateY(ry);
+		text3D(font, str2[i%str2.length], 200, 50, 5, i);
+		rotateY(-ry);
+		rotateX(-rx);
+		translate(-tx, -ty, 500);
 	}
 }
 
 
-function text3D(font, text, size, depth, divisions, horizontal_align, vertical_align) {
+function text3D(font, text, size, depth, divisions, hueId, horizontal_align, vertical_align) {
 	if (typeof text !== 'string') {
 		text = str(text);
 	}
@@ -60,6 +114,7 @@ function text3D(font, text, size, depth, divisions, horizontal_align, vertical_a
 
 	if (!this._renderer.geometryInHash(gId)) {
 		const textGeom = new p5.Geometry();
+		const bodyColor = _HSV(hueId/n, 1, 1);
 
 		const vertices = textToVertices(font, text, 1, divisions, horizontal_align, vertical_align);
 		const z1 = new p5.Vector(0, 0, 0.5);
@@ -73,9 +128,11 @@ function text3D(font, text, size, depth, divisions, horizontal_align, vertical_a
 
 		for (let i=0; i<tesselateVertices.length; i++) {
 			textGeom.vertices.push(p5.Vector.add(tesselateVertices[i], z1));
+			textGeom.vertexColors.push(1, 1, 1, 1);
 		}
 		for (let i=0; i<tesselateVertices.length; i++) {
 			textGeom.vertices.push(p5.Vector.add(tesselateVertices[tesselateVertices.length-(i+1)], z2));
+			textGeom.vertexColors.push(bodyColor.r, bodyColor.g, bodyColor.b, 1);
 		}
 
 		for (let i=0; i<tesselateVertices.length * 2; i+=3) {
@@ -89,6 +146,8 @@ function text3D(font, text, size, depth, divisions, horizontal_align, vertical_a
 			for (const ver of vers) {
 				textGeom.vertices.push(p5.Vector.add(ver, z1));
 				textGeom.vertices.push(p5.Vector.add(ver, z2));
+				textGeom.vertexColors.push(1, 1, 1, 1);
+				textGeom.vertexColors.push(bodyColor.r, bodyColor.g, bodyColor.b, 1);
 			}
 
 			let len = vers.length * 2;
@@ -206,6 +265,23 @@ function arrayToVertices(array) {
 	}
 
 	return vertices;
+}
+
+function _HSV(h, s, v){
+  h = constrain(h, 0, 1);
+  s = constrain(s, 0, 1);
+  v = constrain(v, 0, 1);
+  let _r = constrain(abs(((6 * h) % 6) - 3) - 1, 0, 1);
+  let _g = constrain(abs(((6 * h + 4) % 6) - 3) - 1, 0, 1);
+  let _b = constrain(abs(((6 * h + 2) % 6) - 3) - 1, 0, 1);
+  _r = _r * _r * (3 - 2 * _r);
+  _g = _g * _g * (3 - 2 * _g);
+  _b = _b * _b * (3 - 2 * _b);
+  let result = {};
+  result.r = v * (1 - s + s * _r);
+  result.g = v * (1 - s + s * _g);
+  result.b = v * (1 - s + s * _b);
+  return result;
 }
 
 

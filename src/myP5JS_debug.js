@@ -103489,7 +103489,7 @@
         _main.default.RendererGL.prototype.stroke = function (r, g, b, a) {
           //@todo allow transparency in stroking currently doesn't have
           //any impact and causes problems with specularMaterial
-          arguments[3] = 255;
+          //arguments[3] = 255;
           var color = _main.default.prototype.color.apply(this._pInst, arguments);
           this.curStrokeColor = color._array;
         };
