@@ -94,6 +94,7 @@ const p5wgex = (function(){
   // 引数を増やすかどうかは応相談
   function myAlert(_string){
     window.alert(_string);
+    console.log("myAlert: " + _string);
     noLoop();
   }
 
