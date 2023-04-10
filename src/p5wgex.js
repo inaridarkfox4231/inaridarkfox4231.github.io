@@ -2892,7 +2892,7 @@ const p5wgex = (function(){
       }
       return result;
     }
-    getGlobalPositionFromNDC(x, y, z = 1, cenetrBased = false){
+    getGlobalPositionFromNDC(x, y, z = 1, centerBased = false){
       // NDCが(x,y)でViewにおける深さがzであるようなGlobalの点の位置を取得する。3Dお絵描きに応用できそう。
       const p = this.getViewPositionFromNDC(x, y, z, centerBased);
       // viewの3x3部分の逆行列（＝転置）を掛けてeyeを足すだけ。ラクチン。
