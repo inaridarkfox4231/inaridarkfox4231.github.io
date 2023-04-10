@@ -1018,6 +1018,10 @@ const p5wgex = (function(){
     toArray(){
       return [this.x, this.y, this.z];
     }
+    toString(){
+      // 文字列化も必要でしょう。
+  		return "(" + (this.x).toFixed(3) + ", " + (this.y).toFixed(3) + ", " + (this.z).toFixed(3) + ")";
+  	}
     add(a, b, c){
       const r = _getValidation(a, b, c);
       this.x += r.x;
@@ -1126,6 +1130,9 @@ const p5wgex = (function(){
       this.y = m[1] * a + m[4] * b + m[7] * c;
       this.z = m[2] * a + m[5] * b + m[8] * c;
       return this;
+    }
+    copy(){
+      return new Vec3(this.x, this.y, this.z); // copy欲しいです
     }
   }
 
