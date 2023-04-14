@@ -93,6 +93,7 @@ const exIA = (function(){
       p.mouseMoveAction(e);
     }
     mouseUpDefaultAction(){
+			if(this.pointers.length == 0){ return; } // 追加
       // ここで排除するpointerに何かさせる...
       const p = this.pointers[0];
       p.mouseUpAction();

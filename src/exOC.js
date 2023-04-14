@@ -1,4 +1,12 @@
-const exOC = (function(){
+// 加速版を個別に作る...もしくは改造する。
+
+// 加速度の場合、インタラクションでは加速のみが為される。
+// 摩擦による減衰や速度に基づくアップデートは毎フレームなされるので
+// アップデート用の関数を用意して毎フレーム呼び出す必要があるのよね
+
+// exIAを引数に取り、Interactionの継承で作る。
+// この作り方が基本となる。
+const exOC = (function(IA){
 
   const ex = {};
 
@@ -13,7 +21,7 @@ const exOC = (function(){
     if(config.eye === undefined){
       // Numberをかますのが正式なやり方。かまさないと文字列になる。
       const h = Number(canvas.style.height.split("px")[0]);
-      config.eye = [0, 0, 0.5 * sqrt(3) * h];
+      config.eye = [0, 0, 0.5 * Math.sqrt(3) * h];
     }
     if(config.center === undefined){
       config.center = [0, 0, 0];
@@ -22,10 +30,11 @@ const exOC = (function(){
 
   // どこまでやるかだけどね...
   // マジックナンバーをどこまで減らすかっていう話
-  class CameraController{
-    constructor(pointers){
+  class CameraController extends IA.Interaction{
+    constructor(factory = (() => new IA.PointerPrototype())){
+      super(factory);
       this.mode = "global";
-      this.pointers = pointers; // これが無いと操作できないわね。
+      //this.pointers = pointers; // 継承なので不要
       this.front = new Vec3();
       this.side = new Vec3();
       this.up = new Vec3();
@@ -40,8 +49,9 @@ const exOC = (function(){
       this.rotationFactor = 0.01; // 回転のファクター
       this.mouseZoomFactor = 0.0003; // マウススクロール拡縮用ファクター
       this.touchZoomFactor = 0.001; // いわゆるピンチインアウト拡縮用ファクター
+      this._gl = undefined; // 射影行列を取得するための_gl
     }
-    initialize(canvas, config = {}){
+    cameraInitialize(canvas, _gl, config = {}){
       validateCameraConfig(canvas, config);
       // デフォルト登録
       const info = this.defaultInformation;
@@ -64,6 +74,7 @@ const exOC = (function(){
       canvas.addEventListener('mousemove', this.mouseMoveCameraAction.bind(this));
       canvas.addEventListener('mousewheel', this.mouseWheelCameraAction.bind(this));
       canvas.addEventListener('touchmove', this.touchMoveCameraAction.bind(this), false);
+      this._gl = _gl;
     }
     setting(config = {}){
       // 定数
@@ -193,7 +204,8 @@ const exOC = (function(){
   // Vec3. normalの計算でもこれ使おう。
 
   // とりあえずこんなもんかな。まあ難しいよねぇ。
-  // CameraExのパラメータをベクトルで管理したいのですよね。でもp5.Vector使い勝手悪いので。自前で...
+  // CameraExのパラメータをベクトルで管理したいのですよね。
+  // でもp5.Vector使い勝手悪いので。自前で...
 
   // xxとかyyとかyxyとかであれが出るのとか欲しいな～（だめ）
   class Vec3{
@@ -372,4 +384,4 @@ const exOC = (function(){
   ex.Vec3 = Vec3;
 
   return ex;
-})();
+})(exIA);
