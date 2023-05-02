@@ -32,6 +32,14 @@ p5.RendererGL.prototype.image = function (img, sx, sy, sWidth, sHeight, dx, dy, 
   const gl = this.GL;
   const depthTestIsEnable = gl.getParameter(gl.DEPTH_TEST);
   const cullFaceIsEnable = gl.getParameter(gl.CULL_FACE);
+	const mode = [ADD, SCREEN, MULTIPLY, OVERLAY, SOFT_LIGHT, HARD_LIGHT];
+	// ambientModeがADDでないといけない。こういう問題が発生するわけだ。難しいね.....
+	// image関数が、noLights()であるにも関わらずライティングシェーダを使っていることが問題なのです。
+	// それはおかしいので。
+	// だから別のシェーダ、カスタムシェーダを用意してそれを使わせればいいんだよな。
+	// 今は暫定的にこの処理でいいけど。いずれ、何とかしましょう。
+	// そうすればカメラをいじる必要もなくなるはず...
+	const currentAmbientMode = (this.ambientMode !== undefined ? mode[this.ambientMode] : undefined);
   gl.disable(gl.DEPTH_TEST);
   gl.disable(gl.CULL_FACE);
 
@@ -48,6 +56,7 @@ p5.RendererGL.prototype.image = function (img, sx, sy, sWidth, sHeight, dx, dy, 
   // 戻す
   if (depthTestIsEnable) { gl.enable(gl.DEPTH_TEST); }
   if (cullFaceIsEnable) { gl.enable(gl.CULL_FACE); }
+	if (currentAmbientMode !== undefined) { ambientMode(currentAmbientMode); }
 
   this._pInst.pop();
   if (this._isErasing) {
