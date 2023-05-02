@@ -42,6 +42,7 @@ p5.RendererGL.prototype.image = function (img, sx, sy, sWidth, sHeight, dx, dy, 
 	const currentAmbientMode = (this.ambientMode !== undefined ? mode[this.ambientMode] : undefined);
   gl.disable(gl.DEPTH_TEST);
   gl.disable(gl.CULL_FACE);
+	if (currentAmbientMode !== undefined) { ambientMode(ADD); }
 
   // カメラをデフォルトにする
   this._curCamera._setDefaultCamera();
