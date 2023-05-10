@@ -15,6 +15,10 @@ Interactionの関数でタッチポインターを受け取るのはスワイプ
 ホイールイベントはホイールする速さにより、少なくともこの機器では100の倍数だったりします
 */
 
+// 20230511
+// DampedActionを追加
+// easyCamで使われている手法で、滑らかな動きを表現できます。
+
 const foxIA = (function(){
   const fox = {};
 
@@ -295,8 +299,43 @@ const foxIA = (function(){
     }
   }
 
+  // dampedAction.
+  // 汎用的なモーション作成ツール
+  // 要するに力を加えた時に速度が発生してそれによりなんか動かすのに
+  // 使えるわけです
+  // ベクトル版作ったら面白い？一次元なので。
+  // 0.85は摩擦部分でここを大きくするといわゆる「滑り」が大きくなるのね
+  // option = {friction:0.15} みたいにして指定できる。よ。
+  // とはいえ実際にはvalueが正や負の値を取りつつ減衰するだけなので
+  // これを単位ベクトルに掛ければ2次元でも使えなくはないと思う...よ。
+  class DampedAction{
+    constructor(actionCallBack, option = {}){
+      const {friction = 0.15} = option;
+      this.value = 0.0;
+      this.damping = 1.0 - friction; // デフォルトは0.85になります
+      this.action = actionCallBack;
+    }
+    addForce(force){
+      this.value += force;
+    }
+    step(){
+      const active = (this.value * this.value > 1e-6);
+      if(active){
+        this.action(this.value);
+        this.value *= this.damping;
+      }else{
+        this.quit();
+      }
+      return active;
+    }
+    quit(){
+      this.value = 0.0;
+    }
+  }
+
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
+  fox.DampedAction = DampedAction;
 
   return fox;
 })();
