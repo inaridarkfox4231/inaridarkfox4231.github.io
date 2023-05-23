@@ -1,6 +1,14 @@
 // GitHubから持ってきました
 // 書き換え終えたら元に戻す...
 
+// change log: 2023-05-23
+// verticalをnormalizeする必要は無いので修正
+// camPhiの計算にangleBetweenを使用
+// camPhiとcamThetaを最初から定数で用意
+// 整合性を考えて順序変更
+// その他、いくつかのコメントを修正
+// 承認されました！！！！！🎉🎉🎉
+
 p5.prototype.orbitControl = function(
   sensitivityX,
   sensitivityY,
@@ -9,19 +17,6 @@ p5.prototype.orbitControl = function(
 ) {
   this._assert3d('orbitControl');
   p5._validateParameters('orbitControl', arguments);
-
-  if (this._renderer.prevTouches === undefined) {
-    this._renderer.prevTouches = [];
-  }
-  if (this._renderer.zoomVelocity === undefined) {
-    this._renderer.zoomVelocity = 0;
-  }
-  if (this._renderer.rotateVelocity === undefined) {
-    this._renderer.rotateVelocity = createVector(0, 0);
-  }
-  if (this._renderer.moveVelocity === undefined) {
-    this._renderer.moveVelocity = createVector(0, 0);
-  }
 
   // If the mouse is not in bounds of the canvas, disable all behaviors:
   const mouseInCanvas =
@@ -74,9 +69,9 @@ p5.prototype.orbitControl = function(
 
   // get moved touches.
   const movedTouches = [];
-  for(let i = 0; i < this.touches.length; i++){
+  for (let i = 0; i < this.touches.length; i++) {
     const curTouch = this.touches[i];
-    for(let k=0; k < this._renderer.prevTouches.length; k++){
+    for (let k = 0; k < this._renderer.prevTouches.length; k++) {
       const prevTouch = this._renderer.prevTouches[k];
       if(curTouch.id === prevTouch.id){
         const movedTouch = {
@@ -92,7 +87,7 @@ p5.prototype.orbitControl = function(
   this._renderer.prevTouches = this.touches;
 
   // The idea of using damping is based on the following website. thank you.
-  // https://github.com/freshfork/p5.EasyCam/blob/9782964680f6a5c4c9bee825c475d9f2021d5134/p5.easycam.js#L1124
+  // https://github.com/freshfork/p5.EasyCam/blob/master/p5.easycam.js
 
   // variables for interaction
   let deltaRadius = 0;
@@ -125,11 +120,8 @@ p5.prototype.orbitControl = function(
       const distWithTouches = Math.hypot(t0.x - t1.x, t0.y - t1.y);
       const prevDistWithTouches = Math.hypot(t0.px - t1.px, t0.py - t1.py);
       const changeDist = distWithTouches - prevDistWithTouches;
-      // move the camera farther when the distance between the two touch points
-      // decreases, move the camera closer when it increases.
       deltaRadius = -changeDist * sensitivityZ * touchZoomScaleFactor;
-      // Move the center of the camera along with the movement of
-      // the center of gravity of the two touch points.
+
       moveDeltaX = 0.5 * (t0.x + t1.x) - 0.5 * (t0.px + t1.px);
       moveDeltaY = 0.5 * (t0.y + t1.y) - 0.5 * (t0.py + t1.py);
     }
@@ -140,7 +132,7 @@ p5.prototype.orbitControl = function(
     // if mouseRightButton is down, move
     if (this._mouseWheelDeltaY !== 0) {
       // zoom the camera depending on the value of _mouseWheelDeltaY.
-      // move away if positive, move closer if negative
+      // Move away if positive, move closer if negative
       deltaRadius = this._mouseWheelDeltaY * sensitivityZ;
       deltaRadius *= mouseZoomScaleFactor;
       this._mouseWheelDeltaY = 0;
@@ -269,26 +261,23 @@ p5.prototype.orbitControl = function(
 
 // ------------------------------------------------------------------- //
 
-p5.Camera.prototype._orbit = function (dTheta, dPhi, dRadius) {
-  var diffX = this.eyeX - this.centerX;
-  var diffY = this.eyeY - this.centerY;
-  var diffZ = this.eyeZ - this.centerZ;
-  // get spherical coorinates for current camera position about origin
-  var camRadius = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ); // from https://github.com/mrdoob/three.js/blob/dev/src/math/Spherical.js#L72-L73
-  var camTheta = Math.atan2(diffX, diffZ);
-  // equatorial angle
-  var camPhi = Math.acos(Math.max( - 1, Math.min(1, diffY / camRadius))); // polar angle
-  var newUpY = this.upY > 0 ? 1 : - 1;
-  // add change according to the direction of newupY
-  camTheta += newUpY * dTheta;
-  camPhi += newUpY * dPhi;
-  // if camPhi becomes >= PI or <= 0,
-  // upY of camera need to be flipped to the other side
-  if (camPhi <= 0 || camPhi >= Math.PI) {
-    newUpY *= - 1;
-  }
-  camRadius *= Math.pow(10, dRadius);
+p5.Camera.prototype._orbit = function(dTheta, dPhi, dRadius) {
+  // Calculate the vector and its magnitude from the center to the viewpoint
+  const diffX = this.eyeX - this.centerX;
+  const diffY = this.eyeY - this.centerY;
+  const diffZ = this.eyeZ - this.centerZ;
+  let camRadius = Math.hypot(diffX, diffY, diffZ);
+  // front vector. unit vector from center to eye.
+  const front = new p5.Vector(diffX, diffY, diffZ).normalize();
+  // up vector. normalized camera's up vector.
+  const up = new p5.Vector(this.upX, this.upY, this.upZ).normalize(); // y-axis
+  // side vector. Right when viewed from the front
+  const side = new p5.Vector.cross(up, front).normalize(); // x-axis
+  // vertical vector. normalized vector of projection of front vector.
+  const vertical = new p5.Vector.cross(side, up); // z-axis
 
+  // update camRadius
+  camRadius *= Math.pow(10, dRadius);
   // prevent zooming through the center:
   if (camRadius < this.cameraNear) {
     camRadius = this.cameraNear;
@@ -297,14 +286,37 @@ p5.Camera.prototype._orbit = function (dTheta, dPhi, dRadius) {
     camRadius = this.cameraFar;
   }
 
-  // from https://github.com/mrdoob/three.js/blob/dev/src/math/Vector3.js#L628-L632
-  var _x = Math.sin(camPhi) * camRadius * Math.sin(camTheta);
-  var _y = Math.cos(camPhi) * camRadius;
-  var _z = Math.sin(camPhi) * camRadius * Math.cos(camTheta);
-  this.camera(_x + this.centerX, _y + this.centerY, _z + this.centerZ, this.centerX, this.centerY, this.centerZ, 0, newUpY, 0);
-};
+  // calculate updated camera angle
+  // Find the angle between the "up" and the "front", add dPhi to that.
+  const camPhi = front.angleBetween(up) + dPhi;
+  // Rotate by dTheta in the shortest direction from "vertical" to "side"
+  const camTheta = dTheta;
 
-// ortho()がthis.cameraFarとthis.cameraNearに設定するように仕様変更
+  // Invert camera's upX, upY, upZ if dPhi is below 0 or above PI
+  if(camPhi <= 0 || camPhi >= Math.PI){
+    this.upX *= -1;
+    this.upY *= -1;
+    this.upZ *= -1;
+  }
+
+  // update eye vector by calculate new front vector
+  up.mult(Math.cos(camPhi));
+  vertical.mult(Math.cos(camTheta) * Math.sin(camPhi));
+  side.mult(Math.sin(camTheta) * Math.sin(camPhi));
+
+  front.set(up).add(vertical).add(side);
+
+  this.eyeX = camRadius * front.x + this.centerX;
+  this.eyeY = camRadius * front.y + this.centerY;
+  this.eyeZ = camRadius * front.z + this.centerZ;
+
+  // update camera
+  this.camera(
+    this.eyeX, this.eyeY, this.eyeZ,
+    this.centerX, this.centerY, this.centerZ,
+    this.upX, this.upY, this.upZ
+  );
+};
 
 p5.Camera.prototype.ortho = function (left, right, bottom, top, near, far) {
   if (left === undefined) left = -this._renderer.width / 2;
@@ -393,4 +405,29 @@ p5.Matrix.prototype.multiplyAndNormalizePoint = function(v) {
 p5.Matrix.prototype.multiplyDirection = function(v) {
   const array = this.multiplyVec4(v.x, v.y, v.z, 0);
   return new p5.Vector(array[0], array[1], array[2]);
+};
+
+// copy()がupX,upY,upZをコピーしない致命的なバグがあったので修正します
+p5.Camera.prototype.copy = function() {
+  const _cam = new p5.Camera(this._renderer);
+  _cam.cameraFOV = this.cameraFOV;
+  _cam.aspectRatio = this.aspectRatio;
+  _cam.eyeX = this.eyeX;
+  _cam.eyeY = this.eyeY;
+  _cam.eyeZ = this.eyeZ;
+  _cam.centerX = this.centerX;
+  _cam.centerY = this.centerY;
+  _cam.centerZ = this.centerZ;
+  _cam.upX = this.upX;
+  _cam.upY = this.upY;
+  _cam.upZ = this.upZ;
+  _cam.cameraNear = this.cameraNear;
+  _cam.cameraFar = this.cameraFar;
+
+  _cam.cameraType = this.cameraType;
+
+  _cam.cameraMatrix = this.cameraMatrix.copy();
+  _cam.projMatrix = this.projMatrix.copy();
+
+  return _cam;
 };
