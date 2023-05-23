@@ -18,6 +18,19 @@ p5.prototype.orbitControl = function(
   this._assert3d('orbitControl');
   p5._validateParameters('orbitControl', arguments);
 
+  if (this._renderer.prevTouches === undefined) {
+    this._renderer.prevTouches = [];
+  }
+  if (this._renderer.zoomVelocity === undefined) {
+    this._renderer.zoomVelocity = 0;
+  }
+  if (this._renderer.rotateVelocity === undefined) {
+    this._renderer.rotateVelocity = createVector(0, 0);
+  }
+  if (this._renderer.moveVelocity === undefined) {
+    this._renderer.moveVelocity = createVector(0, 0);
+  }
+
   // If the mouse is not in bounds of the canvas, disable all behaviors:
   const mouseInCanvas =
     this.mouseX < this.width &&
