@@ -12,6 +12,20 @@
 // 軽微なバグ修正
 // angleBetween()の使用をやめて従来の計算方法に戻しました。
 
+// 修正1：マウスが外にあるときキャンセルする処理をカット
+// 修正2：pointersInCanvasを用意
+// 修正3：touchで計算
+// 修正4：touchに関するインタラクションの開始終了を定義
+// 修正5：マウスについても同様に
+// 修正6：フラグ処理をいじる。
+// 修正7：名前をexecuteZoomとexecuteRotateAndMoveにした方がいい？
+// 字数の問題があるから長い名前は避けたいんだけど。
+
+// 2023-06-04
+// マウスダウンしたまま外に出すと止まるバグを修正
+// オプションを追加（freeRotation:trueでEasyCamのような挙動になる）
+// これで一応完成です
+
 p5.prototype.orbitControl = function(
   sensitivityX,
   sensitivityY,
@@ -19,7 +33,9 @@ p5.prototype.orbitControl = function(
   options
 ) {
   this._assert3d('orbitControl');
-  p5._validateParameters('orbitControl', arguments);
+  // 引数の個数に関するチェックが通らないので。まあぶっちゃけこの処理要るのか？って感じだけどね...
+  // Three.jsとかはやってないと思う
+  //p5._validateParameters('orbitControl', arguments);
 
   if (this._renderer.prevTouches === undefined) {
     this._renderer.prevTouches = [];
@@ -33,14 +49,12 @@ p5.prototype.orbitControl = function(
   if (this._renderer.moveVelocity === undefined) {
     this._renderer.moveVelocity = createVector(0, 0);
   }
-
-  // If the mouse is not in bounds of the canvas, disable all behaviors:
-  const mouseInCanvas =
-    this.mouseX < this.width &&
-    this.mouseX > 0 &&
-    this.mouseY < this.height &&
-    this.mouseY > 0;
-  if (!mouseInCanvas) return;
+  if (this._renderer.executeRotateAndMove === undefined) {
+    this._renderer.executeRotateAndMove = false;
+  }
+  if (this._renderer.executeZoom === undefined) {
+    this._renderer.executeZoom = false;
+  }
 
   const cam = this._renderer._curCamera;
 
@@ -83,13 +97,16 @@ p5.prototype.orbitControl = function(
     this._setProperty('touchActionsDisabled', true);
   }
 
+  // If option.freeRotation is true, the camera always rotates freely in the direction
+  // the pointer moves. default value is false (normal behavior)
+  const { freeRotation = false } = options;
+
   // get moved touches.
   const movedTouches = [];
-  for (let i = 0; i < this.touches.length; i++) {
-    const curTouch = this.touches[i];
-    for (let k = 0; k < this._renderer.prevTouches.length; k++) {
-      const prevTouch = this._renderer.prevTouches[k];
-      if(curTouch.id === prevTouch.id){
+
+  this.touches.forEach(curTouch => {
+    this._renderer.prevTouches.forEach(prevTouch => {
+      if (curTouch.id === prevTouch.id) {
         const movedTouch = {
           x: curTouch.x,
           y: curTouch.y,
@@ -98,12 +115,13 @@ p5.prototype.orbitControl = function(
         };
         movedTouches.push(movedTouch);
       }
-    }
-  }
+    });
+  });
+
   this._renderer.prevTouches = this.touches;
 
   // The idea of using damping is based on the following website. thank you.
-  // https://github.com/freshfork/p5.EasyCam/blob/master/p5.easycam.js
+  // https://github.com/freshfork/p5.EasyCam/blob/9782964680f6a5c4c9bee825c475d9f2021d5134/p5.easycam.js#L1124
 
   // variables for interaction
   let deltaRadius = 0;
@@ -120,12 +138,20 @@ p5.prototype.orbitControl = function(
   const mouseZoomScaleFactor = 0.0001;
   const touchZoomScaleFactor = 0.0004;
   const scaleFactor = this.height < this.width ? this.height : this.width;
+  // Flag whether the mouse or touch pointer is inside the canvas
+  let pointersInCanvas = false;
 
   // calculate and determine flags and variables.
   if (movedTouches.length > 0) {
     /* for touch */
     // if length === 1, rotate
     // if length > 1, zoom and move
+
+    // for touch, it is calculated based on one moved touch pointer position.
+    pointersInCanvas =
+      movedTouches[0].x > 0 && movedTouches[0].x < this.width &&
+      movedTouches[0].y > 0 && movedTouches[0].y < this.height;
+
     if (movedTouches.length === 1) {
       const t = movedTouches[0];
       deltaTheta = -sensitivityX * (t.x - t.px) / scaleFactor;
@@ -136,22 +162,47 @@ p5.prototype.orbitControl = function(
       const distWithTouches = Math.hypot(t0.x - t1.x, t0.y - t1.y);
       const prevDistWithTouches = Math.hypot(t0.px - t1.px, t0.py - t1.py);
       const changeDist = distWithTouches - prevDistWithTouches;
+      // move the camera farther when the distance between the two touch points
+      // decreases, move the camera closer when it increases.
       deltaRadius = -changeDist * sensitivityZ * touchZoomScaleFactor;
-
+      // Move the center of the camera along with the movement of
+      // the center of gravity of the two touch points.
       moveDeltaX = 0.5 * (t0.x + t1.x) - 0.5 * (t0.px + t1.px);
       moveDeltaY = 0.5 * (t0.y + t1.y) - 0.5 * (t0.py + t1.py);
+    }
+    if (this.touches.length > 0) {
+      if (pointersInCanvas) {
+        // Initiate an interaction if touched in the canvas
+        this._renderer.executeRotateAndMove = true;
+        this._renderer.executeZoom = true;
+      }
+    } else {
+      // End an interaction when the touch is released
+      this._renderer.executeRotateAndMove = false;
+      this._renderer.executeZoom = false;
     }
   } else {
     /* for mouse */
     // if wheelDeltaY !== 0, zoom
     // if mouseLeftButton is down, rotate
     // if mouseRightButton is down, move
+
+    // For mouse, it is calculated based on the mouse position.
+    pointersInCanvas =
+      (this.mouseX > 0 && this.mouseX < this.width) &&
+      (this.mouseY > 0 && this.mouseY < this.height);
+
     if (this._mouseWheelDeltaY !== 0) {
       // zoom the camera depending on the value of _mouseWheelDeltaY.
-      // Move away if positive, move closer if negative
+      // move away if positive, move closer if negative
       deltaRadius = this._mouseWheelDeltaY * sensitivityZ;
       deltaRadius *= mouseZoomScaleFactor;
       this._mouseWheelDeltaY = 0;
+      // start zoom when the mouse is wheeled within the canvas.
+      if (pointersInCanvas) this._renderer.executeZoom = true;
+    } else {
+      // quit zoom when you stop wheeling.
+      this._renderer.zoomFlag = false;
     }
     if (this.mouseIsPressed) {
       if (this.mouseButton === this.LEFT) {
@@ -161,18 +212,32 @@ p5.prototype.orbitControl = function(
         moveDeltaX = this.mouseX - this.pmouseX;
         moveDeltaY = this.mouseY - this.pmouseY;
       }
+      // start rotate and move when mouse is pressed within the canvas.
+      if (pointersInCanvas) this._renderer.executeRotateAndMove = true;
+    } else {
+      // quit rotate and move if mouse is released.
+      this._renderer.executeRotateAndMove = false;
     }
   }
 
   // interactions
 
   // zoom process
-  if (deltaRadius !== 0) {
+  if (deltaRadius !== 0 && this._renderer.executeZoom) {
     // accelerate zoom velocity
     this._renderer.zoomVelocity += deltaRadius;
   }
   if (Math.abs(this._renderer.zoomVelocity) > 0.001) {
-    this._renderer._curCamera._orbit(0, 0, this._renderer.zoomVelocity);
+    // if freeRotation is true, we use _orbitFree() instead of _orbit()
+    if (freeRotation) {
+      this._renderer._curCamera._orbitFree(
+        0, 0, this._renderer.zoomVelocity
+      );
+    } else {
+      this._renderer._curCamera._orbit(
+        0, 0, this._renderer.zoomVelocity
+      );
+    }
     // In orthogonal projection, the scale does not change even if
     // the distance to the gaze point is changed, so the projection matrix
     // needs to be modified.
@@ -191,20 +256,29 @@ p5.prototype.orbitControl = function(
   }
 
   // rotate process
-  if (deltaTheta !== 0 || deltaPhi !== 0) {
+  if ((deltaTheta !== 0 || deltaPhi !== 0) &&
+  this._renderer.executeRotateAndMove) {
     // accelerate rotate velocity
     this._renderer.rotateVelocity.add(
       deltaTheta * rotateAccelerationFactor,
-      deltaPhi * rotateAccelerationFactor,
-      0
+      deltaPhi * rotateAccelerationFactor
     );
   }
-  if (this._renderer.rotateVelocity.mag() > 0.001) {
-    this._renderer._curCamera._orbit(
-      this._renderer.rotateVelocity.x,
-      this._renderer.rotateVelocity.y,
-      0
-    );
+  if (this._renderer.rotateVelocity.magSq() > 0.000001) {
+    // if freeRotation is true, the camera always rotates freely in the direction the pointer moves
+    if (freeRotation) {
+      this._renderer._curCamera._orbitFree(
+        -this._renderer.rotateVelocity.x,
+        this._renderer.rotateVelocity.y,
+        0
+      );
+    } else {
+      this._renderer._curCamera._orbit(
+        this._renderer.rotateVelocity.x,
+        this._renderer.rotateVelocity.y,
+        0
+      );
+    }
     // damping
     this._renderer.rotateVelocity.mult(damping);
   } else {
@@ -212,7 +286,8 @@ p5.prototype.orbitControl = function(
   }
 
   // move process
-  if (moveDeltaX !== 0 || moveDeltaY !== 0) {
+  if ((moveDeltaX !== 0 || moveDeltaY !== 0) &&
+  this._renderer.executeRotateAndMove) {
     // Normalize movement distance
     const ndcX = moveDeltaX * 2/this.width;
     const ndcY = -moveDeltaY * 2/this.height;
@@ -222,7 +297,7 @@ p5.prototype.orbitControl = function(
       ndcY * moveAccelerationFactor
     );
   }
-  if (this._renderer.moveVelocity.mag() > 0.001) {
+  if (this._renderer.moveVelocity.magSq() > 0.000001) {
     // Translate the camera so that the entire object moves
     // perpendicular to the line of sight when the mouse is moved
     // or when the centers of gravity of the two touch pointers move.
@@ -276,6 +351,80 @@ p5.prototype.orbitControl = function(
 };
 
 // ------------------------------------------------------------------- //
+// _orbitFree.
+
+// dx, dyの方向に回転させる感じです。
+// frontが画面真正面向き、sideがその右方向。この2つを外積して...
+// 正規直交基底ができますね。sideとverticalはそれぞれマウスのx,y軸の
+// 正の方向に一致していますので、dxとdyにマイナスの付いてない値が入れば...
+p5.Camera.prototype._orbitFree = function(dx, dy, dRadius) {
+  // Calculate the vector and its magnitude from the center to the viewpoint
+  const diffX = this.eyeX - this.centerX;
+  const diffY = this.eyeY - this.centerY;
+  const diffZ = this.eyeZ - this.centerZ;
+  let camRadius = Math.hypot(diffX, diffY, diffZ);
+  // front vector. unit vector from center to eye.
+  const front = new p5.Vector(diffX, diffY, diffZ).normalize();
+  // up vector. camera's up vector.
+  const up = new p5.Vector(this.upX, this.upY, this.upZ);
+  // side vector. Right when viewed from the front. (like x-axis)
+  const side = new p5.Vector.cross(up, front).normalize();
+  // down vector. Bottom when viewed from the front. (like y-axis)
+  const down = new p5.Vector.cross(front, side);
+
+  // side vector and down vector are no longer used as-is.
+  // Create a vector representing the direction of rotation
+  // in the form cos(direction)*side + sin(direction)*down.
+  // Make the current side vector into this.
+  const directionAngle = Math.atan2(dy, dx);
+  down.mult(Math.sin(directionAngle));
+  side.mult(Math.cos(directionAngle)).add(down);
+  // The amount of rotation is the size of the vector (dx, dy).
+  const rotAngle = Math.sqrt(dx*dx + dy*dy);
+  // The vector that is orthogonal to both the front vector and
+  // the rotation direction vector is the rotation axis vector.
+  const axis = new p5.Vector.cross(front, side);
+
+  // update camRadius
+  camRadius *= Math.pow(10, dRadius);
+  // prevent zooming through the center:
+  if (camRadius < this.cameraNear) {
+    camRadius = this.cameraNear;
+  }
+  if (camRadius > this.cameraFar) {
+    camRadius = this.cameraFar;
+  }
+
+  // If the axis vector is likened to the z-axis, the front vector is
+  // the x-axis and the side vector is the y-axis. Rotate the up and front
+  // vectors respectively by thinking of them as rotations around the z-axis.
+
+  // Calculate the components by taking the dot product and
+  // calculate a rotation based on that.
+  const c = Math.cos(rotAngle);
+  const s = Math.sin(rotAngle);
+  const dotFront = up.dot(front);
+  const dotSide = up.dot(side);
+  const ux = dotFront * c + dotSide * s;
+  const uy = -dotFront * s + dotSide * c;
+  const uz = up.dot(axis);
+  up.x = ux * front.x + uy * side.x + uz * axis.x;
+  up.y = ux * front.y + uy * side.y + uz * axis.y;
+  up.z = ux * front.z + uy * side.z + uz * axis.z;
+  // We won't be using the side vector and the front vector anymore,
+  // so let's make the front vector into the vector from the center to the new eye.
+  side.mult(-s);
+  front.mult(c).add(side).mult(camRadius);
+
+  // it's complete. let's update camera.
+  this.camera(
+    front.x + this.centerX,
+    front.y + this.centerY,
+    front.z + this.centerZ,
+    this.centerX, this.centerY, this.centerZ,
+    up.x, up.y, up.z
+  );
+}
 
 p5.Camera.prototype._orbit = function(dTheta, dPhi, dRadius) {
   // Calculate the vector and its magnitude from the center to the viewpoint
@@ -304,6 +453,9 @@ p5.Camera.prototype._orbit = function(dTheta, dPhi, dRadius) {
 
   // calculate updated camera angle
   // Find the angle between the "up" and the "front", add dPhi to that.
+  // angleBetween() may return negative value. Since this specification is subject to change
+  // due to version updates, it cannot be adopted, so here we calculate using a method
+  // that directly obtains the absolute value.
   const camPhi =
     Math.acos(Math.max(-1, Math.min(1, p5.Vector.dot(front, up)))) + dPhi;
   // Rotate by dTheta in the shortest direction from "vertical" to "side"
