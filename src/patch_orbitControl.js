@@ -241,13 +241,16 @@ p5.prototype.orbitControl = function(
     // In orthogonal projection, the scale does not change even if
     // the distance to the gaze point is changed, so the projection matrix
     // needs to be modified.
-    if (this._renderer.uPMatrix.mat4[15] !== 0) {
-      this._renderer.uPMatrix.mat4[0] *= Math.pow(
+    if (cam.projMatrix.mat4[15] !== 0) {
+      cam.projMatrix.mat4[0] *= Math.pow(
         10, -this._renderer.zoomVelocity
       );
-      this._renderer.uPMatrix.mat4[5] *= Math.pow(
+      cam.projMatrix.mat4[5] *= Math.pow(
         10, -this._renderer.zoomVelocity
       );
+      // modify uPMatrix
+      this._renderer.uPMatrix.mat4[0] = cam.projMatrix.mat4[0];
+      this._renderer.uPMatrix.mat4[5] = cam.projMatrix.mat4[5];
     }
     // damping
     this._renderer.zoomVelocity *= damping;
