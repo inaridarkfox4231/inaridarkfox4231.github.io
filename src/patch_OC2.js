@@ -611,6 +611,28 @@ p5.Camera.prototype.copy = function() {
   return _cam;
 };
 
+// カメラのset
+p5.Camera.prototype.set = function(cam) {
+  const keyNamesOfThePropToCopy = [
+    'eyeX', 'eyeY', 'eyeZ',
+    'centerX', 'centerY', 'centerZ',
+    'upX', 'upY', 'upZ',
+    'cameraFOV', 'aspectRatio', 'cameraNear', 'cameraFar', 'cameraType'
+  ];
+  for (const keyName of keyNamesOfThePropToCopy) {
+    this[keyName] = cam[keyName];
+  }
+
+  this.cameraMatrix = cam.cameraMatrix.copy();
+  this.projMatrix = cam.projMatrix.copy();
+
+  // If the target camera is active, update uMVMatrix and uPMatrix.
+  if (this._isActive()) {
+    this._renderer.uMVMatrix.mat4 = this.cameraMatrix.mat4.slice();
+    this._renderer.uPMatrix.mat4 = this.projMatrix.mat4.slice();
+  }
+}
+
 // ベクトルのslerp.
 p5.Vector.prototype.slerp = function(v, amt) {
   // edge cases.
