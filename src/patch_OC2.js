@@ -678,6 +678,22 @@ p5.Vector.prototype.slerp = function(v, amt) {
   return this;
 }
 
+p5.Vector.slerp = function(v1, v2, amt, target) {
+  if (!target) {
+    target = v1.copy();
+    if (arguments.length === 4) {
+      p5._friendlyError(
+        'The target parameter is undefined, it should be of type p5.Vector',
+        'p5.Vector.slerp'
+      );
+    }
+  } else {
+    target.set(v1);
+  }
+  target.slerp(v2, amt);
+  return target;
+}
+
 // 3x3Matrixのための行列関数
 
 if (typeof Float32Array !== 'undefined') {
