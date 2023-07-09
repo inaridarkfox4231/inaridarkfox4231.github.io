@@ -879,9 +879,11 @@ p5.Camera.prototype.slerp = function(cam0, cam1, amt){
   // and interpolate the elements of the projection matrix.
   if (this.projMatrix.mat4[15] !== 0) {
     this.projMatrix.mat4[0] =
-      (1 - amt) * cam0.projMatrix.mat4[0] + amt * cam1.projMatrix.mat4[0];
+      cam0.projMatrix.mat4[0] *
+      Math.pow(cam1.projMatrix.mat4[0] / cam0.projMatrix.mat4[0], amt);
     this.projMatrix.mat4[5] =
-      (1 - amt) * cam0.projMatrix.mat4[5] + amt * cam1.projMatrix.mat4[5];
+      cam0.projMatrix.mat4[5] *
+      Math.pow(cam1.projMatrix.mat4[5] / cam0.projMatrix.mat4[5], amt);
     // If the camera is active, make uPMatrix reflect changes in projMatrix.
     if (this._isActive()) {
       this._renderer.uPMatrix.mat4 = this.projMatrix.mat4.slice();
@@ -898,7 +900,7 @@ p5.Camera.prototype.slerp = function(cam0, cam1, amt){
   // Then linearly interpolate them by amt.
   const dist0 = p5.Vector.dist(eye0, center0);
   const dist1 = p5.Vector.dist(eye1, center1);
-  const lerpedDist = (1 - amt) * dist0 + amt * dist1;
+  const lerpedDist = dist0 * Math.pow(dist1 / dist0, amt);
 
   // Next, calculate the ratio to interpolate the eye and center by a constant
   // ratio for each camera. This ratio is the same for both. Also, with this ratio
