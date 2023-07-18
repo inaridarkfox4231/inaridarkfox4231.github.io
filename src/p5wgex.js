@@ -4,46 +4,317 @@
 
 // まるごと移してしまえ。えいっ
 // でもってalphaをtrueで上書き。えいっ（どうなっても知らないよ...）
-p5.RendererGL.prototype._setAttributeDefaults = function(pInst) {
-  // See issue #3850, safer to enable AA in Safari
-  var applyAA = navigator.userAgent.toLowerCase().includes('safari');
-  var defaults = {
-    alpha: true, // ここ。いいのかなあ...
-    depth: true,
-    stencil: true,
-    antialias: applyAA,
-    premultipliedAlpha: false,
-    preserveDrawingBuffer: true // perPixelLightingはp5.jsの話だそうなのでカット
-  };
 
-  if (pInst._glAttributes === null) {
-    pInst._glAttributes = defaults;
-  } else {
-    pInst._glAttributes = Object.assign(defaults, pInst._glAttributes);
+// 1.7.0はwebgl2なのでもう不要です
+// 卍解済み
+
+// orbitControlのパッチ
+// 回転のYと移動のYの向きを逆にしただけ
+// 参考：https://openprocessing.org/sketch/1886629
+p5.prototype.orbitControl = function(
+  sensitivityX,
+  sensitivityY,
+  sensitivityZ,
+  options
+) {
+  this._assert3d('orbitControl');
+  p5._validateParameters('orbitControl', arguments);
+
+  const cam = this._renderer._curCamera;
+
+  if (typeof sensitivityX === 'undefined') {
+    sensitivityX = 1;
   }
-  return;
-};
+  if (typeof sensitivityY === 'undefined') {
+    sensitivityY = sensitivityX;
+  }
+  if (typeof sensitivityZ === 'undefined') {
+    sensitivityZ = 1;
+  }
+  if (typeof options !== 'object') {
+    options = {};
+  }
 
-// その前に卍解やっとこう。ばん！かい！webgl2を有効化します。
-p5.RendererGL.prototype._initContext = function() {
-  try {
-    this.drawingContext =
-      this.canvas.getContext('webgl2', this._pInst._glAttributes) ||
-      this.canvas.getContext('experimental-webgl', this._pInst._glAttributes);
-    if (this.drawingContext === null) {
-      throw new Error('Error creating webgl context');
+  // default right-mouse and mouse-wheel behaviors (context menu and scrolling,
+  // respectively) are disabled here to allow use of those events for panning and
+  // zooming. However, whether or not to disable touch actions is an option.
+
+  // disable context menu for canvas element and add 'contextMenuDisabled'
+  // flag to p5 instance
+  if (this.contextMenuDisabled !== true) {
+    this.canvas.oncontextmenu = () => false;
+    this._setProperty('contextMenuDisabled', true);
+  }
+
+  // disable default scrolling behavior on the canvas element and add
+  // 'wheelDefaultDisabled' flag to p5 instance
+  if (this.wheelDefaultDisabled !== true) {
+    this.canvas.onwheel = () => false;
+    this._setProperty('wheelDefaultDisabled', true);
+  }
+
+  // disable default touch behavior on the canvas element and add
+  // 'touchActionsDisabled' flag to p5 instance
+  const { disableTouchActions = true } = options;
+  if (this.touchActionsDisabled !== true && disableTouchActions) {
+    this.canvas.style['touch-action'] = 'none';
+    this._setProperty('touchActionsDisabled', true);
+  }
+
+  // If option.freeRotation is true, the camera always rotates freely in the direction
+  // the pointer moves. default value is false (normal behavior)
+  const { freeRotation = false } = options;
+
+  // get moved touches.
+  const movedTouches = [];
+
+  this.touches.forEach(curTouch => {
+    this._renderer.prevTouches.forEach(prevTouch => {
+      if (curTouch.id === prevTouch.id) {
+        const movedTouch = {
+          x: curTouch.x,
+          y: curTouch.y,
+          px: prevTouch.x,
+          py: prevTouch.y
+        };
+        movedTouches.push(movedTouch);
+      }
+    });
+  });
+
+  this._renderer.prevTouches = this.touches;
+
+  // The idea of using damping is based on the following website. thank you.
+  // https://github.com/freshfork/p5.EasyCam/blob/9782964680f6a5c4c9bee825c475d9f2021d5134/p5.easycam.js#L1124
+
+  // variables for interaction
+  let deltaRadius = 0;
+  let deltaTheta = 0;
+  let deltaPhi = 0;
+  let moveDeltaX = 0;
+  let moveDeltaY = 0;
+  // constants for dampingProcess
+  const damping = 0.85;
+  const rotateAccelerationFactor = 0.6;
+  const moveAccelerationFactor = 0.15;
+  // For touches, the appropriate scale is different
+  // because the distance difference is multiplied.
+  const mouseZoomScaleFactor = 0.01;
+  const touchZoomScaleFactor = 0.0004;
+  const scaleFactor = this.height < this.width ? this.height : this.width;
+  // Flag whether the mouse or touch pointer is inside the canvas
+  let pointersInCanvas = false;
+
+  // calculate and determine flags and variables.
+  if (movedTouches.length > 0) {
+    /* for touch */
+    // if length === 1, rotate
+    // if length > 1, zoom and move
+
+    // for touch, it is calculated based on one moved touch pointer position.
+    pointersInCanvas =
+      movedTouches[0].x > 0 && movedTouches[0].x < this.width &&
+      movedTouches[0].y > 0 && movedTouches[0].y < this.height;
+
+    if (movedTouches.length === 1) {
+      const t = movedTouches[0];
+      deltaTheta = -sensitivityX * (t.x - t.px) / scaleFactor;
+      deltaPhi = -sensitivityY * (t.y - t.py) / scaleFactor;
     } else {
-      var gl = this.drawingContext;
-      gl.enable(gl.DEPTH_TEST);
-      gl.depthFunc(gl.LEQUAL);
-      gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-      this._viewport = this.drawingContext.getParameter(
-        this.drawingContext.VIEWPORT
+      const t0 = movedTouches[0];
+      const t1 = movedTouches[1];
+      const distWithTouches = Math.hypot(t0.x - t1.x, t0.y - t1.y);
+      const prevDistWithTouches = Math.hypot(t0.px - t1.px, t0.py - t1.py);
+      const changeDist = distWithTouches - prevDistWithTouches;
+      // move the camera farther when the distance between the two touch points
+      // decreases, move the camera closer when it increases.
+      deltaRadius = -changeDist * sensitivityZ * touchZoomScaleFactor;
+      // Move the center of the camera along with the movement of
+      // the center of gravity of the two touch points.
+      moveDeltaX = 0.5 * (t0.x + t1.x) - 0.5 * (t0.px + t1.px);
+      moveDeltaY = 0.5 * (t0.y + t1.y) - 0.5 * (t0.py + t1.py);
+    }
+    if (this.touches.length > 0) {
+      if (pointersInCanvas) {
+        // Initiate an interaction if touched in the canvas
+        this._renderer.executeRotateAndMove = true;
+        this._renderer.executeZoom = true;
+      }
+    } else {
+      // End an interaction when the touch is released
+      this._renderer.executeRotateAndMove = false;
+      this._renderer.executeZoom = false;
+    }
+  } else {
+    /* for mouse */
+    // if wheelDeltaY !== 0, zoom
+    // if mouseLeftButton is down, rotate
+    // if mouseRightButton is down, move
+
+    // For mouse, it is calculated based on the mouse position.
+    pointersInCanvas =
+      (this.mouseX > 0 && this.mouseX < this.width) &&
+      (this.mouseY > 0 && this.mouseY < this.height);
+
+    if (this._mouseWheelDeltaY !== 0) {
+      // zoom the camera depending on the value of _mouseWheelDeltaY.
+      // move away if positive, move closer if negative
+      deltaRadius = Math.sign(this._mouseWheelDeltaY) * sensitivityZ;
+      deltaRadius *= mouseZoomScaleFactor;
+      this._mouseWheelDeltaY = 0;
+      // start zoom when the mouse is wheeled within the canvas.
+      if (pointersInCanvas) this._renderer.executeZoom = true;
+    } else {
+      // quit zoom when you stop wheeling.
+      this._renderer.zoomFlag = false;
+    }
+    if (this.mouseIsPressed) {
+      if (this.mouseButton === this.LEFT) {
+        deltaTheta = -sensitivityX * this.movedX / scaleFactor;
+        deltaPhi = -sensitivityY * this.movedY / scaleFactor;
+      } else if (this.mouseButton === this.RIGHT) {
+        moveDeltaX = this.movedX;
+        moveDeltaY = this.movedY;
+      }
+      // start rotate and move when mouse is pressed within the canvas.
+      if (pointersInCanvas) this._renderer.executeRotateAndMove = true;
+    } else {
+      // quit rotate and move if mouse is released.
+      this._renderer.executeRotateAndMove = false;
+    }
+  }
+
+  // interactions
+
+  // zoom process
+  if (deltaRadius !== 0 && this._renderer.executeZoom) {
+    // accelerate zoom velocity
+    this._renderer.zoomVelocity += deltaRadius;
+  }
+  if (Math.abs(this._renderer.zoomVelocity) > 0.001) {
+    // if freeRotation is true, we use _orbitFree() instead of _orbit()
+    if (freeRotation) {
+      cam._orbitFree(
+        0, 0, this._renderer.zoomVelocity
+      );
+    } else {
+      cam._orbit(
+        0, 0, this._renderer.zoomVelocity
       );
     }
-  } catch (er) {
-    throw er;
+    // In orthogonal projection, the scale does not change even if
+    // the distance to the gaze point is changed, so the projection matrix
+    // needs to be modified.
+    if (cam.projMatrix.mat4[15] !== 0) {
+      cam.projMatrix.mat4[0] *= Math.pow(
+        10, -this._renderer.zoomVelocity
+      );
+      cam.projMatrix.mat4[5] *= Math.pow(
+        10, -this._renderer.zoomVelocity
+      );
+      // modify uPMatrix
+      this._renderer.uPMatrix.mat4[0] = cam.projMatrix.mat4[0];
+      this._renderer.uPMatrix.mat4[5] = cam.projMatrix.mat4[5];
+    }
+    // damping
+    this._renderer.zoomVelocity *= damping;
+  } else {
+    this._renderer.zoomVelocity = 0;
   }
+
+  // rotate process
+  if ((deltaTheta !== 0 || deltaPhi !== 0) &&
+  this._renderer.executeRotateAndMove) {
+    // accelerate rotate velocity
+    this._renderer.rotateVelocity.add(
+      deltaTheta * rotateAccelerationFactor,
+      deltaPhi * rotateAccelerationFactor
+    );
+  }
+  if (this._renderer.rotateVelocity.magSq() > 0.000001) {
+    // if freeRotation is true, the camera always rotates freely in the direction the pointer moves
+    if (freeRotation) {
+      cam._orbitFree(
+        -this._renderer.rotateVelocity.x,
+        this._renderer.rotateVelocity.y,
+        0
+      );
+    } else {
+      cam._orbit(
+        this._renderer.rotateVelocity.x,
+        this._renderer.rotateVelocity.y,
+        0
+      );
+    }
+    // damping
+    this._renderer.rotateVelocity.mult(damping);
+  } else {
+    this._renderer.rotateVelocity.set(0, 0);
+  }
+
+  // move process
+  if ((moveDeltaX !== 0 || moveDeltaY !== 0) &&
+  this._renderer.executeRotateAndMove) {
+    // Normalize movement distance
+    const ndcX = moveDeltaX * 2/this.width;
+    const ndcY = moveDeltaY * 2/this.height;
+    // accelerate move velocity
+    this._renderer.moveVelocity.add(
+      ndcX * moveAccelerationFactor,
+      ndcY * moveAccelerationFactor
+    );
+  }
+  if (this._renderer.moveVelocity.magSq() > 0.000001) {
+    // Translate the camera so that the entire object moves
+    // perpendicular to the line of sight when the mouse is moved
+    // or when the centers of gravity of the two touch pointers move.
+    const local = cam._getLocalAxes();
+
+    // Calculate the z coordinate in the view coordinates of
+    // the center, that is, the distance to the view point
+    const diffX = cam.eyeX - cam.centerX;
+    const diffY = cam.eyeY - cam.centerY;
+    const diffZ = cam.eyeZ - cam.centerZ;
+    const viewZ = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
+
+    // position vector of the center.
+    let cv = new p5.Vector(cam.centerX, cam.centerY, cam.centerZ);
+
+    // Calculate the normalized device coordinates of the center.
+    cv = cam.cameraMatrix.multiplyPoint(cv);
+    cv = this._renderer.uPMatrix.multiplyAndNormalizePoint(cv);
+
+    // Move the center by this distance
+    // in the normalized device coordinate system.
+    cv.x -= this._renderer.moveVelocity.x;
+    cv.y -= this._renderer.moveVelocity.y;
+
+    // Calculate the translation vector
+    // in the direction perpendicular to the line of sight of center.
+    let dx, dy;
+    const uP = this._renderer.uPMatrix.mat4;
+
+    if (uP[15] === 0) {
+      dx = ((uP[8] + cv.x)/uP[0]) * viewZ;
+      dy = ((uP[9] + cv.y)/uP[5]) * viewZ;
+    } else {
+      dx = (cv.x - uP[12])/uP[0];
+      dy = (cv.y - uP[13])/uP[5];
+    }
+
+    // translate the camera.
+    cam.setPosition(
+      cam.eyeX + dx * local.x[0] + dy * local.y[0],
+      cam.eyeY + dx * local.x[1] + dy * local.y[1],
+      cam.eyeZ + dx * local.x[2] + dy * local.y[2]
+    );
+    // damping
+    this._renderer.moveVelocity.mult(damping);
+  } else {
+    this._renderer.moveVelocity.set(0, 0);
+  }
+
+  return this;
 };
 
 // これがp5webglのexです。
@@ -2892,7 +3163,7 @@ const p5wgex = (function(){
       }
       return result;
     }
-    getGlobalPositionFromNDC(x, y, z = 1, centerBased = false){
+    getGlobalPositionFromNDC(x, y, z = 1, cenetrBased = false){
       // NDCが(x,y)でViewにおける深さがzであるようなGlobalの点の位置を取得する。3Dお絵描きに応用できそう。
       const p = this.getViewPositionFromNDC(x, y, z, centerBased);
       // viewの3x3部分の逆行列（＝転置）を掛けてeyeを足すだけ。ラクチン。
