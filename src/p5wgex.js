@@ -8,6 +8,15 @@
 // 1.7.0はwebgl2なのでもう不要です
 // 卍解済み
 
+// 2023-07-18
+// 暫定的にこれでいこう
+// copyPainterのalphaBlendingをいじりました
+// Separateのone,oneでalphaを掛ける
+// とりあえずこれで。
+// って思ったのに
+// Separateやめたら綺麗になった・・
+// もうわからん～
+
 // orbitControlのパッチ
 // 回転のYと移動のYの向きを逆にしただけ
 // 参考：https://openprocessing.org/sketch/1886629
@@ -399,7 +408,6 @@ const p5wgex = (function(){
     }
     validateKeyName(keyName, methodName){
       if(this.timers[keyName] === undefined){
-        //window.alert(methodName + " failure: invalid name.");
         myAlert(methodName + " failure: invalid name.");
         return null;
       }
@@ -586,7 +594,6 @@ const p5wgex = (function(){
   // シェーダーを作る
   function _getShader(name, gl, source, type){
     if(type !== "vs" && type !== "fs"){
-      //window.alert("invalid type");
       myAlert("invalid type");
       return null;
     }
@@ -602,7 +609,6 @@ const p5wgex = (function(){
     // 結果のチェック
     if(!gl.getShaderParameter(_shader, gl.COMPILE_STATUS)){
       console.error(gl.getShaderInfoLog(_shader));
-      //window.alert("name: " + name + ", " + type + ", compile failure.");
       myAlert("name: " + name + ", " + type + ", compile failure.");
       return null;
     }
@@ -624,8 +630,6 @@ const p5wgex = (function(){
 
     // 結果のチェック
     if(!gl.getProgramParameter(_program, gl.LINK_STATUS)){
-      //window.alert('Could not initialize shaders');
-      //window.alert("name: " + name + ", program link failure.");
       myAlert('Could not initialize shaders. ' + "name: " + name + ", program link failure.");
       return null;
     }
@@ -939,7 +943,6 @@ const p5wgex = (function(){
     if(src instanceof HTMLImageElement){ return src; }
     if(src instanceof p5.Graphics){ return src.elt; }
     if(src instanceof p5.Image){ return src.canvas; }
-    //window.alert("sorry, I don't know how to.");
     myAlert("sorry, I don't know how to.");
     return null;
   }
@@ -1324,7 +1327,6 @@ const p5wgex = (function(){
     divide(a, b, c){
       const r = _getValidation(a, b, c, 1); // 割り算のデフォも1でしょう
       if(r.x === 0.0 || r.y === 0.0 || r.z === 0.0){
-        //window.alert("Vec3 divide: zero division error!");
         myAlert("Vec3 divide: zero division error!");
         return null;
       }
@@ -1379,7 +1381,6 @@ const p5wgex = (function(){
     normalize(){
       const L = this.mag();
       if(L == 0.0){
-        //window.alert("Vec3 normalize: zero division error!");
         myAlert("Vec3 normalize: zero division error!");
         return null;
       }
@@ -1537,7 +1538,6 @@ const p5wgex = (function(){
       }else if(info.type === "fb"){
         info.flip = false;
       }else{
-        //window.alert("validateForCopySrcInfo error: invalid type.");
         myAlert("validateForCopySrcInfo error: invalid type.");
         return;
       }
@@ -1586,7 +1586,6 @@ const p5wgex = (function(){
       info.dst = {type:null};
     }
     if(info.dst.type === "fb" && info.dst.name === undefined){
-      //window.alert("validateForCopy error: invalid fbo name.");
       myAlert("validateForCopy error: invalid fbo name.");
       return;
     }
@@ -1708,8 +1707,11 @@ const p5wgex = (function(){
       float ratio = clamp(dot(p-start, n) / length(stop - start), 0.0, 1.0);
       vec4 gradColor = (1.0-ratio)*vStartColor + ratio*vStopColor;
       // アルファブレンディング、やっぱこっちのが正解っぽいな。テキストが汚くなる。
-      result = result.a * result + (1.0 - result.a) * gradColor;
-    }
+			//result = result.a * result + (1.0 - result.a) * gradColor;
+			// 一旦戻します
+			result.rgb = result.a * result.rgb + (1.0 - result.a) * gradColor.rgb;
+			result.a = result.a + gradColor.a - result.a * gradColor.a;
+		}
     // 放射状グラデーション
     void applyRadialGradient(in vec2 p, inout vec4 result){
       vec2 start = vGradationAnchor.xy;
@@ -1735,8 +1737,8 @@ const p5wgex = (function(){
       if(vGradationFlag == RADIAL_GRADIENT){ applyRadialGradient(vUv, result); }
       result.rgb *= vTint;
       result.rgb += vAmbient;
-      if(result.a < 0.001){ discard; }
-      fragColor = result;
+      //if(result.a < 0.001){ discard; }
+      fragColor = result * vec4(vec3(result.a), 1.0);
     }
     `;
     return {v:vs, f:fs};
@@ -1765,7 +1767,8 @@ const p5wgex = (function(){
     // blendがある場合は適用、最後に戻す。デフォtrue.
     if(info.blend){
       node.enable("blend")
-          .blendFunc(info.blendFunc.src, info.blendFunc.dst); // blendFuncのsrcとdstだったね。ばか。
+			    .blendFunc(info.blendFunc.src, info.blendFunc.dst); // Separateじゃない方がいいのだろうか...
+			    //.blendFuncSeparate(info.blendFunc.src, info.blendFunc.dst, "one", "one");
     }
     // depthOffがある場合はdepthを切る. デフォtrue.
     if(info.depthOff){
@@ -2035,7 +2038,6 @@ const p5wgex = (function(){
       let fbo = this.fbos[fboName];
       if(!fbo){
         // fboが無い場合の警告
-        //window.alert("bind failure: The corresponding framebuffer does not exist.");
         myAlert("bind failure: The corresponding framebuffer does not exist.");
         return null;
       }
@@ -2043,7 +2045,6 @@ const p5wgex = (function(){
     }
     enable(name){
       if(this.dict[name] === undefined){
-        //window.alert("enable failured: invalid name.");
         myAlert("enable failured: invalid name.");
         return null;
       }
@@ -2053,7 +2054,6 @@ const p5wgex = (function(){
     }
     cullFace(mode){
       if(this.dict[mode] === undefined){
-        //window.alert("cullFace failured: invalid mode name.");
         myAlert("cullFace failured: invalid mode name.");
         return null;
       }
@@ -2073,7 +2073,6 @@ const p5wgex = (function(){
     }
     disable(name){
       if(this.dict[name] === undefined){
-        //window.alert("disable failured: invalid name.");
         myAlert("disable failured: invalid name.");
         return null;
       }
@@ -2108,7 +2107,6 @@ const p5wgex = (function(){
       }
       const newFBO = _createFBO(this.gl, info, this.dict);
       if(newFBO === undefined){
-        //window.alert("failure to create framebuffer.");
         myAlert("failure to create framebuffer.");
         return null;
       }
@@ -2121,7 +2119,6 @@ const p5wgex = (function(){
       const newFBO = _createDoubleFBO(this.gl, info, this.dict);
       this.fbos[name] = newFBO;
       if(newFBO === undefined){
-        //window.alert("failure to create doubleFramebuffer.");
         myAlert("failure to create doubleFramebuffer.");
         return null;
       }
@@ -2218,7 +2215,6 @@ const p5wgex = (function(){
       try{
         this.currentPainter.setUniform(name, data);
       }catch(error){
-        //window.alert("setUniform method error!. " + name);
         myAlert("setUniform method error!. " + name);
         console.log(error.message);
         console.log(error.stack);
@@ -2251,7 +2247,6 @@ const p5wgex = (function(){
         let fbo = this.fbos[target];
         if(!fbo){
           // fboが無い場合の警告
-          //window.alert("bind failure: The corresponding framebuffer does not exist.");
           myAlert("bind failure: The corresponding framebuffer does not exist.");
           return null;
         }
@@ -2299,14 +2294,12 @@ const p5wgex = (function(){
       // つまり従来のcolorからtexture取得の場合は変える必要なし。
       if(fboName === undefined || (typeof fboName !== 'string')){
         // 指定の仕方に問題がある場合
-        //window.alert("setFBOtexture2D failure: Inappropriate name setting.");
         myAlert("setFBOtexture2D failure: Inappropriate name setting.");
         return null;
       }
       let fbo = this.fbos[fboName];
       if(!fbo){
         // fboが無い場合の警告
-        //window.alert("setFBOtexture2D failure: The corresponding framebuffer does not exist.");
         myAlert("setFBOtexture2D failure: The corresponding framebuffer does not exist.");
         return null;
       }
@@ -2329,7 +2322,6 @@ const p5wgex = (function(){
       let fbo = this.fbos[fboName];
       if(!fbo){
         // fboが無い場合の警告
-        //window.alert("The corresponding framebuffer does not exist.");
         myAlert("The corresponding framebuffer does not exist.");
         return null;
       }
@@ -2389,7 +2381,6 @@ const p5wgex = (function(){
       // デバッグ用。PainterのAttrに関する情報を取得しようかと。Program側の「このattr使う！」の指定方法が処理系依存なので。
       const _painter = this.painters[painterName];
       if(_painter === undefined){
-        //window.alert("getAttrInfo failure: The corresponding painter does not exist.");
         myAlert("getAttrInfo failure: The corresponding painter does not exist.");
         return null;
       }
@@ -2413,12 +2404,10 @@ const p5wgex = (function(){
       let fbo = this.fbos[this.currentFBO];
       if(!fbo){
         // fboが無い場合の警告
-        //window.alert("drawBuffers failure: The corresponding framebuffer does not exist.");
         myAlert("drawBuffers failure: The corresponding framebuffer does not exist.");
         return null;
       }else if(!fbo.MRT){
         // MRTでない場合は適用されない
-        //window.alert("drawBuffers failure: The corresponding framebuffer is not for MRT.");
         myAlert("drawBuffers failure: The corresponding framebuffer is not for MRT.");
         return null;
       }
