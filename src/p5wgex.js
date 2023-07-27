@@ -17,6 +17,9 @@
 // Separateやめたら綺麗になった・・
 // もうわからん～
 
+// offsetがoffseyになってたので直しました
+// OpenProcessingが原因で発生する余計なインデントを殺しました
+
 // orbitControlのパッチ
 // 回転のYと移動のYの向きを逆にしただけ
 // 参考：https://openprocessing.org/sketch/1886629
@@ -1294,8 +1297,8 @@ const p5wgex = (function(){
     }
     toString(){
       // 文字列化も必要でしょう。
-  		return "(" + (this.x).toFixed(3) + ", " + (this.y).toFixed(3) + ", " + (this.z).toFixed(3) + ")";
-  	}
+      return "(" + (this.x).toFixed(3) + ", " + (this.y).toFixed(3) + ", " + (this.z).toFixed(3) + ")";
+    }
     add(a, b, c){
       const r = _getValidation(a, b, c);
       this.x += r.x;
@@ -1707,11 +1710,11 @@ const p5wgex = (function(){
       float ratio = clamp(dot(p-start, n) / length(stop - start), 0.0, 1.0);
       vec4 gradColor = (1.0-ratio)*vStartColor + ratio*vStopColor;
       // アルファブレンディング、やっぱこっちのが正解っぽいな。テキストが汚くなる。
-			//result = result.a * result + (1.0 - result.a) * gradColor;
-			// 一旦戻します
-			result.rgb = result.a * result.rgb + (1.0 - result.a) * gradColor.rgb;
-			result.a = result.a + gradColor.a - result.a * gradColor.a;
-		}
+      //result = result.a * result + (1.0 - result.a) * gradColor;
+      // 一旦戻します
+      result.rgb = result.a * result.rgb + (1.0 - result.a) * gradColor.rgb;
+      result.a = result.a + gradColor.a - result.a * gradColor.a;
+    }
     // 放射状グラデーション
     void applyRadialGradient(in vec2 p, inout vec4 result){
       vec2 start = vGradationAnchor.xy;
@@ -1767,8 +1770,8 @@ const p5wgex = (function(){
     // blendがある場合は適用、最後に戻す。デフォtrue.
     if(info.blend){
       node.enable("blend")
-			    .blendFunc(info.blendFunc.src, info.blendFunc.dst); // Separateじゃない方がいいのだろうか...
-			    //.blendFuncSeparate(info.blendFunc.src, info.blendFunc.dst, "one", "one");
+          .blendFunc(info.blendFunc.src, info.blendFunc.dst); // Separateじゃない方がいいのだろうか...
+          //.blendFuncSeparate(info.blendFunc.src, info.blendFunc.dst, "one", "one");
     }
     // depthOffがある場合はdepthを切る. デフォtrue.
     if(info.depthOff){
@@ -2188,7 +2191,7 @@ const p5wgex = (function(){
     bufferSubData(attrName, targetName, dstByteOffset, srcData, srcOffset = 0){
       // いわゆる動的更新。currentFigureに対し、それがもつ属性の名前と放り込む際に使う配列を渡して更新させる。
       // targetNameは array_buf: ARRAY_BUFFER で element_buf: ELEMENT_ARRAY_BUFFER ということですね。OK!
-      // srcOffsetは常に0でいいですね。dstByteOffseyは何処のバイトから書き換えるか。srcDataのデータでそれを
+      // srcOffsetは常に0でいいですね。dstByteOffsetは何処のバイトから書き換えるか。srcDataのデータでそれを
       // 置き換える。たとえばfloat vec4で1番を置き換えるなら16を指定する。
       const vbos = this.currentFigure.getVBOs();
       const vbo = vbos[attrName];
