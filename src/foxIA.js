@@ -15,9 +15,129 @@ Interactionの関数でタッチポインターを受け取るのはスワイプ
 ホイールイベントはホイールする速さにより、少なくともこの機器では100の倍数だったりします
 */
 
-// 20230511
-// DampedActionを追加
-// easyCamで使われている手法で、滑らかな動きを表現できます。
+/*
+Swipeですが
+やはり起点が重要かなと
+dxとdyだけだとまずいかなと
+AからBに動くとして、今Bにいる、A→Bの速度というか変位を持ってる、その
+変位で何かする、そういう感じかなと思うわけ。
+PinchInOutにしても...
+まあどっちにしろ大差ない？（根拠があればOK）
+そのときの重心の座標と
+距離の変化だけ使う（delta）
+MultiSwipeとRotate追加したので
+じきにテストします
+
+今ちょっと見てきた
+んだけど
+clickって右とセンターは対象外のようね
+左クリック
+それしか反応できないみたい
+です
+
+手っ取り早いのは
+デフォルトアクションになんかコンソールほにゃらら用意して
+消して
+みたいな？
+それで色々テストできる...
+まあインタラクションなければ何も起きないですから
+大丈夫
+playGroundを作る
+すべてはそこからですね～
+
+起点はprevX,prevYでいいと思う
+重心についても同じく
+動きがあったら
+前の点を使うのだ
+そういう感じで。
+ただ
+movedX,movedYでああいうこと言っちゃったわけで
+あれは～～～...
+あれだと前の点？が取れないのです。
+タッチだから前の点取れるよ
+
+柔軟性を考えれば
+単純にswipeの場合はtを渡してxもyもprevXもprevYも使えるようにするといい
+で...
+重心については重心のx,y,px,pyを渡す...
+もう面倒だから
+swipe: ポインターのdx,dy,x,y,px,py
+pinchInOut: 重心の変化value,x,y,px,py
+multiSwipe: 重心の変化vectorのdx,dy,x,y,px,py
+rotate: 回転量value,x,y,px,py
+でいいじゃん。
+rotateのvalueは両者の重心を一致させたうえでの変化ベクトルのモーメント量
+でOKです。
+
+回転はもめそうなので後回し
+角度でいいと思う
+モーメントだと直感に反する動きをしそう
+GoogleMapも角度でやってると思う
+*/
+
+/*
+外部から上書きするメソッドの一覧
+pointerPrototype:
+  mouseDownAction(e):
+    e.offsetXとe.offsetYでそのときのマウス位置
+    それによりなんかしたい場合に使います
+  mouseMoveAction(e):
+    e.offsetXとe.offsetYでマウスの位置
+    e.movementXとe.movementYで前との位置の変化...
+    ただこれに相当するタッチの方のあれが見当たらないので使わない方がいいかも
+  mouseUpAction():
+    マウスアップで何かしたい場合
+  touchStartAction(t):
+    t.pageXとt.pageYでそのポインタの位置です（使わないかも）
+    initializeでxとyになんか入るので使わないんだよね
+    消しちゃうか...
+  touchMoveAction(t):
+  touchEndAction(t):
+
+Interaction:
+  mouseDownDefaultAction(e):
+    e.offsetXやe.offsetYを使って、マウスダウンの際の一般的なイベントを記述
+  mouseMoveDefaultAction(e):
+    e.offsetXやe.offsetYを使って...
+    e.movementXやe.movementYも使うかも？マウスはポインタが1つしか
+    ないからそういう選択肢もあるわね
+  mouseUpDefaultAction():
+    マウスアップの際の一般的な処理
+    上記2つもそうだがInteraction独自の処理を書くことの方が多いです
+  wheelAction(e):
+    e.offsetXやe.offsetYで位置、
+    e.deltaYでホイールの変化。下に回すと大きな値。
+  clickAction():
+    clickイベント。クリックは左前提なので注意。
+  mouseEnterAction():
+    マウスがキャンバスに入った時の処理
+  mouseLeaveAction():
+    マウスがキャンバスから出て行った時の処理
+  doubleClickAction():
+    ダブルクリック。まあ、非推奨って言われてるけどね。
+  doubleTapAction():
+    ダブルクリックで併用できるが、これが用意されている場合
+    タッチではこっちが優先される
+  touchStartDefaultAction(e):
+    eの扱いは検討中
+    とにかくタッチがスタートした場合の一般的な処理（あんま使わない？）
+  touchSwipeAction(dx, dy, x, y, px, py):
+    指一本で動かす場合の処理
+  touchPinchInOutAction(value, x, y, px, py):
+    指二本で動かす場合の、距離が離れた場合の処理
+  touchMultiSwipeAction(dx, dy, x, y, px, py):
+    指二本で動かす場合の、重心が移動した場合の処理
+  touchEndDefaultAction(e):
+    これもよくわからん。使わないのでは？
+  keyDownAction(e):
+    キーダウン時。これもデスクトップ用。主にデバッグ用？
+    blenderで多用されてる。
+    e.keyよりe.codeを使った方がいい
+    ShiftやCtrlの左右を区別してくれる優れもの
+  keyUpAction(e):
+    同様。
+以上です。
+*/
 
 const foxIA = (function(){
   const fox = {};
@@ -164,7 +284,7 @@ const foxIA = (function(){
       // 当然だが、拡大縮小に使う場合は対数を使った方が挙動が滑らかになるしスケールにもよらないのでおすすめ。
     }
     clickAction(){
-      // Interactionサイドの実行内容を書く。クリック時。
+      // Interactionサイドの実行内容を書く。クリック時。左クリック。
     }
     mouseEnterAction(){
       // Interactionサイドの実行内容を書く。enter時。
@@ -237,10 +357,29 @@ const foxIA = (function(){
       this.touchMovePointerAction(e);
       if (this.pointers.length === 1) {
         // swipe.
-        this.touchSwipeAction(this.pointers[0]);
+        const p0 = this.pointers[0];
+        this.touchSwipeAction(
+          p0.x - p0.prevX, p0.y - p0.prevY, p0.x, p0.y, p0.prevX, p0.prevY
+        );
       } else if (this.pointers.length > 1) {
         // pinch in/out.
-        this.touchPinchInOutAction(this.pointers[0], this.pointers[1]);
+        const p = this.pointers[0];
+        const q = this.pointers[1];
+        // pとqから重心の位置と変化、距離の変化を
+        // 計算して各種アクションを実行する
+        const gx = (p.x + q.x) * 0.5;
+        const gPrevX = (p.prevX + q.prevX) * 0.5;
+        const gy = (p.y + q.y) * 0.5;
+        const gPrevY = (p.prevY + q.prevY) * 0.5;
+        const gDX = gx - gPrevX;
+        const gDY = gy - gPrevY;
+        // 今の距離 - 前の距離
+        const value =
+          Math.hypot(p.x - q.x, p.y - q.y) -
+          Math.hypot(p.prevX - q.prevX, p.prevY - q.prevY);
+        this.touchPinchInOutAction(value, gx, gy, gPrevX, gPrevY);
+        this.touchMultiSwipeAction(gDX, gDY, gx, gy, gPrevX, gPrevY);
+        // rotateは要検討
       }
     }
     touchMovePointerAction(e){
@@ -257,14 +396,20 @@ const foxIA = (function(){
         }
       }
     }
-    touchSwipeAction(t){
-      // tの変位でなんかする。基本的にはベクトルでなんかする。
-      // ベクトルには大きさと方向があるので両方使うでしょう、おそらく。だから方向だけということはないと思う、
-      // まあそれいうなら...
+    touchSwipeAction(dx, dy, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // dx,dyが変位。
     }
-    touchPinchInOutAction(t0, t1){
-      // t0,t1の変位でなんかする。基本的に距離の変化でなんか処理する。
-      // 引数を距離にしてもいいけど距離を使うとは限らないので。
+    touchPinchInOutAction(value, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // valueは距離の変化。正の場合大きくなる。
+    }
+    touchMultiSwipeAction(dx, dy, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // dx,dyは重心の変位。
+    }
+    touchRotateAction(value, x, y, px, py){
+      // TODO.
     }
     touchEndAction(e){
       // End時のアクション。
@@ -289,10 +434,13 @@ const foxIA = (function(){
       // とはいえ難しいだろうので、おそらくpointersが空っぽの時とかそういう感じになるかと。
     }
     keyDownAction(e){
+      // Interactionサイドの実行内容を書く。
       // キーが押されたとき
     }
     keyUpAction(e){
+      // Interactionサイドの実行内容を書く。
       // キーが離れた時
+      //console.log(e.code);
     }
     getPointers(){
       return this.pointers;
