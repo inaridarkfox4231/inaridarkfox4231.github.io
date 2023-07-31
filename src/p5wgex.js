@@ -804,10 +804,18 @@ const p5wgex = (function(){
     }
   }
 
+  // FigureとVAOFigureで同じ処理してるので、こっちでこういう形でまとめた方がいいと思うんだよね。
+  function _validateForAttribute(attr){
+    if (attr.usage === undefined) { attr.usage = "static_draw"; }
+    if (attr.type === undefined) { attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
+    if (attr.divisor === undefined) { attr.divisor = 0; } // インスタンス化に使う除数。1以上の場合、インスタンスアトリビュート。
+  }
+
   // attrの構成例：{name:"aPosition", size:2, data:[-1,-1,-1,1,1,-1,1,1], usage:"static_draw"}
   // ああそうか隠蔽するからこうしないとまずいわ...修正しないと。"static"とか。
   // usage指定：static_draw, dynamic_drawなど。
   function _createVBO(gl, attr, dict){
+    _validateForAttribute(attr); // これでいいはず...
     const _usage = dict[attr.usage];
     const _type = dict[attr.type];
 
@@ -839,6 +847,7 @@ const p5wgex = (function(){
     let attrCount; // drawArraysで使うデータの個数のような何か、あるいは抽象化された「数」
     for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
+      _validateForAttribute(attr); // これでいいはず...
       const _usage = dict[attr.usage];
       const _type = dict[attr.type];
       const vbo = gl.createBuffer();
@@ -1891,8 +1900,11 @@ const p5wgex = (function(){
       this.gl = gl;
       this.name = name;
       this.useVAO = false; // VAOFigureと区別する。
-      this.validate(attrs);
+      //this.validate(attrs);
       this.vbos = _createVBOs(gl, attrs, dict);
+      // countはもう計算してしまおう（面倒）
+      const attrName = Object.keys(this.vbos)[0];
+      this.count = this.vbos[attrName].count / this.vbos[attrName].size; // countを持たせてしまう。
     }
     validate(attrs){
       // attrsは配列です。各成分の形：{name:"aPosition",data:[-1,-1,-1,1,1,-1,1,1]}とか。場合によってはusage:gl.DYNAMIC_DRAWなど
@@ -1900,6 +1912,7 @@ const p5wgex = (function(){
       for(let attr of attrs){
         if(attr.usage === undefined){ attr.usage = "static_draw"; }
         if(attr.type === undefined){ attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
+        if (attr.divisor === undefined) { attr.divisor = 0; } // インスタンス化に使う除数。1以上の場合、インスタンスアトリビュート。
       }
     }
     getVBOs(){
@@ -1914,8 +1927,9 @@ const p5wgex = (function(){
       this.gl = gl;
       this.name = name;
       this.useVAO = true; // VAOFigureです
-      this.validate(attrs);
+      //this.validate(attrs);
       this.vao = _createVAO(gl, attrs, dict);
+      this.count = this.vao.attrCount; // countを持たせてしまおう。
     }
     validate(attrs){
       // attrsは配列です。各成分の形：{name:"aPosition",data:[-1,-1,-1,1,1,-1,1,1]}とか。場合によってはusage:gl.DYNAMIC_DRAWなど
@@ -1923,6 +1937,7 @@ const p5wgex = (function(){
       for(let attr of attrs){
         if(attr.usage === undefined){ attr.usage = "static_draw"; }
         if(attr.type === undefined){ attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
+        if (attr.divisor === undefined) { attr.divisor = 0; } // インスタンス化に使う除数。1以上の場合、インスタンスアトリビュート。
       }
     }
     getVAO(){
@@ -2412,6 +2427,7 @@ const p5wgex = (function(){
       // 終わりの4つだけ使う場合は(4,4)のように指定する。4,5,6,7というわけ。
       // こういうのは説明きちんとしないと混乱するわね...英語見ろよって話ではあるんだけど、
       // fool proofって大事だと思うので。誤解の原因は常に撲滅すべきだと思う。
+      /*
       if (arguments.length === 1) {
         first = 0;
         if (this.currentFigure.useVAO) {
@@ -2423,16 +2439,27 @@ const p5wgex = (function(){
           count = vbos[name].count / vbos[name].size;
         }
       }
+      */
       // modeの文字列からgl定数を取得
       // 実行
-      this.gl.drawArrays(this.dict[mode], first, count);
+      this.gl.drawArrays(this.dict[mode], first, this.currentFigure.count);
       return this;
     }
     drawElements(mode){
       // typeとsizeがそのまま使えると思う
-      const ibo = this.currentIBO;
+      //const ibo = this.currentIBO;
       //mode = _parseDrawMode(this.gl, mode);
-      this.gl.drawElements(this.dict[mode], ibo.count, ibo.intType, 0);
+      this.gl.drawElements(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0);
+      return this;
+    }
+    drawArraysInstanced(mode, instanceCount, first, count){
+      /*工事中... おそらくこれでいいはず*/
+      // this.gl.drawArraysInsatnced(this.dict[mode], first, this.currentFigure.count, instanceCount);
+      return this;
+    }
+    drawElementsInstanced(mode, instanceCount){
+      /*工事中... おそらくこれでいいはず*/
+      // this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount);
       return this;
     }
     unbind(){
