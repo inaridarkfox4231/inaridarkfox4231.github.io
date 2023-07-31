@@ -356,7 +356,7 @@ const p5wgex = (function(){
 
   // 直接配列の形で返したい場合はこちら
   function hsvArray(h, s, v){
-    const obj = _HSV(h, s, v);
+    const obj = hsv2rgb(h, s, v);
     return [obj.r, obj.g, obj.b];
   }
 
@@ -827,10 +827,36 @@ const p5wgex = (function(){
     };
   }
 
-  // vba生成関数。そのうちね...vbo保持する必要がなくなるのでstatic_draw前提なのよね。
-  // だからstatic指定の場合にvba使うように誘導する方がいいかもしれない。とはいえどうせ隠蔽されるのであんま意味ないけどね...
-  function _createVBA(gl, attrs, dict){
-    /* please wait... */
+  // vao生成関数。そのうちね...vbo保持する必要がなくなるのでstatic_draw前提なのよね。
+  // だからstatic指定の場合にvao使うように誘導する方がいいかもしれない。とはいえどうせ隠蔽されるのであんま意味ないけどね...
+  // vboの情報があった方がいい場合もあるかもしれないけどね。
+  // iboの梱包はやめました。
+  function _createVAO(gl, attrs, dict){
+    const vao = gl.createVertexArray();
+    const vbos = {};
+
+    gl.bindVertexArray(vao);
+    let attrCount; // drawArraysで使うデータの個数のような何か、あるいは抽象化された「数」
+    for (let i = 0; i < attrs.length; i++) {
+      const attr = attrs[i];
+      const _usage = dict[attr.usage];
+      const _type = dict[attr.type];
+      const vbo = gl.createBuffer();
+      attrCount = Math.floor(attr.data.length / attr.size); // 繰り返し上書き
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(attr.data), _usage);
+      gl.enableVertexAttribArray(i); // locationは通し番号で0,1,2,...
+      gl.vertexAttribPointer(i, attr.size, _type, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      vbos[attr.name] = vbo; // bufだけでいいと思う
+    }
+    gl.bindVertexArray(null);
+    // 一応bufで統一する。
+    return {
+      buf: vao,
+      vbos: vbos, // buf以外は要らないか。
+      attrCount: attrCount, // drawArrays用。
+    };
   }
 
   // attrsはattrの配列
@@ -1859,11 +1885,12 @@ const p5wgex = (function(){
   // ---------------------------------------------------------------------------------------------- //
   // Figure.
   // いろいろやることあるんかなぁ。今はこんな感じ。dict渡したけどまあ、何かに使えるでしょう...分かんないけど。
-
+  // こっちもインスタンスで拡張できるはず...除数を指定するだけでしょ？
   class Figure{
     constructor(gl, name, attrs, dict){
       this.gl = gl;
       this.name = name;
+      this.useVAO = false; // VAOFigureと区別する。
       this.validate(attrs);
       this.vbos = _createVBOs(gl, attrs, dict);
     }
@@ -1877,6 +1904,30 @@ const p5wgex = (function(){
     }
     getVBOs(){
       return this.vbos;
+    }
+  }
+
+  // VAOです
+  // IBOは扱いません。別にします。
+  class VAOFigure{
+    constructor(gl, name, attrs, dict){
+      this.gl = gl;
+      this.name = name;
+      this.useVAO = true; // VAOFigureです
+      this.validate(attrs);
+      this.vao = _createVAO(gl, attrs, dict);
+    }
+    validate(attrs){
+      // attrsは配列です。各成分の形：{name:"aPosition",data:[-1,-1,-1,1,1,-1,1,1]}とか。場合によってはusage:gl.DYNAMIC_DRAWなど
+      // sizeも追加で。1とか2とか。これも追加でよろしく。
+      for(let attr of attrs){
+        if(attr.usage === undefined){ attr.usage = "static_draw"; }
+        if(attr.type === undefined){ attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
+      }
+    }
+    getVAO(){
+      // この中のvbosに名前経由でbufが入ってる感じ（動的更新で使う）
+      return this.vao;
     }
   }
 
@@ -2094,6 +2145,14 @@ const p5wgex = (function(){
       this.figures[name] = newFigure;
       return this;
     }
+    registVAOFigure(name, attrs){
+      // vao版。作るのはVAOFigureです。どうしようね。figuresには入れよう。で、useVAOがあるかどうかで分ける。
+      // Figureの方でuseVAO=falseってやる。もしかしたら継承使った方がいいのかも。
+      // locationは配列に従って通し番号で設定されるのでshaderの設計が前提となります
+      const newFigure = new VAOFigure(this.gl, name, attrs, this.dict);
+      this.figures[name] = newFigure;
+      return this;
+    }
     registIBO(name, info){
       info.name = name; // infoは{data:[0,1,2,2,1,3]}みたいなので問題ないです。配列渡すのでもいいんだけど...柔軟性考えるとね...
       const newIBO = _createIBO(this.gl, info, this.dict);
@@ -2156,7 +2215,8 @@ const p5wgex = (function(){
     drawFigure(name){
       // 異なるポリゴンを同じシェーダでレンダリングする際に重宝する。
       this.currentFigure = this.figures[name];
-      // 属性の有効化
+      // 属性の有効化（ここをvaoかそうでないかで分ける可能性があるわね）
+      // vaoの場合はshaderの方のattribLocationを使わないからです。
       this.enableAttributes();
       return this;
     }
@@ -2168,23 +2228,29 @@ const p5wgex = (function(){
       return this;
     }
     enableAttributes(){
-      // 属性の有効化
-      const attributes = this.currentPainter.getAttributes();
-      const vbos = this.currentFigure.getVBOs();
-      // どっちかっていうとvbosの方に従うべきかな...
-      // 使わないattributeがあってもいいので
-      for(let attrName of Object.keys(vbos)){
-        const vbo = vbos[attrName];
-        const attr = attributes[attrName];
-        // 処理系によってはattrが取得できない（処理系がvbosサイドのattributeの一部を不要と判断するケースがある）ので、
-        // その場合は処理をスキップするようにしましょう。ただ、なるべく過不足のない記述をしたいですね。
-        if(vbo === undefined || attr === undefined){ continue; }
-        // vboをbindする
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
-        // attributeLocationを有効にする
-        this.gl.enableVertexAttribArray(attr.location);
-        // attributeLocationを通知し登録する
-        this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
+      // useVAO === trueの場合、vaoをbindするだけ。
+      if (this.currentFigure.useVAO) {
+        // こんだけ！！！！
+        this.gl.bindVertexArray(this.currentFigure.getVAO().buf);
+      } else {
+        // 属性の有効化
+        const attributes = this.currentPainter.getAttributes();
+        const vbos = this.currentFigure.getVBOs();
+        // どっちかっていうとvbosの方に従うべきかな...
+        // 使わないattributeがあってもいいので
+        for(let attrName of Object.keys(vbos)){
+          const vbo = vbos[attrName];
+          const attr = attributes[attrName];
+          // 処理系によってはattrが取得できない（処理系がvbosサイドのattributeの一部を不要と判断するケースがある）ので、
+          // その場合は処理をスキップするようにしましょう。ただ、なるべく過不足のない記述をしたいですね。
+          if(vbo === undefined || attr === undefined){ continue; }
+          // vboをbindする
+          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
+          // attributeLocationを有効にする
+          this.gl.enableVertexAttribArray(attr.location);
+          // attributeLocationを通知し登録する
+          this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
+        }
       }
       return this;
     }
@@ -2193,9 +2259,17 @@ const p5wgex = (function(){
       // targetNameは array_buf: ARRAY_BUFFER で element_buf: ELEMENT_ARRAY_BUFFER ということですね。OK!
       // srcOffsetは常に0でいいですね。dstByteOffsetは何処のバイトから書き換えるか。srcDataのデータでそれを
       // 置き換える。たとえばfloat vec4で1番を置き換えるなら16を指定する。
-      const vbos = this.currentFigure.getVBOs();
-      const vbo = vbos[attrName];
-      this.gl.bindBuffer(this.dict[targetName], vbo.buf);
+      // ...現時点ではvaoは未対応だけど、おそらくvaoでもできるはず。vbosを取得しておけば。
+      // ていうかiboでもOKのはずだけど・・・そのうち書き換える必要があるかもしれない。
+
+      const buf = (this.currentFigure.useVAO ?
+        this.currentFigure.getVBOs()[attrName].buf :
+        this.currentFigure.getVAO().vbos[attrName]
+      );
+      //const vbos = this.currentFigure.getVBOs();
+      //const vbo = vbos[attrName];
+      //this.gl.bindBuffer(this.dict[targetName], vbo.buf);
+      this.gl.bindBuffer(this.dict[targetName], buf);
       this.gl.bufferSubData(this.dict[targetName], dstByteOffset, srcData, srcOffset); // srcDataはFloat32Arrayの何か
       return this;
     }
@@ -2237,7 +2311,7 @@ const p5wgex = (function(){
       return this;
     }
     bindIBO(name){
-      // iboをbindする。
+      // iboをbindする。vaoとは無関係な処理とする。やっぱとっかえひっかえできた方がいいと思う。
       const ibo = this.ibos[name];
       this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, ibo.buf);
       this.currentIBO = ibo;
@@ -2338,12 +2412,16 @@ const p5wgex = (function(){
       // 終わりの4つだけ使う場合は(4,4)のように指定する。4,5,6,7というわけ。
       // こういうのは説明きちんとしないと混乱するわね...英語見ろよって話ではあるんだけど、
       // fool proofって大事だと思うので。誤解の原因は常に撲滅すべきだと思う。
-      if(arguments.length === 1){
+      if (arguments.length === 1) {
         first = 0;
-        // countの計算は...vboで。
-        const vbos = this.currentFigure.getVBOs();
-        const name = Object.keys(vbos)[0];
-        count = vbos[name].count / vbos[name].size;
+        if (this.currentFigure.useVAO) {
+          count = this.currentFigure.getVAO().attrCount;
+        } else {
+          // countの計算は...vboで。
+          const vbos = this.currentFigure.getVBOs();
+          const name = Object.keys(vbos)[0];
+          count = vbos[name].count / vbos[name].size;
+        }
       }
       // modeの文字列からgl定数を取得
       // 実行
@@ -2361,6 +2439,9 @@ const p5wgex = (function(){
       // 各種bind解除
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
       this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
+      if (this.currentFigure.useVAO) {
+        this.gl.bindVertexArray(null);
+      }
       this.currentIBO = undefined;
       this.currentPainter.unbindTexture2D();
       return this;
