@@ -2257,13 +2257,13 @@ const p5wgex = (function(){
       return this;
     }
     enableAttributes(tfDrawCall = undefined){
+      // tfDrawCallがある場合にはoutIndexを持つattrに対して特別な処理を実行する。VAOは出てこない。TFと共存しないので。
+      const isTF = (tfDrawCall !== undefined);
       // useVAO === trueの場合、vaoをbindするだけ。
       if (this.currentFigure.useVAO) {
         // こんだけ！！！！
         this.gl.bindVertexArray(this.currentFigure.getVAO().buf);
       } else {
-        // tfDrawCallがある場合にはoutIndexを持つattrに対して特別な処理を実行する。
-        const isTF = (tfDrawCall !== undefined);
         // 属性の有効化
         const attributes = this.currentPainter.getAttributes();
         const vbos = this.currentFigure.getVBOs();
