@@ -2269,8 +2269,8 @@ const p5wgex = (function(){
       // ていうかiboでもOKのはずだけど・・・そのうち書き換える必要があるかもしれない。
 
       const buf = (this.currentFigure.useVAO ?
-        this.currentFigure.getVBOs()[attrName].buf :
-        this.currentFigure.getVAO().vbos[attrName]
+        this.currentFigure.getVAO().vbos[attrName] :
+        this.currentFigure.getVBOs()[attrName].buf
       );
       //const vbos = this.currentFigure.getVBOs();
       //const vbo = vbos[attrName];
