@@ -832,6 +832,7 @@ const p5wgex = (function(){
       size: attr.size, // vec2なら2ですし、vec4なら4です。作るときに指定。
       type: _type,  // いつの日か整数属性を使う時が来たら考える。今は未定義でgl.FLOATになるくらいで。
       usage: attr.usage,
+      divisor: attr.divisor // インスタンシング用
     };
   }
 
@@ -856,6 +857,10 @@ const p5wgex = (function(){
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(attr.data), _usage);
       gl.enableVertexAttribArray(i); // locationは通し番号で0,1,2,...
       gl.vertexAttribPointer(i, attr.size, _type, false, 0, 0);
+      // divisorが1以上の場合はvertexAttribDivisorを呼び出す
+      if (attr.divisor > 0) {
+        gl.vertexAttribDivisor(i, attr.divisor);
+      }
       gl.bindBuffer(gl.ARRAY_BUFFER, null);
       vbos[attr.name] = vbo; // bufだけでいいと思う
     }
@@ -1900,20 +1905,10 @@ const p5wgex = (function(){
       this.gl = gl;
       this.name = name;
       this.useVAO = false; // VAOFigureと区別する。
-      //this.validate(attrs);
       this.vbos = _createVBOs(gl, attrs, dict);
       // countはもう計算してしまおう（面倒）
       const attrName = Object.keys(this.vbos)[0];
       this.count = this.vbos[attrName].count / this.vbos[attrName].size; // countを持たせてしまう。
-    }
-    validate(attrs){
-      // attrsは配列です。各成分の形：{name:"aPosition",data:[-1,-1,-1,1,1,-1,1,1]}とか。場合によってはusage:gl.DYNAMIC_DRAWなど
-      // sizeも追加で。1とか2とか。これも追加でよろしく。
-      for(let attr of attrs){
-        if(attr.usage === undefined){ attr.usage = "static_draw"; }
-        if(attr.type === undefined){ attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
-        if (attr.divisor === undefined) { attr.divisor = 0; } // インスタンス化に使う除数。1以上の場合、インスタンスアトリビュート。
-      }
     }
     getVBOs(){
       return this.vbos;
@@ -1927,18 +1922,9 @@ const p5wgex = (function(){
       this.gl = gl;
       this.name = name;
       this.useVAO = true; // VAOFigureです
-      //this.validate(attrs);
       this.vao = _createVAO(gl, attrs, dict);
-      this.count = this.vao.attrCount; // countを持たせてしまおう。
-    }
-    validate(attrs){
-      // attrsは配列です。各成分の形：{name:"aPosition",data:[-1,-1,-1,1,1,-1,1,1]}とか。場合によってはusage:gl.DYNAMIC_DRAWなど
-      // sizeも追加で。1とか2とか。これも追加でよろしく。
-      for(let attr of attrs){
-        if(attr.usage === undefined){ attr.usage = "static_draw"; }
-        if(attr.type === undefined){ attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
-        if (attr.divisor === undefined) { attr.divisor = 0; } // インスタンス化に使う除数。1以上の場合、インスタンスアトリビュート。
-      }
+      // countはもう計算してしまおう（面倒）
+      this.count = this.vao.attrCount;
     }
     getVAO(){
       // この中のvbosに名前経由でbufが入ってる感じ（動的更新で使う）
@@ -2265,6 +2251,11 @@ const p5wgex = (function(){
           this.gl.enableVertexAttribArray(attr.location);
           // attributeLocationを通知し登録する
           this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
+          // divisorが1以上の場合はvertexAttribDivisorを呼び出す
+          // vboからdivisorを持ってこないといけないのね。
+          if (vbo.divisor > 0) {
+            this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
+          }
         }
       }
       return this;
@@ -2454,12 +2445,12 @@ const p5wgex = (function(){
     }
     drawArraysInstanced(mode, instanceCount, first, count){
       /*工事中... おそらくこれでいいはず*/
-      // this.gl.drawArraysInsatnced(this.dict[mode], first, this.currentFigure.count, instanceCount);
+      this.gl.drawArraysInstanced(this.dict[mode], first, this.currentFigure.count, instanceCount);
       return this;
     }
     drawElementsInstanced(mode, instanceCount){
       /*工事中... おそらくこれでいいはず*/
-      // this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount);
+      this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount);
       return this;
     }
     unbind(){
