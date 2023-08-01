@@ -588,6 +588,8 @@ const p5wgex = (function(){
     d.array_buf = gl.ARRAY_BUFFER;
     d.element_buf = gl.ELEMENT_ARRAY_BUFFER;
     d.transform_feedback_buf = gl.TRANSFORM_FEEDBACK_BUFFER; // こんなところで。
+    // -------rasterizer-------//
+    d.rasterizer_discard = gl.RASTERIZER_DISCARD; // TFに使う。使わない場合もあるが。
     return d;
   }
 
@@ -620,21 +622,39 @@ const p5wgex = (function(){
   }
 
   // プログラムを作る
-  function _getProgram(name, gl, sourceV, sourceF){
+  // TFの場合はTF用のプログラムを作る。
+  function _getProgram(name, gl, sourceV, sourceF, outVaryings = []){
+    // isTFで分岐処理。
+    const isTF = (outVaryings.length > 0);
+    // isTFならTFの準備をする。
+    let transformFeedback;
+    if (isTF) {
+      transformFeedback = gl.createTransformFeedback();
+      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, transformFeedback);
+    }
     const vShader = _getShader(name, gl, sourceV, "vs");
     const fShader = _getShader(name, gl, sourceF, "fs");
 
     // プログラムの作成
     let _program = gl.createProgram();
-    // シェーダーにアタッチ → リンク (transform feedbackの場合は片方だけでいい？要検証)
+    // シェーダーにアタッチ → リンク
     gl.attachShader(_program, vShader);
     gl.attachShader(_program, fShader);
+    // TFの場合はoutVaryingsによりちょっと複雑な処理をする。
+    // インターリーブは未習得なのでパス。
+    if (isTF) {
+      gl.transformFeedbackVaryings(_program, outVaryings, gl.SEPARATE_ATTRIBS);
+    }
     gl.linkProgram(_program);
 
     // 結果のチェック
     if(!gl.getProgramParameter(_program, gl.LINK_STATUS)){
       myAlert('Could not initialize shaders. ' + "name: " + name + ", program link failure.");
       return null;
+    }
+    if (isTF) {
+      // 必要かどうかは不明。
+      gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
     }
     return _program;
   }
@@ -809,6 +829,7 @@ const p5wgex = (function(){
     if (attr.usage === undefined) { attr.usage = "static_draw"; }
     if (attr.type === undefined) { attr.type = "float"; } // ていうか色でもFLOATでいいんだ？？
     if (attr.divisor === undefined) { attr.divisor = 0; } // インスタンス化に使う除数。1以上の場合、インスタンスアトリビュート。
+    if (attr.outIndex === undefined) { attr.outIndex = -1; } // TransformFeedback用のvaryingsにおける配列の番号。0以上の場合、TFに使われる。
   }
 
   // attrの構成例：{name:"aPosition", size:2, data:[-1,-1,-1,1,1,-1,1,1], usage:"static_draw"}
@@ -832,7 +853,8 @@ const p5wgex = (function(){
       size: attr.size, // vec2なら2ですし、vec4なら4です。作るときに指定。
       type: _type,  // いつの日か整数属性を使う時が来たら考える。今は未定義でgl.FLOATになるくらいで。
       usage: attr.usage,
-      divisor: attr.divisor // インスタンシング用
+      divisor: attr.divisor, // インスタンシング用
+      outIndex: attr.outIndex // TF用
     };
   }
 
@@ -1495,10 +1517,11 @@ const p5wgex = (function(){
   // shaderは廃止。いいのかどうかは知らない。
   // getProgramで名前を渡す。理由は原因追及をしやすくするため。
   class Painter{
-    constructor(gl, name, vs, fs){
+    constructor(gl, name, vs, fs, outVaryings = []){
       this.gl = gl;
       this.name = name;
-      this.program = _getProgram(name, this.gl, vs, fs); // プログラムだけでいいのよね
+      this.outVaryings = outVaryings; // TF用
+      this.program = _getProgram(name, this.gl, vs, fs, outVaryings); // TFの場合はoutVaryingsの長さが1以上
       this.attributes = _loadAttributes(this.gl, this.program); // 属性に関するshader情報
       this.uniforms = _loadUniforms(this.gl, this.program); // ユニフォームに関するshader情報
     }
@@ -1932,12 +1955,7 @@ const p5wgex = (function(){
     }
   }
 
-  // TransformFeedback用。あれshader作るところもいじるんだって。やばすぎ...
-  class TFFigure{
-    constructor(){
-
-    }
-  }
+  // TransformFeedback用のFigureは要らないかも。
 
   // ---------------------------------------------------------------------------------------------- //
   // utility for Figure.
@@ -2054,6 +2072,7 @@ const p5wgex = (function(){
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
       this.prepareDefault(); // defaultShaderの構築
+      this.inTransformFeedback = false; // TFしてるかどうかのフラグ
     }
     enableExtensions(){
       // color_buffer_floatのEXT処理。pavelさんはこれ使ってwebgl2でもfloatへの書き込みが出来るようにしてた。
@@ -2142,8 +2161,9 @@ const p5wgex = (function(){
       this.gl.disable(this.dict[name]);
       return this;
     }
-    registPainter(name, vs, fs){
-      const newPainter = new Painter(this.gl, name, vs, fs);
+    registPainter(name, vs, fs, outVaryings = []){
+      // outVaryingsが[]かどうかで分岐処理する(TFに使う)
+      const newPainter = new Painter(this.gl, name, vs, fs, outVaryings);
       this.painters[name] = newPainter;
       return this;
     }
@@ -2220,27 +2240,30 @@ const p5wgex = (function(){
       this.currentPainter.use();
       return this;
     }
-    drawFigure(name){
+    drawFigure(name, tfDrawCall = undefined){
       // 異なるポリゴンを同じシェーダでレンダリングする際に重宝する。
       this.currentFigure = this.figures[name];
       // 属性の有効化（ここをvaoかそうでないかで分ける可能性があるわね）
       // vaoの場合はshaderの方のattribLocationを使わないからです。
-      this.enableAttributes();
+      this.enableAttributes(tfDrawCall);
       return this;
     }
-    use(painterName, figureName){
+    use(painterName, figureName, tfDrawCall = undefined){
       // painter, figureの順に...さすがにめんどくさい。
       this.usePainter(painterName);
       // Painterが定義されていないと属性の有効化が出来ないのでこの順番でないといけない
-      this.drawFigure(figureName);
+      // tfDrawCallが設定されている場合はこれを渡すことでTFの準備をする
+      this.drawFigure(figureName,  tfDrawCall);
       return this;
     }
-    enableAttributes(){
+    enableAttributes(tfDrawCall = undefined){
       // useVAO === trueの場合、vaoをbindするだけ。
       if (this.currentFigure.useVAO) {
         // こんだけ！！！！
         this.gl.bindVertexArray(this.currentFigure.getVAO().buf);
       } else {
+        // tfDrawCallがある場合にはoutIndexを持つattrに対して特別な処理を実行する。
+        const isTF = (tfDrawCall !== undefined);
         // 属性の有効化
         const attributes = this.currentPainter.getAttributes();
         const vbos = this.currentFigure.getVBOs();
@@ -2252,18 +2275,26 @@ const p5wgex = (function(){
           // 処理系によってはattrが取得できない（処理系がvbosサイドのattributeの一部を不要と判断するケースがある）ので、
           // その場合は処理をスキップするようにしましょう。ただ、なるべく過不足のない記述をしたいですね。
           if(vbo === undefined || attr === undefined){ continue; }
-          // vboをbindする
-          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
-          // attributeLocationを有効にする
-          this.gl.enableVertexAttribArray(attr.location);
-          // attributeLocationを通知し登録する
-          this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
-          // divisorが1以上の場合はvertexAttribDivisorを呼び出す
-          // vboからdivisorを持ってこないといけないのね。
+          if (isTF) {
+            this.gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, vbo.buf);
+          } else {
+            // vboをbindする
+            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
+            // attributeLocationを有効にする
+            this.gl.enableVertexAttribArray(attr.location);
+            // attributeLocationを通知し登録する
+            this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
+            // divisorが1以上の場合はvertexAttribDivisorを呼び出す
+            // vboからdivisorを持ってこないといけないのね。
+          }
           if (vbo.divisor > 0) {
             this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
           }
         }
+      }
+      if (isTF) {
+        this.gl.beginTransformFeedback(this.dict[tfDrawCall]);
+        this.inTransformFeedback = true;
       }
       return this;
     }
@@ -2460,6 +2491,19 @@ const p5wgex = (function(){
       this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
       if (this.currentFigure.useVAO) {
         this.gl.bindVertexArray(null);
+      } else if (this.inTransformFeedback) {
+        // TFはVAO関係ないのでここに処理を書く
+        // transformFeedback状態を解除（設定側）
+        this.gl.endTransformFeedback();
+        // vbosのうちoutIndex>0であるものについてunbind処理を実行する
+        const vbos = this.currentFigure.getVBOs();
+        for (const vbo of vbos) {
+          if (vbo.outIndex > 0) {
+            this.gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, null);
+          }
+        }
+        // transformFeedback状態を解除（フラグ側）
+        this.inTransformFeedback = false;
       }
       this.currentIBO = undefined;
       this.currentPainter.unbindTexture2D();
