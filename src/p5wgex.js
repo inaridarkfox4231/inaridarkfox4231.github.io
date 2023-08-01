@@ -1932,6 +1932,13 @@ const p5wgex = (function(){
     }
   }
 
+  // TransformFeedback用。あれshader作るところもいじるんだって。やばすぎ...
+  class TFFigure{
+    constructor(){
+
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------- //
   // utility for Figure.
 
@@ -2260,22 +2267,29 @@ const p5wgex = (function(){
       }
       return this;
     }
-    bufferSubData(attrName, targetName, dstByteOffset, srcData, srcOffset = 0){
+    bufferSubData(bufName, targetName, dstByteOffset, srcData, srcOffset = 0){
       // いわゆる動的更新。currentFigureに対し、それがもつ属性の名前と放り込む際に使う配列を渡して更新させる。
       // targetNameは array_buf: ARRAY_BUFFER で element_buf: ELEMENT_ARRAY_BUFFER ということですね。OK!
       // srcOffsetは常に0でいいですね。dstByteOffsetは何処のバイトから書き換えるか。srcDataのデータでそれを
       // 置き換える。たとえばfloat vec4で1番を置き換えるなら16を指定する。
       // ...現時点ではvaoは未対応だけど、おそらくvaoでもできるはず。vbosを取得しておけば。
-      // ていうかiboでもOKのはずだけど・・・そのうち書き換える必要があるかもしれない。
-
-      const buf = (this.currentFigure.useVAO ?
-        this.currentFigure.getVAO().vbos[attrName] :
-        this.currentFigure.getVBOs()[attrName].buf
-      );
-      //const vbos = this.currentFigure.getVBOs();
-      //const vbo = vbos[attrName];
-      //this.gl.bindBuffer(this.dict[targetName], vbo.buf);
-      this.gl.bindBuffer(this.dict[targetName], buf);
+      // attrNameが"ibo"の場合にiboを更新しよう。
+      // iboの場合、Uint16ArrayのケースとUint32Arrayのケースがあり、2バイトずつ動かすか4バイトずつ動かすかが違うので注意する。
+      let buf;
+      if (bufName === "ibo") {
+        buf = this.currentIBO.buf;
+      } else {
+        buf = (this.currentFigure.useVAO ?
+          this.currentFigure.getVAO().vbos[bufName] :
+          this.currentFigure.getVBOs()[bufName].buf
+        );
+      }
+      // この関数はこの時点でFigureもしくはIBOがbindされていることが前提なので
+      // ここは要らないかもしれないって思ったけどVAOだと必須みたいです
+      if (bufName !== "ibo" && this.currentFigure.useVAO) {
+        // VAOの場合だけこれを実行する（個別にbufferを操作しないといけないわけ）
+        this.gl.bindBuffer(this.dict[targetName], buf);
+      }
       this.gl.bufferSubData(this.dict[targetName], dstByteOffset, srcData, srcOffset); // srcDataはFloat32Arrayの何か
       return this;
     }
@@ -2418,38 +2432,25 @@ const p5wgex = (function(){
       // 終わりの4つだけ使う場合は(4,4)のように指定する。4,5,6,7というわけ。
       // こういうのは説明きちんとしないと混乱するわね...英語見ろよって話ではあるんだけど、
       // fool proofって大事だと思うので。誤解の原因は常に撲滅すべきだと思う。
-      /*
-      if (arguments.length === 1) {
-        first = 0;
-        if (this.currentFigure.useVAO) {
-          count = this.currentFigure.getVAO().attrCount;
-        } else {
-          // countの計算は...vboで。
-          const vbos = this.currentFigure.getVBOs();
-          const name = Object.keys(vbos)[0];
-          count = vbos[name].count / vbos[name].size;
-        }
-      }
-      */
+
       // modeの文字列からgl定数を取得
       // 実行
+      // countは事前計算になりました。
       this.gl.drawArrays(this.dict[mode], first, this.currentFigure.count);
       return this;
     }
     drawElements(mode){
       // typeとsizeがそのまま使えると思う
-      //const ibo = this.currentIBO;
-      //mode = _parseDrawMode(this.gl, mode);
       this.gl.drawElements(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0);
       return this;
     }
     drawArraysInstanced(mode, instanceCount, first, count){
-      /*工事中... おそらくこれでいいはず*/
+      /*これでいいはず*/
       this.gl.drawArraysInstanced(this.dict[mode], first, this.currentFigure.count, instanceCount);
       return this;
     }
     drawElementsInstanced(mode, instanceCount){
-      /*工事中... おそらくこれでいいはず*/
+      /*これでいいはず*/
       this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount);
       return this;
     }
