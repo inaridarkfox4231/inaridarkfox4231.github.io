@@ -1936,6 +1936,18 @@ const p5wgex = (function(){
     getVBOs(){
       return this.vbos;
     }
+    swapAttribute(attrName0, attrName1){
+      // この機能はVAOではサポートされません。
+      // TFのための機能であり、TFはVAOと共存できないためです。
+      const vbos = this.getVBOs();
+      if (vbos[attrName0] === undefined || vbos[attrName1] === undefined) {
+        myAlert("invalid attribute name (Figure_swapAttribute)");
+        return;
+      }
+      const tmpAttr = vbos[attrName0];
+      vbos[attrName0] = vbos[attrName1];
+      vbos[attrName1] = tmpAttr;
+    }
   }
 
   // VAOです
@@ -2274,19 +2286,31 @@ const p5wgex = (function(){
           const attr = attributes[attrName];
           // 処理系によってはattrが取得できない（処理系がvbosサイドのattributeの一部を不要と判断するケースがある）ので、
           // その場合は処理をスキップするようにしましょう。ただ、なるべく過不足のない記述をしたいですね。
-          if(vbo === undefined || attr === undefined){ continue; }
-          if (isTF) {
-            this.gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, vbo.buf);
-          } else {
-            // vboをbindする
-            this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
-            // attributeLocationを有効にする
-            this.gl.enableVertexAttribArray(attr.location);
-            // attributeLocationを通知し登録する
-            this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
-            // divisorが1以上の場合はvertexAttribDivisorを呼び出す
-            // vboからdivisorを持ってこないといけないのね。
+          if(vbo === undefined){ continue; }
+          // TFの場合、outIndex>=0であるようなattributeは書き込み用で、
+          // inで宣言されてないためshaderが捕捉できないので、
+          // outIndexだけ見て個別に対処する。やっかいですね。
+          // TFでない場合ここは完全に無視されて従来の挙動です。
+          if (isTF && vbo.outIndex >= 0) {
+            // isTFでなおかつoutIndexが0以上の場合はこのようにbindBufferBaseを用いる
+            this.gl.bindBufferBase(this.gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, vbo.buf);
+            // そしてこの処理が実行される場合、TFにおいてoutIndexが0以上の
+            // attributeはshaderがattrとして認識していないので次の処理で
+            // 自動的にcontinueされますが、念のため以降の処理が必要ないことを
+            // 明示するためにここでcontinueします。
+            continue;
           }
+          if(attr === undefined){ continue; }
+          // isTFでないかisTFでもoutIndexが明示されていない場合は通常の処理。
+          // vboをbindする
+          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
+          // attributeLocationを有効にする
+          this.gl.enableVertexAttribArray(attr.location);
+          // attributeLocationを通知し登録する
+          this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
+          // divisorが1以上の場合はvertexAttribDivisorを呼び出す
+          // vboからdivisorを持ってこないといけないのね。
+
           if (vbo.divisor > 0) {
             this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
           }
@@ -2456,6 +2480,15 @@ const p5wgex = (function(){
       if(fbo.read && fbo.write){ fbo.swap(); }
       return this;
     }
+    swapAttribute(attrName0, attrName1){
+      const fig = this.currentFigure;
+      if (fig.useVAO) {
+        myAlert("this function doesn't support VAO.");
+        return null;
+      }
+      fig.swapAttribute(attrName0, attrName1);
+      return this;
+    }
     drawArrays(mode, first, count){
       // modeは文字列指定でドローの仕方を指定する(7種類)。
       // 残りの引数は0とMAXでいいです。
@@ -2495,11 +2528,13 @@ const p5wgex = (function(){
         // TFはVAO関係ないのでここに処理を書く
         // transformFeedback状態を解除（設定側）
         this.gl.endTransformFeedback();
-        // vbosのうちoutIndex>0であるものについてunbind処理を実行する
+        // vbosのうちoutIndex >= 0であるものについてunbind処理を実行する
+        // 0以上ですよ。>=0ですよ。>0じゃないです。
         const vbos = this.currentFigure.getVBOs();
-        for (const vbo of vbos) {
-          if (vbo.outIndex > 0) {
-            this.gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, null);
+        for (const vboKeys of Object.keys(vbos)) {
+          const vbo = vbos[vboKeys];
+          if (vbo.outIndex >= 0) {
+            this.gl.bindBufferBase(this.gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, null);
           }
         }
         // transformFeedback状態を解除（フラグ側）
