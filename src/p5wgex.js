@@ -20,6 +20,31 @@
 // offsetがoffseyになってたので直しました
 // OpenProcessingが原因で発生する余計なインデントを殺しました
 
+// ジオメトリインスタンシング導入しました
+// 使い方は簡単。divisorを1以上に指定してshaderサイドでそれを使っていろいろ計算するだけ
+// Instancedの付いたドローコールをしないとひとつしか描画されませんので注意しましょう
+
+// transformFeedbackを導入しました
+// ラスタライズしない処理を導入しました
+
+// 2023-08-05
+// transform feedback
+// enableAttributesにおいて
+// 「attrがundefined」という条件を追加しました
+// これがないと描画と同時に更新することができないんですよね
+// attributeの入れ替えの際に入れ替えたattributeがoutIndexをもって
+// いない、また入れ替えでinされるattributeがoutIndexを持っている
+// ことにより不具合が生じるわけ
+// 同じIndexを指定しておくことで、これを回避できる。
+
+// そういうことです
+// TFでoutIndex>=0であってもattrがundefinedでないならば
+// つまりinで宣言されているならば
+// 通常の処理をしないといけないし
+// 逆に通常の処理をしていたattributeにTF処理をさせたかったら
+// あらかじめoutIndexを設定しておかないといけないのだよ
+// 以上だよ。
+
 // orbitControlのパッチ
 // 回転のYと移動のYの向きを逆にしただけ
 // 参考：https://openprocessing.org/sketch/1886629
@@ -1025,11 +1050,15 @@ const p5wgex = (function(){
     gl.texImage2D(gl.TEXTURE_2D, 0, dict[info.internalFormat], info.w, info.h, 0,
                   dict[info.format], dict[info.type], data);
     // mipmapの作成はどうも失敗してるみたいです。原因は調査中。とりあえず使わないで。
-    if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
+    //if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
 
     // テクスチャのフィルタ設定（サンプリングの仕方を決める）
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, dict[info.magFilter]); // 拡大表示用
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, dict[info.minFilter]); // 縮小表示用
+
+    // mipmapを作成するのMDNが後回しにしてたのでこれで実験してみる
+    if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
+
     // テクスチャのラッピング設定（範囲外のUV値に対する挙動を決める）
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, dict[info.sWrap]);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, dict[info.tWrap]);
@@ -1294,8 +1323,8 @@ const p5wgex = (function(){
       // mipmap作るやつ。使うかどうかは、知らん。
       const {gl} = this;
       gl.bindTexture(gl.TEXTURE_2D, this.tex);
-      gl.generateMipmap();
-      gl.bindTexture(gl.TEXTURE_2D,null);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.bindTexture(gl.TEXTURE_2D, null);
     }
     setFilterParam(param = {}){
       const {gl, dict} = this;
@@ -2297,13 +2326,20 @@ const p5wgex = (function(){
           // inで宣言されてないためshaderが捕捉できないので、
           // outIndexだけ見て個別に対処する。やっかいですね。
           // TFでない場合ここは完全に無視されて従来の挙動です。
-          if (isTF && vbo.outIndex >= 0) {
+          if (isTF && vbo.outIndex >= 0 && attr === undefined) {
             // isTFでなおかつoutIndexが0以上の場合はこのようにbindBufferBaseを用いる
             this.gl.bindBufferBase(this.gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, vbo.buf);
             // そしてこの処理が実行される場合、TFにおいてoutIndexが0以上の
             // attributeはshaderがattrとして認識していないので次の処理で
             // 自動的にcontinueされますが、念のため以降の処理が必要ないことを
             // 明示するためにここでcontinueします。
+            // まずかったですね
+            // 「attrがundefined」という条件を追加しました
+            // これがないと描画と同時に更新することができないんですよね
+            // attributeの入れ替えの際に入れ替えたattributeがoutIndexをもって
+            // いない、また入れ替えでinされるattributeがoutIndexを持っている
+            // ことにより不具合が生じるわけ
+            // 同じIndexを指定しておくことで、これを回避できる。
             continue;
           }
           if(attr === undefined){ continue; }
