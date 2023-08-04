@@ -2271,6 +2271,12 @@ const p5wgex = (function(){
     enableAttributes(tfDrawCall = undefined){
       // tfDrawCallがある場合にはoutIndexを持つattrに対して特別な処理を実行する。VAOは出てこない。TFと共存しないので。
       const isTF = (tfDrawCall !== undefined);
+      // 設定できるthDrawCallはpoints, lines, triangles,の3種類だけのようです
+      // 一応myAlertを出しておきます
+      if (isTF && (tfDrawCall !== "points") && (tfDrawCall !== "lines") && (tfDrawCall !== "triangles")) {
+        myAlert("There are only 3 types of draw calls for transformFeedback: points, lines and triangles.");
+        return null;
+      }
       // useVAO === trueの場合、vaoをbindするだけ。
       if (this.currentFigure.useVAO) {
         // こんだけ！！！！
