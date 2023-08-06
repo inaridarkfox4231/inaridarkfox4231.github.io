@@ -45,6 +45,10 @@
 // あらかじめoutIndexを設定しておかないといけないのだよ
 // 以上だよ。
 
+// CUBE_MAPですが、いけそうですね...
+// ほとんどのパートはTEXTURE_2DをTEXTURE_CUBE_MAPに変えるだけ。
+// 登録時に6枚要求するところ以外はほぼ一緒
+
 // orbitControlのパッチ
 // 回転のYと移動のYの向きを逆にしただけ
 // 参考：https://openprocessing.org/sketch/1886629
@@ -710,6 +714,7 @@ const p5wgex = (function(){
   function _loadUniforms(gl, pg){
     // ユニフォームの総数を取得
     const numUniforms = gl.getProgramParameter(pg, gl.ACTIVE_UNIFORMS);
+    // uniformの型一覧：https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/getActiveUniform
     const uniforms = {};
     // ユニフォームを格納していく
     let samplerIndex = 0; // サンプラのインデックスはシェーダー内で0ベースで異なってればOK, を検証してみる。
@@ -2353,7 +2358,8 @@ const p5wgex = (function(){
           // divisorが1以上の場合はvertexAttribDivisorを呼び出す
           // vboからdivisorを持ってこないといけないのね。
 
-          if (vbo.divisor > 0) {
+          // isTFの場合はdivisorを適用しない
+          if (!isTF && vbo.divisor > 0) {
             this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
           }
         }
@@ -2541,8 +2547,10 @@ const p5wgex = (function(){
 
       // modeの文字列からgl定数を取得
       // 実行
-      // countは事前計算になりました。
-      this.gl.drawArrays(this.dict[mode], first, this.currentFigure.count);
+      // countはundefinedの場合は事前計算
+      // TFで追加attrだけ更新する実験中
+      if (count === undefined) { count = this.currentFigure.count; }
+      this.gl.drawArrays(this.dict[mode], first, count);
       return this;
     }
     drawElements(mode){
@@ -2551,8 +2559,9 @@ const p5wgex = (function(){
       return this;
     }
     drawArraysInstanced(mode, instanceCount, first, count){
-      /*これでいいはず*/
-      this.gl.drawArraysInstanced(this.dict[mode], first, this.currentFigure.count, instanceCount);
+      // countはundefinedの場合は事前計算
+      if (count === undefined) { count = this.currentFigure.count; }
+      this.gl.drawArraysInstanced(this.dict[mode], first, count, instanceCount);
       return this;
     }
     drawElementsInstanced(mode, instanceCount){
