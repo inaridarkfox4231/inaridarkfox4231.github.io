@@ -567,6 +567,9 @@ const p5wgex = (function(){
     d.static_copy = gl.STATIC_COPY;
     d.dynamic_copy = gl.DYNAMIC_COPY;
     d.stream_copy = gl.STREAM_COPY;
+    // -------texture-------//
+    d.texture_2d = gl.TEXTURE_2D;
+    d.texture_cube_map = gl.TEXTURE_CUBE_MAP;
     // -------textureParam-------//
     d.linear = gl.LINEAR;
     d.nearest = gl.NEAREST;
@@ -717,7 +720,10 @@ const p5wgex = (function(){
     // uniformの型一覧：https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/getActiveUniform
     const uniforms = {};
     // ユニフォームを格納していく
-    let samplerIndex = 0; // サンプラのインデックスはシェーダー内で0ベースで異なってればOK, を検証してみる。
+    // サンプラのインデックスはシェーダー内で0ベースで異なってればOK, を検証してみる。
+    let samplerIndex = 0;
+    // samplerTargetの種類別に格納する
+    const samplerTargetArray = [];
     for(let i = 0; i < numUniforms; i++){
       const uniform = {};
       const uniformInfo = gl.getActiveUniform(pg, i); // ほぼ一緒ですね
@@ -731,13 +737,21 @@ const p5wgex = (function(){
       uniform.size = uniformInfo.size; // 配列の場合はこれが2とか3とか10になる感じ
       uniform.location = gl.getUniformLocation(pg, name);
       uniform.type = uniformInfo.type; // gl.FLOATなどの型情報
+      // TEXTURE_2Dのケース
       if(uniform.type === gl.SAMPLER_2D){
         uniform.samplerIndex = samplerIndex++; // 名前からアクセスして...setTextureで使う
+        samplerTargetArray.push(gl.TEXTURE_2D);
+      // TEXTURE_CUBE_MAPのケース
+      } else if(uniform.type === gl.SAMPLER_CUBE) {
+        uniform.samplerIndex = samplerIndex++;
+        samplerTargetArray.push(gl.TEXTURE_CUBE_MAP);
       }
+
       // isArrayの情報...は、いいや。普通に書く。それで問題が生じないか見る。
       uniforms[name] = uniform;
     }
     uniforms.maxSamplerIndex = samplerIndex; // samplerIndexの上限を取得して格納する
+    uniforms.samplerTargetArray = samplerTargetArray;
     return uniforms;
   }
 
@@ -752,10 +766,11 @@ const p5wgex = (function(){
     switch(uniform.type){
       case gl.BOOL:
         if(uniform.size > 1){
-          gl.uniform1fv(location, data.map((value) => (value ? 1 : 0))); break;
+          gl.uniform1fv(location, data.map((value) => (value ? 1 : 0)));
         }else{
-          if(data === true){ gl.uniform1i(location, 1); }else{ gl.uniform1i(location, 0); } break;
+          if(data === true){ gl.uniform1i(location, 1); }else{ gl.uniform1i(location, 0); }
         }
+        break;
       case gl.INT:
         if(uniform.size > 1){
           gl.uniform1iv(location, data);
@@ -776,6 +791,7 @@ const p5wgex = (function(){
         }else{
           gl.uniform1ui(location, data);
         }
+        break;
       case gl.FLOAT_MAT2:
         gl.uniformMatrix2fv(location, false, data); // 2次元で使い道ないかな～（ないか）
         break;
@@ -1029,6 +1045,16 @@ const p5wgex = (function(){
       if(info.w === undefined){ info.w = td.width; }
       if(info.h === undefined){ info.h = td.height; }
     }
+    // targetは基本2Dだが、CUBE_MAPもOKにする。
+    // 指定の仕方は"2d"もしくは"cube_map"だが、具体的に指定する場合"2d"と記述することはないと思う。
+    // 仮に...framebufferにcube_mapを関連付けるのであれば、typeなどと一緒にtargetを"cube_map"に指定する。あとは_createTextureの仕事。
+    // ...ではないのよね。framebufferTexture2Dを使わないと駄目らしい。該当fbがbindされているときにね。なのでそこらへんちょっと工夫が必要かも。
+    // そうしないとおそらく0番にしか描画されない。
+    if(info.target === undefined){ info.target = "2d"; }
+    switch(info.target){
+      case "2d": info.target = "texture_2d"; break;
+      case "cube_map": info.target = "texture_cube_map"; break;
+    }
   }
 
   // info.srcが用意されてないならnullを返す。一種のバリデーション。
@@ -1042,33 +1068,73 @@ const p5wgex = (function(){
     return null;
   }
 
-  // dictも要るね。
+  // CUBE_MAP用の_getTextureDataFromSrc.
+  function _getCubemapTextureDataFromSrc(src){
+    const result = {};
+    result.xp = _getTextureDataFromSrc(src.xp);
+    result.xn = _getTextureDataFromSrc(src.xn);
+    result.yp = _getTextureDataFromSrc(src.yp);
+    result.yn = _getTextureDataFromSrc(src.yn);
+    result.zp = _getTextureDataFromSrc(src.zp);
+    result.zn = _getTextureDataFromSrc(src.zn);
+    return result;
+  }
+
+  // dictも要るね。いずれはテクスチャ配列も使えるようにしたいところ。
+  // テクスチャ配列のMRTとかできるのかしら（無理だと思うけれど...）？案外できそうな気がしてきた（おい）
+  // いや無理でしょ...どうやって格納するの...32x1024とかして...あー、そゆこと？いけるんかね。
   function _createTexture(gl, info, dict){
-    // _validateForTexture(info); // 単独の場合は事前に済ます
-    const data = _getTextureDataFromSrc(info.src);
+    // targetですね。gl.TEXTURE_2Dもしくはgl.TEXTURE_CUBE_MAP;
+    const target = dict[info.target];
+    // texImage2Dに使うデータ。cube_mapの場合はxp,xn,yp,yn.zp,znの6枚がある。
+    //const data = _getTextureDataFromSrc(info.src);
+    let data;
+    switch(target){
+      case gl.TEXTURE_2D:
+        data = _getTextureDataFromSrc(info.src); break;
+      case gl.TEXTURE_CUBE_MAP:
+        data = _getCubemapTextureDataFromSrc(info.src); break;
+    }
     // テクスチャを生成する
     let tex = gl.createTexture();
     // テクスチャをバインド
-    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.bindTexture(target, tex);
 
-    // テクスチャにメモリ領域を確保
-    gl.texImage2D(gl.TEXTURE_2D, 0, dict[info.internalFormat], info.w, info.h, 0,
-                  dict[info.format], dict[info.type], data);
+    // テクスチャにメモリ領域を確保。ここの処理はCUBE_MAPの場合ちょっと異なる。場合分けする。
+    switch(target){
+      case gl.TEXTURE_2D:
+        gl.texImage2D(target, 0, dict[info.internalFormat], info.w, info.h, 0,
+                      dict[info.format], dict[info.type], data);
+        break;
+      case gl.TEXTURE_CUBE_MAP:
+        const cubemapTargets = [
+          gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+          gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+          gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
+        ];
+        const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
+        for (const textureIndex = 0; textureIndex < 6; textureIndex++) {
+          gl.texImage2D(cubemapTargets[textureIndex], 0, dict[info.internalFormat], info.w, info.h, 0,
+                        dict[info.format], dict[info.type], dataArray[textureIndex]);
+        }
+    }
+    //gl.texImage2D(gl.TEXTURE_2D, 0, dict[info.internalFormat], info.w, info.h, 0,
+    //              dict[info.format], dict[info.type], data);
     // mipmapの作成はどうも失敗してるみたいです。原因は調査中。とりあえず使わないで。
     //if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
 
     // テクスチャのフィルタ設定（サンプリングの仕方を決める）
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, dict[info.magFilter]); // 拡大表示用
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, dict[info.minFilter]); // 縮小表示用
+    gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, dict[info.magFilter]); // 拡大表示用
+    gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, dict[info.minFilter]); // 縮小表示用
 
     // mipmapを作成するのMDNが後回しにしてたのでこれで実験してみる
-    if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
+    if(info.mipmap){ gl.generateMipmap(target); }
 
     // テクスチャのラッピング設定（範囲外のUV値に対する挙動を決める）
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, dict[info.sWrap]);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, dict[info.tWrap]);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_S, dict[info.sWrap]);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_T, dict[info.tWrap]);
     // テクスチャのバインドを解除
-    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.bindTexture(target, null);
     return tex;
   }
 
@@ -1106,6 +1172,7 @@ const p5wgex = (function(){
 
   function _createEachBuffer(gl, attachType, info, dict){
     // renderbuffer又はtextureを返す。
+    // _createTextureにおいてdataはnullです。framebufferの場合dataを用意するわけでは無いので。
     switch(attachType){
       case "renderbuffer":
         return _createRenderbuffer(gl, info, dict);
@@ -1309,6 +1376,14 @@ const p5wgex = (function(){
   // glとdictが無いと...もっともこれを直接いじる必要性を感じない、基本シェーダーで書き込むものだから。
   // そう割り切ってしまってもいいのよね...というかさ、今まで通りテクスチャを直接...
   // あー、p5のTexture使いたくないんだっけ。じゃあ仕方ないな。
+
+  // デフォルトは2DですがCUBE_MAPも使えるようにします
+  // そのためにはinfo指定でtarget:"cube_map"ってやればいいです。デフォルトは"2d"です。
+  // ただしtargetには"texture_2d"もしくは"texture_cube_map"が入ります。dictと組み合わせてgl定数を取得するためです。
+  // infoの方はめんどくさいので2dもしくはcube_mapで指定できるようにします...が、2dはデフォなので明示することはないかも。
+  // targetが"cube_map"の場合、{src:~~~}ではなく、{src:{xp:~~, xn:~~, yp:~~, yn:~~, zp:~~, zn:~~}}
+  // ってやればいいと思う。それぞれにグラフィックを入れる。
+  // getTextureSourceについても{xp:~~,yp:~~}の形でそのまま返すようにしよう
   class TextureEx{
     constructor(gl, info, dict){
       this.gl = gl;
@@ -1316,6 +1391,7 @@ const p5wgex = (function(){
       this.name = info.name;
       this.src = info.src; // ソース。p5.Graphicsの場合これを使って...
       _validateForTexture(info); // _createTexture内部ではやらないことになった
+      this.target = info.target; // テクスチャターゲット。デフォルトは2dですがcube_mapも使えるようにします。
       this.tex = _createTexture(gl, info, dict);
       // infoのバリデーションが済んだので各種情報を格納
       this.w = (info.w !== undefined ? info.w : 1);
@@ -1326,43 +1402,75 @@ const p5wgex = (function(){
     }
     generateMipmap(){
       // mipmap作るやつ。使うかどうかは、知らん。
+      // cubemapにも対応させたが...うーん。
       const {gl} = this;
-      gl.bindTexture(gl.TEXTURE_2D, this.tex);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.bindTexture(gl.TEXTURE_2D, null);
+      const target = this.dict[this.target];
+      gl.bindTexture(target, this.tex);
+      gl.generateMipmap(target);
+      gl.bindTexture(target, null);
     }
     setFilterParam(param = {}){
       const {gl, dict} = this;
+      const target = dict[this.target];
       if(param.magFilter !== undefined){ this.filterParam.magFilter = param.magFilter; }
       if(param.minFilter !== undefined){ this.filterParam.minFilter = param.minFilter; }
       // フィルタ設定関数
-      gl.bindTexture(gl.TEXTURE_2D, this.tex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, dict[this.filterParam.magFilter]); // 拡大表示用
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, dict[this.filterParam.minFilter]); // 縮小表示用
-      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindTexture(target, this.tex);
+      gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, dict[this.filterParam.magFilter]); // 拡大表示用
+      gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, dict[this.filterParam.minFilter]); // 縮小表示用
+      gl.bindTexture(target, null);
     }
     setWrapParam(param = {}){
       const {gl, dict} = this;
+      const target = dict[this.target];
       if(param.sWrap !== undefined){ this.wrapParam.sWrap = param.sWrap; }
       if(param.tWrap !== undefined){ this.wrapParam.tWrap = param.tWrap; }
       // ラッピング設定関数
-      gl.bindTexture(gl.TEXTURE_2D, this.tex);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, dict[this.wrapParam.sWrap]);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, dict[this.wrapParam.tWrap]);
-      gl.bindTexture(gl.TEXTURE_2D, null);
+      gl.bindTexture(target, this.tex);
+      gl.texParameteri(target, gl.TEXTURE_WRAP_S, dict[this.wrapParam.sWrap]);
+      gl.texParameteri(target, gl.TEXTURE_WRAP_T, dict[this.wrapParam.tWrap]);
+      gl.bindTexture(target, null);
     }
     getTextureSource(){
-      // Source取得関数。主にp5の2D用。
+      // Source取得関数。主にp5の2D用。cubemapの場合はxp,xn,yp,yn,zp,znごとにsourceが入ってるやつが来る感じで。
       return this.src;
     }
     updateTexture(){
       const {gl, dict} = this;
+      const target = dict[this.target];
       // texSubImage2Dを使って内容を上書きする。主にp5の2D用。
-      const data = _getTextureDataFromSrc(this.src);
-      gl.bindTexture(gl.TEXTURE_2D, this.tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
-                    dict[this.formatParam.format], dict[this.formatParam.type], data);
-      gl.bindTexture(gl.TEXTURE_2D, null);
+      // cubemapの場合はそれぞれ別々にやればできる...か？
+      // 上書きはsourceを取得して個別に行なうのよね。
+      // ほぼ同じ処理のコピペだな...メソッド化するわ、そのうち。
+      // これについてはテストが必要ですね（やります）
+      let data;
+      switch(target){
+        case gl.TEXTURE_2D:
+          data = _getTextureDataFromSrc(info.src); break;
+        case gl.TEXTURE_CUBE_MAP:
+          data = _getCubemapTextureDataFromSrc(info.src); break;
+      }
+      gl.bindTexture(target, this.tex);
+      switch(target){
+        case gl.TEXTURE_2D:
+          gl.texImage2D(target, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
+                        dict[this.formatParam.format], dict[this.formatParam.type], data);
+          break;
+        case gl.TEXTURE_CUBE_MAP:
+          const cubemapTargets = [
+            gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+            gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+            gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
+          ];
+          const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
+          for (const textureIndex = 0; textureIndex < 6; textureIndex++) {
+            gl.texImage2D(cubemapTargets[textureIndex], 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
+                          dict[this.formatParam.format], dict[this.formatParam.type], dataArray[textureIndex]);
+          }
+      }
+      //gl.texImage2D(target, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
+      //              dict[this.formatParam.format], dict[this.formatParam.type], data);
+      gl.bindTexture(target, null);
       // 果たしてこれでちゃんと上書きされるのか...
     }
   }
@@ -1586,6 +1694,8 @@ const p5wgex = (function(){
       _setUniform(this.gl, this.uniforms[name], data);
     }
     setTexture2D(name, _texture){
+      // 非推奨。
+      // 後方互換性のために非推奨指定したうえで残しておきます。
       const gl = this.gl;
       const uniform = this.uniforms[name];
       // activateする番号とuniform1iで登録する番号は一致しており、かつsamplerごとに異なる必要があるということ
@@ -1593,13 +1703,36 @@ const p5wgex = (function(){
       gl.bindTexture(gl.TEXTURE_2D, _texture);
       gl.uniform1i(uniform.location, uniform.samplerIndex);
     }
+    setTexture(name, _texture){
+      // 2d, cube_map, 2d_arrayなどを想定
+      const gl = this.gl;
+      const uniform = this.uniforms[name];
+      const target = this.uniforms.samplerTargetArray[uniform.samplerIndex];
+      // activateする番号とuniform1iで登録する番号は一致しており、かつsamplerごとに異なる必要があるということ
+      gl.activeTexture(gl.TEXTURE0 + uniform.samplerIndex);
+      gl.bindTexture(target, _texture);
+      gl.uniform1i(uniform.location, uniform.samplerIndex);
+    }
     unbindTexture2D(){
+      // 非推奨。
+      const gl = this.gl;
+      // 後方互換性のために非推奨指定したうえで残しておきます。
+      // 最初から...まあいいや。
       // 2Dや3Dのテクスチャがbindされていたら解除(今は2D only.)
       // maxSamplerIndexでサンプラーインデックスの上限が分かる
       // そこまでのすべてのtextureUnitの中身をからっぽにする（従来の処理ではひとつしかnullにできなかった）
-      for(let i=0; i<this.uniforms.maxSamplerIndex; i++){
-        this.gl.activeTexture(this.gl.TEXTURE0 + i);
-        this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+      for(let i = 0; i < this.uniforms.maxSamplerIndex; i++){
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+    }
+    unbindTexture(){
+      // targetが異なってもやることは同じ。
+      const gl = this.gl;
+      for(let i = 0; i < this.uniforms.maxSamplerIndex; i++){
+        const target = this.uniforms.samplerTargetArray[i];
+        gl.activeTexture(gl.TEXTURE0 + i);
+        gl.bindTexture(target, null);
       }
     }
   }
@@ -2397,6 +2530,7 @@ const p5wgex = (function(){
       return this;
     }
     setTexture2D(name, _texture){
+      // 非推奨（後方互換性）
       // 有効になっているPainterがテクスチャユニフォームを持っているとして、それを使えるようにbindする。
       // 分岐処理！
       // _textureがstringの場合は登録されているのを使う。
@@ -2406,6 +2540,17 @@ const p5wgex = (function(){
       }
       // そうでない場合は直接放り込む形で。
       this.currentPainter.setTexture2D(name, _texture);
+      return this;
+    }
+    setTexture(name, _texture){
+      // なるべくこっちを使ってね
+      // _textureがstringの場合は登録されているのを使う。
+      if(typeof(_texture) === "string"){
+        this.currentPainter.setTexture(name, this.textures[_texture].tex);
+        return this;
+      }
+      // そうでない場合は直接放り込む形で。
+      this.currentPainter.setTexture(name, _texture);
       return this;
     }
     setUniform(name, data){
@@ -2489,6 +2634,8 @@ const p5wgex = (function(){
       return this.currentFBO;
     }
     setFBOtexture2D(uniformName, fboName, kind = "color", index = 0){
+      // CUBE_MAPも使うようになればいずれ非推奨、今は無理。
+
       // FBOを名前経由でセット。ダブルの場合はreadをセット。
       // texture限定。fbo.tやfbo.read.tの代わりに[kind]で場合によっては[index]を付ける。
       // つまり従来のcolorからtexture取得の場合は変える必要なし。
@@ -2592,7 +2739,8 @@ const p5wgex = (function(){
         this.inTransformFeedback = false;
       }
       this.currentIBO = undefined;
-      this.currentPainter.unbindTexture2D();
+      //this.currentPainter.unbindTexture2D();
+      this.currentPainter.unbindTexture(); // 試しに
       return this;
     }
     flush(){
