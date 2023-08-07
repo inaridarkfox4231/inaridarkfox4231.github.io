@@ -1,3 +1,7 @@
+// チェック用
+// 消すな！！！！！！！！！！！！！！！！！！
+
+
 // --------------------------- //
 // まず、...
 // うまくいくんかいな。まあ別に死ぬわけじゃないし。死にかけたし。気楽にやろ。死ぬことが無いなら何でもできる。
@@ -1008,6 +1012,16 @@ const p5wgex = (function(){
   // そういうことでこれからはmag, min, sWrap, tWrapという指定にする...（片方が未指定ならもう片方は合わせる形）
   // 双方未指定なら双方nearest/clampとする。あちこち変えないといけない。
   function _validateForTexture(info){
+    // targetは基本2Dだが、CUBE_MAPもOKにする。
+    // 指定の仕方は"2d"もしくは"cube_map"だが、具体的に指定する場合"2d"と記述することはないと思う。
+    // 仮に...framebufferにcube_mapを関連付けるのであれば、typeなどと一緒にtargetを"cube_map"に指定する。あとは_createTextureの仕事。
+    // ...ではないのよね。framebufferTexture2Dを使わないと駄目らしい。該当fbがbindされているときにね。なのでそこらへんちょっと工夫が必要かも。
+    // そうしないとおそらく0番にしか描画されない。
+    if(info.target === undefined){ info.target = "2d"; }
+    switch(info.target){
+      case "2d": info.target = "texture_2d"; break;
+      case "cube_map": info.target = "texture_cube_map"; break;
+    }
     // textureType. "ubyte", "half_float", "float"で指定
     if(info.type === undefined){ info.type = "ubyte"; }
     // textureInternalFormatとtextureFormatについて
@@ -1041,34 +1055,79 @@ const p5wgex = (function(){
     if(info.mipmap === undefined){ info.mipmap = false; }
     // srcがnullでない場合に限りwとhは未定義でもOK
     if(info.src !== undefined){
-      const td = _getTextureDataFromSrc(info.src); // テクスチャデータから設定されるようにする。理由：めんどくさいから！！
+      //let td;
+      let td = _getTextureData(info.target, info.src);
+      if (info.target === "texture_cube_map") { td = td.xp; } // どれか。どれでもOK.
+      /*
+      switch(info.target){
+        case "texture_2d":
+          td = _getTextureDataFromSrc(info.src); break;
+        case "texture_cube_map":
+          // cubemapの場合は全部同じサイズでないといけないので
+          // 一つだけ取ってそれを使う
+          td = _getCubemapTextureDataFromSrc(info.src).xp; break;
+      }
+      */
+      // テクスチャデータから設定されるようにする。理由：めんどくさいから！！
       if(info.w === undefined){ info.w = td.width; }
       if(info.h === undefined){ info.h = td.height; }
-    }
-    // targetは基本2Dだが、CUBE_MAPもOKにする。
-    // 指定の仕方は"2d"もしくは"cube_map"だが、具体的に指定する場合"2d"と記述することはないと思う。
-    // 仮に...framebufferにcube_mapを関連付けるのであれば、typeなどと一緒にtargetを"cube_map"に指定する。あとは_createTextureの仕事。
-    // ...ではないのよね。framebufferTexture2Dを使わないと駄目らしい。該当fbがbindされているときにね。なのでそこらへんちょっと工夫が必要かも。
-    // そうしないとおそらく0番にしか描画されない。
-    if(info.target === undefined){ info.target = "2d"; }
-    switch(info.target){
-      case "2d": info.target = "texture_2d"; break;
-      case "cube_map": info.target = "texture_cube_map"; break;
     }
   }
 
   // info.srcが用意されてないならnullを返す。一種のバリデーション。
+  // これをデフォとしていろいろ作ればいい
   function _getTextureDataFromSrc(src){
     if(src === undefined){ return null; }
     if(src instanceof Uint8Array || src instanceof Float32Array){ return src; }
     if(src instanceof HTMLImageElement){ return src; }
     if(src instanceof p5.Graphics){ return src.elt; }
     if(src instanceof p5.Image){ return src.canvas; }
-    myAlert("sorry, I don't know how to.");
+    myAlert("You cannot extract data from that source.");
     return null;
   }
 
+  // 汎用
+  function _getTextureData(target, src){
+    switch (target) {
+      case "texture_2d":
+        return _getTextureDataFromSrc(src);
+      case "texture_cube_map":
+        const result = {};
+        result.xp = _getTextureDataFromSrc(src.xp);
+        result.xn = _getTextureDataFromSrc(src.xn);
+        result.yp = _getTextureDataFromSrc(src.yp);
+        result.yn = _getTextureDataFromSrc(src.yn);
+        result.zp = _getTextureDataFromSrc(src.zp);
+        result.zn = _getTextureDataFromSrc(src.zn);
+        return result;
+    }
+    myAlert("invalid texture target or texture src.");
+    return null;
+  }
+
+  // texImageの簡易版
+  // internalFormat, format, typeはgl定数に翻訳済み
+  function _texImage(gl, target, data, w, h, internalFormat, format, type){
+    switch(target) {
+      case gl.TEXTURE_2D:
+        gl.texImage2D(target, 0, internalFormat, w, h, 0, format, type, data);
+        break;
+      case gl.TEXTURE_CUBE_MAP:
+        const cubemapTargets = [
+          gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+          gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+          gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
+        ];
+        const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
+        for (let textureIndex = 0; textureIndex < 6; textureIndex++) {
+          gl.texImage2D(cubemapTargets[textureIndex], 0, internalFormat, w, h, 0, format, type, dataArray[textureIndex]);
+        }
+        break;
+    }
+  }
+
   // CUBE_MAP用の_getTextureDataFromSrc.
+  /*
   function _getCubemapTextureDataFromSrc(src){
     const result = {};
     result.xp = _getTextureDataFromSrc(src.xp);
@@ -1079,6 +1138,7 @@ const p5wgex = (function(){
     result.zn = _getTextureDataFromSrc(src.zn);
     return result;
   }
+  */
 
   // dictも要るね。いずれはテクスチャ配列も使えるようにしたいところ。
   // テクスチャ配列のMRTとかできるのかしら（無理だと思うけれど...）？案外できそうな気がしてきた（おい）
@@ -1088,6 +1148,7 @@ const p5wgex = (function(){
     const target = dict[info.target];
     // texImage2Dに使うデータ。cube_mapの場合はxp,xn,yp,yn.zp,znの6枚がある。
     //const data = _getTextureDataFromSrc(info.src);
+    /*
     let data;
     switch(target){
       case gl.TEXTURE_2D:
@@ -1095,12 +1156,16 @@ const p5wgex = (function(){
       case gl.TEXTURE_CUBE_MAP:
         data = _getCubemapTextureDataFromSrc(info.src); break;
     }
+    */
+    const data = _getTextureData(info.target, info.src);
     // テクスチャを生成する
     let tex = gl.createTexture();
     // テクスチャをバインド
     gl.bindTexture(target, tex);
 
     // テクスチャにメモリ領域を確保。ここの処理はCUBE_MAPの場合ちょっと異なる。場合分けする。
+    _texImage(gl, target, data, info.w, info.h, dict[info.internalFormat], dict[info.format], dict[info.type]);
+    /*
     switch(target){
       case gl.TEXTURE_2D:
         gl.texImage2D(target, 0, dict[info.internalFormat], info.w, info.h, 0,
@@ -1113,11 +1178,12 @@ const p5wgex = (function(){
           gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
         ];
         const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
-        for (const textureIndex = 0; textureIndex < 6; textureIndex++) {
+        for (let textureIndex = 0; textureIndex < 6; textureIndex++) {
           gl.texImage2D(cubemapTargets[textureIndex], 0, dict[info.internalFormat], info.w, info.h, 0,
                         dict[info.format], dict[info.type], dataArray[textureIndex]);
         }
     }
+    */
     //gl.texImage2D(gl.TEXTURE_2D, 0, dict[info.internalFormat], info.w, info.h, 0,
     //              dict[info.format], dict[info.type], data);
     // mipmapの作成はどうも失敗してるみたいです。原因は調査中。とりあえず使わないで。
@@ -1403,8 +1469,8 @@ const p5wgex = (function(){
     generateMipmap(){
       // mipmap作るやつ。使うかどうかは、知らん。
       // cubemapにも対応させたが...うーん。
-      const {gl} = this;
-      const target = this.dict[this.target];
+      const {gl, dict} = this;
+      const target = dict[this.target];
       gl.bindTexture(target, this.tex);
       gl.generateMipmap(target);
       gl.bindTexture(target, null);
@@ -1443,14 +1509,19 @@ const p5wgex = (function(){
       // 上書きはsourceを取得して個別に行なうのよね。
       // ほぼ同じ処理のコピペだな...メソッド化するわ、そのうち。
       // これについてはテストが必要ですね（やります）
+      /*
       let data;
       switch(target){
         case gl.TEXTURE_2D:
-          data = _getTextureDataFromSrc(info.src); break;
+          data = _getTextureDataFromSrc(this.src); break;
         case gl.TEXTURE_CUBE_MAP:
-          data = _getCubemapTextureDataFromSrc(info.src); break;
+          data = _getCubemapTextureDataFromSrc(this.src); break;
       }
+      */
+      const data = _getTextureData(this.target, this.src);
       gl.bindTexture(target, this.tex);
+      _texImage(gl, target, data, this.w, this.h, dict[this.formatParam.internalFormat], dict[this.formatParam.format], dict[this.formatParam.type]);
+      /*
       switch(target){
         case gl.TEXTURE_2D:
           gl.texImage2D(target, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
@@ -1463,11 +1534,12 @@ const p5wgex = (function(){
             gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
           ];
           const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
-          for (const textureIndex = 0; textureIndex < 6; textureIndex++) {
+          for (let textureIndex = 0; textureIndex < 6; textureIndex++) {
             gl.texImage2D(cubemapTargets[textureIndex], 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
                           dict[this.formatParam.format], dict[this.formatParam.type], dataArray[textureIndex]);
           }
       }
+      */
       //gl.texImage2D(target, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
       //              dict[this.formatParam.format], dict[this.formatParam.type], data);
       gl.bindTexture(target, null);
@@ -2492,6 +2564,7 @@ const p5wgex = (function(){
           // vboからdivisorを持ってこないといけないのね。
 
           // isTFの場合はdivisorを適用しない
+          // こうしないとインスタンシングのattrだけ動的に更新する際に不具合が起きる。
           if (!isTF && vbo.divisor > 0) {
             this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
           }
