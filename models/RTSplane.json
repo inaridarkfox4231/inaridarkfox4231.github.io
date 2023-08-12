@@ -1,0 +1,195 @@
+{
+    "asset" : {
+        "generator" : "Khronos glTF Blender I/O v1.8.19",
+        "version" : "2.0"
+    },
+    "scene" : 0,
+    "scenes" : [
+        {
+            "name" : "Scene",
+            "nodes" : [
+                0
+            ]
+        }
+    ],
+    "nodes" : [
+        {
+            "mesh" : 0,
+            "name" : "Plane"
+        }
+    ],
+    "animations" : [
+        {
+            "channels" : [
+                {
+                    "sampler" : 0,
+                    "target" : {
+                        "node" : 0,
+                        "path" : "translation"
+                    }
+                },
+                {
+                    "sampler" : 1,
+                    "target" : {
+                        "node" : 0,
+                        "path" : "rotation"
+                    }
+                },
+                {
+                    "sampler" : 2,
+                    "target" : {
+                        "node" : 0,
+                        "path" : "scale"
+                    }
+                }
+            ],
+            "name" : "PlaneAction",
+            "samplers" : [
+                {
+                    "input" : 4,
+                    "interpolation" : "LINEAR",
+                    "output" : 5
+                },
+                {
+                    "input" : 4,
+                    "interpolation" : "LINEAR",
+                    "output" : 6
+                },
+                {
+                    "input" : 4,
+                    "interpolation" : "LINEAR",
+                    "output" : 7
+                }
+            ]
+        }
+    ],
+    "meshes" : [
+        {
+            "name" : "Plane",
+            "primitives" : [
+                {
+                    "attributes" : {
+                        "POSITION" : 0,
+                        "NORMAL" : 1,
+                        "TEXCOORD_0" : 2
+                    },
+                    "indices" : 3
+                }
+            ]
+        }
+    ],
+    "accessors" : [
+        {
+            "bufferView" : 0,
+            "componentType" : 5126,
+            "count" : 4,
+            "max" : [
+                1,
+                1,
+                0
+            ],
+            "min" : [
+                -1,
+                -1,
+                0
+            ],
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 1,
+            "componentType" : 5126,
+            "count" : 4,
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 2,
+            "componentType" : 5126,
+            "count" : 4,
+            "type" : "VEC2"
+        },
+        {
+            "bufferView" : 3,
+            "componentType" : 5123,
+            "count" : 6,
+            "type" : "SCALAR"
+        },
+        {
+            "bufferView" : 4,
+            "componentType" : 5126,
+            "count" : 60,
+            "max" : [
+                2.4583333333333335
+            ],
+            "min" : [
+                0
+            ],
+            "type" : "SCALAR"
+        },
+        {
+            "bufferView" : 5,
+            "componentType" : 5126,
+            "count" : 60,
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 6,
+            "componentType" : 5126,
+            "count" : 60,
+            "type" : "VEC4"
+        },
+        {
+            "bufferView" : 7,
+            "componentType" : 5126,
+            "count" : 60,
+            "type" : "VEC3"
+        }
+    ],
+    "bufferViews" : [
+        {
+            "buffer" : 0,
+            "byteLength" : 48,
+            "byteOffset" : 0
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 48,
+            "byteOffset" : 48
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 32,
+            "byteOffset" : 96
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 12,
+            "byteOffset" : 128
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 240,
+            "byteOffset" : 140
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 720,
+            "byteOffset" : 380
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 960,
+            "byteOffset" : 1100
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 720,
+            "byteOffset" : 2060
+        }
+    ],
+    "buffers" : [
+        {
+            "byteLength" : 2780,
+            "uri" : "data:application/octet-stream;base64,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"
+        }
+    ]
+}
