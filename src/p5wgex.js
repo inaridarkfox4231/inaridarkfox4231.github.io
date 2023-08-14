@@ -1022,6 +1022,7 @@ const p5wgex = (function(){
       case "cube_map": info.target = "texture_cube_map"; break;
     }
     // textureType. "ubyte", "half_float", "float"で指定
+    // 画像用なら普通にubyte, float textureでやりたいならfloatを指定しましょう（流体やブルーム、パーティクル）
     if(info.type === undefined){ info.type = "ubyte"; }
     // textureInternalFormatとtextureFormatについて
     if(info.internalFormat === undefined){
@@ -1037,7 +1038,14 @@ const p5wgex = (function(){
     if(info.format === undefined){ info.format = "rgba"; } // とりあえずこれで。あの3種類みんなこれ。
     // textureFilter. "nearest", "linear"で指定
     if(info.magFilter === undefined && info.minFilter === undefined){
-      info.magFilter = info.minFilter = "nearest";
+      // info.typeがubyteの場合はlinearが妥当でしょう
+      // 明示されていない場合はそうするべき
+      // floatならnearestにすべき。使い方によっては違うかもだけど。
+      if (info.type === "ubyte") {
+        info.magFilter = info.minFilter = "linear";
+      } else {
+        info.magFilter = info.minFilter = "nearest";
+      }
     }else{
       if(info.magFilter === undefined){ info.magFilter = info.minFilter; }
       else if(info.minFilter === undefined){ info.minFilter = info.magFilter; }
@@ -1049,7 +1057,6 @@ const p5wgex = (function(){
       if(info.sWrap === undefined){ info.sWrap = info.tWrap; }
       else if(info.tWrap === undefined){ info.tWrap = info.sWrap; }
     }
-    //if(info.wrap === undefined){ info.wrap = "clamp"; }
     // mipmapはデフォルトfalseで。一応後から作れるようにしといた（null引数だと作られ無さそだし、実際作れないだろ。）
     if(info.mipmap === undefined){ info.mipmap = false; }
     // srcがnullでない場合に限りwとhは未定義でもOK
@@ -1057,16 +1064,6 @@ const p5wgex = (function(){
       //let td;
       let td = _getTextureData(info.target, info.src);
       if (info.target === "texture_cube_map") { td = td.xp; } // どれか。どれでもOK.
-      /*
-      switch(info.target){
-        case "texture_2d":
-          td = _getTextureDataFromSrc(info.src); break;
-        case "texture_cube_map":
-          // cubemapの場合は全部同じサイズでないといけないので
-          // 一つだけ取ってそれを使う
-          td = _getCubemapTextureDataFromSrc(info.src).xp; break;
-      }
-      */
       // テクスチャデータから設定されるようにする。理由：めんどくさいから！！
       if(info.w === undefined){ info.w = td.width; }
       if(info.h === undefined){ info.h = td.height; }
@@ -1125,20 +1122,6 @@ const p5wgex = (function(){
     }
   }
 
-  // CUBE_MAP用の_getTextureDataFromSrc.
-  /*
-  function _getCubemapTextureDataFromSrc(src){
-    const result = {};
-    result.xp = _getTextureDataFromSrc(src.xp);
-    result.xn = _getTextureDataFromSrc(src.xn);
-    result.yp = _getTextureDataFromSrc(src.yp);
-    result.yn = _getTextureDataFromSrc(src.yn);
-    result.zp = _getTextureDataFromSrc(src.zp);
-    result.zn = _getTextureDataFromSrc(src.zn);
-    return result;
-  }
-  */
-
   // dictも要るね。いずれはテクスチャ配列も使えるようにしたいところ。
   // テクスチャ配列のMRTとかできるのかしら（無理だと思うけれど...）？案外できそうな気がしてきた（おい）
   // いや無理でしょ...どうやって格納するの...32x1024とかして...あー、そゆこと？いけるんかね。
@@ -1146,16 +1129,6 @@ const p5wgex = (function(){
     // targetですね。gl.TEXTURE_2Dもしくはgl.TEXTURE_CUBE_MAP;
     const target = dict[info.target];
     // texImage2Dに使うデータ。cube_mapの場合はxp,xn,yp,yn.zp,znの6枚がある。
-    //const data = _getTextureDataFromSrc(info.src);
-    /*
-    let data;
-    switch(target){
-      case gl.TEXTURE_2D:
-        data = _getTextureDataFromSrc(info.src); break;
-      case gl.TEXTURE_CUBE_MAP:
-        data = _getCubemapTextureDataFromSrc(info.src); break;
-    }
-    */
     const data = _getTextureData(info.target, info.src);
     // テクスチャを生成する
     let tex = gl.createTexture();
@@ -1164,27 +1137,7 @@ const p5wgex = (function(){
 
     // テクスチャにメモリ領域を確保。ここの処理はCUBE_MAPの場合ちょっと異なる。場合分けする。
     _texImage(gl, target, data, info.w, info.h, dict[info.internalFormat], dict[info.format], dict[info.type]);
-    /*
-    switch(target){
-      case gl.TEXTURE_2D:
-        gl.texImage2D(target, 0, dict[info.internalFormat], info.w, info.h, 0,
-                      dict[info.format], dict[info.type], data);
-        break;
-      case gl.TEXTURE_CUBE_MAP:
-        const cubemapTargets = [
-          gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
-          gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
-          gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
-        ];
-        const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
-        for (let textureIndex = 0; textureIndex < 6; textureIndex++) {
-          gl.texImage2D(cubemapTargets[textureIndex], 0, dict[info.internalFormat], info.w, info.h, 0,
-                        dict[info.format], dict[info.type], dataArray[textureIndex]);
-        }
-    }
-    */
-    //gl.texImage2D(gl.TEXTURE_2D, 0, dict[info.internalFormat], info.w, info.h, 0,
-    //              dict[info.format], dict[info.type], data);
+
     // mipmapの作成はどうも失敗してるみたいです。原因は調査中。とりあえず使わないで。
     //if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
 
@@ -1508,39 +1461,11 @@ const p5wgex = (function(){
       // 上書きはsourceを取得して個別に行なうのよね。
       // ほぼ同じ処理のコピペだな...メソッド化するわ、そのうち。
       // これについてはテストが必要ですね（やります）
-      /*
-      let data;
-      switch(target){
-        case gl.TEXTURE_2D:
-          data = _getTextureDataFromSrc(this.src); break;
-        case gl.TEXTURE_CUBE_MAP:
-          data = _getCubemapTextureDataFromSrc(this.src); break;
-      }
-      */
+
       const data = _getTextureData(this.target, this.src);
       gl.bindTexture(target, this.tex);
       _texImage(gl, target, data, this.w, this.h, dict[this.formatParam.internalFormat], dict[this.formatParam.format], dict[this.formatParam.type]);
-      /*
-      switch(target){
-        case gl.TEXTURE_2D:
-          gl.texImage2D(target, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
-                        dict[this.formatParam.format], dict[this.formatParam.type], data);
-          break;
-        case gl.TEXTURE_CUBE_MAP:
-          const cubemapTargets = [
-            gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
-            gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
-            gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z
-          ];
-          const dataArray = [data.xp, data.xn, data.yp, data.yn, data.zp, data.zn];
-          for (let textureIndex = 0; textureIndex < 6; textureIndex++) {
-            gl.texImage2D(cubemapTargets[textureIndex], 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
-                          dict[this.formatParam.format], dict[this.formatParam.type], dataArray[textureIndex]);
-          }
-      }
-      */
-      //gl.texImage2D(target, 0, dict[this.formatParam.internalFormat], this.w, this.h, 0,
-      //              dict[this.formatParam.format], dict[this.formatParam.type], data);
+
       gl.bindTexture(target, null);
       // 果たしてこれでちゃんと上書きされるのか...
     }
@@ -2301,8 +2226,143 @@ const p5wgex = (function(){
 
   // ---------------------------------------------------------------------------------------------- //
   // Meshes.
-  // まあ、メッシュいろいろテンプレート、あると便利だし。難しいけどね。
-  // 落ち着いてから。
+
+  // 立方体
+  // まあキューブマップ使いましょうね
+  function getCubeMesh(_size = 1){
+    // 上の方の正方形がxMinusでその下にzPlus,xPlus,zMinusと続く
+    // zPlusの左側がyMinusで、zPlusの右側がyPlusです。
+    // つまり十字のクロスしたところにzPlusが来て下にxPlus,右にyPlusというイメージ。
+    const v=[-1,-1,-1, -1,1,-1, -1,-1,1, -1,1,1, // x-minus
+             -1,-1,1, -1,1,1, 1,-1,1, 1,1,1, // z-plus
+             1,-1,1, 1,1,1, 1,-1,-1, 1,1,-1, // x-plus
+             1,-1,-1, 1,1,-1, -1,-1,-1, -1,1,-1, // z-minus
+             -1,-1,-1, -1,-1,1, 1,-1,-1, 1,-1,1, // y-minus
+             -1,1,1, -1,1,-1, 1,1,1, 1,1,-1] // y-plus.
+    for(let i=0; i<v.length; i++) { v[i] *= _size; }
+    const f = [0,2,3, 0,3,1, 4,6,7, 4,7,5, 8,10,11, 8,11,9, 12,14,15, 12,15,13, 16,18,19, 16,19,17, 20,22,23, 20,23,21];
+    const n = ex.getNormals(v, f);
+    const createUV = (a,b) => { return [a, b, a+0.25, b, a, b+0.25, a+0.25, b+0.25]; }
+    const uv = [];
+    uv.push(...createUV(0.375, 0));
+    uv.push(...createUV(0.375, 0.25));
+    uv.push(...createUV(0.375, 0.5));
+    uv.push(...createUV(0.375, 0.75));
+    uv.push(...createUV(0.125, 0.25));
+    uv.push(...createUV(0.625, 0.25));
+    return {v, f, n, uv};
+  }
+
+  // 雑。z軸に平行な平面。
+  function getPlaneMesh(_size = 1){
+    const v = [-1,-1,0, 1,-1,0, -1,1,0, 1,1,0];
+    for(let i=0; i<_size; i++) { v[i] *= _size; }
+    const uv = [0, 1, 1, 1, 0, 0, 1, 0];
+    const f = [0, 1, 2, 2, 1, 3];
+    const n = [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1];
+    return {v, f, n, uv};
+  }
+
+  // UVめんどくさいな
+  // 頂点を重複させればいい
+  function getSphereMesh(_size = 1){
+    const r = _size;
+    const ds = 32;
+    const dt = 48;
+    const v = [];
+    let n = [];
+    const f = [];
+    const uv = []; // ディテールでUVを張る
+
+    // 頂点は重複させる
+    for(let k=0; k<=ds; k++){
+      const theta = Math.PI*k/ds;
+      for(let m=0; m<=dt; m++){
+        const phi = 2*Math.PI*m/dt;
+        v.push(
+          r*sin(theta)*cos(phi), r*sin(theta)*sin(phi), r*cos(theta)
+        );
+        n.push(
+          sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)
+        );
+        uv.push(m/dt, k/ds);
+      }
+    }
+
+    for(let k=0; k<ds; k++){
+      // 平面と同じようにする
+      for(let m=0; m<dt; m++){
+        const leftUp = k*(dt+1) + m;
+        const leftDown = (k+1)*(dt+1) + m;
+        const rightUp = leftUp+1;
+        const rightDown = leftDown+1;
+        f.push(leftUp, leftDown, rightDown, leftUp, rightDown, rightUp);
+      }
+    }
+
+    return {v, f, n, uv};
+  }
+
+  function getTorusMesh(a=1.0, b=0.4){
+    // 今回はトーラスで。紙の上で計算してるけどロジックは難しくないのよ。
+    const ds = 32;
+    const dt = 32;
+    const v = [];
+    const n = [];
+    const uv = [];
+    const f = [];
+    const dTheta = Math.PI*2/ds;
+    const dPhi = Math.PI*2/dt;
+    // イメージ的にはkがx軸でlがy軸で原点左下の座標系を考えている
+    // この原点はx軸aでz軸bの点で、そこから右と上にxとyをそれぞれ伸ばす感じ。
+    for(let l=0; l<=dt; l++){
+      for(let k=0; k<=ds; k++){
+        const index = (dt+1)*l + k;
+        const px = Math.cos(dPhi*l);
+        const py = Math.sin(dPhi*l);
+        const nx = Math.sin(dTheta*k)*px;
+        const ny = Math.sin(dTheta*k)*py;
+        const nz = Math.cos(dTheta*k);
+        const x = a*px + b*nx;
+        const y = a*py + b*ny;
+        const z = b*nz;
+        v.push(x, y, z);
+        n.push(nx, ny, nz);
+        uv.push((k+1)/ds, (l+1)/dt);
+      }
+    }
+    // kとlに着目すると分かりやすいかもしれない。
+    for(let l=0; l<dt; l++){
+      for(let k=0; k<ds; k++){
+        const index = dt*l + k;
+        f.push(
+          l*(ds+1) + k, l*(ds+1) + k+1, (l+1)*(ds+1) + k+1,
+          l*(ds+1) + k, (l+1)*(ds+1) + k+1, (l+1)*(ds+1) + k
+        );
+      }
+    }
+    return {v, f, n, uv};
+  }
+
+  // v, n, uv, fは予約されているとする。
+  // 他にも使いたい場合は配列の形で付加的に用意する。
+  // まずメッシュ、次いで名前、最後に追加のattr
+  // たとえば{name:"aColor", size:4, data:頂点色データ}
+  // こんな感じ。要するに普通にattrを追加するだけ。
+  // IBOは普通にname + IBOになるので注意しましょう
+  function registMesh(node, mesh, meshName, otherAttrs = []){
+    const attrData = [];
+    attrData.push(
+      {name:"aPosition", size:3, data:mesh.v},
+      {name:"aNormal", size:3, data:mesh.n},
+      {name:"aTexCoord", size:2, data:mesh.uv}
+    );
+    for(const attr of otherAttrs){
+      attrData.push({name:attr.name, size:attr.size, data:attr.data});
+    }
+    node.registFigure(meshName, attrData);
+    node.registIBO(meshName + "IBO", {data:mesh.f});
+  }
 
   // ---------------------------------------------------------------------------------------------- //
   // RenderNode.
@@ -3718,6 +3778,602 @@ const p5wgex = (function(){
   // てか、ああそうか、Vec4作ってVec3から(x,y,z,1)作るメソッドを...そうすれば自由に...
   // となるとゆくゆくはside,up,frontはVec4というかQuarternionとして扱うことになる？それでもいいけどね。
 
+  // ---------------------------------------------------------------------------------------------- //
+  // Snipet.
+  const snipet = {
+    lightingRoutines:
+      `
+        // ---------- lighting process ---------- //
+
+        float lambertDiffuse(vec3 lightDirection, vec3 surfaceNormal){
+          return max(0.0, dot(-lightDirection, surfaceNormal));
+        }
+
+        // view座標で計算してる
+        float phongSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNormal){
+          vec3 R = reflect(lightDirection, surfaceNormal);
+          return pow(max(0.0, dot(R, viewDirection)), uShininess);
+        }
+
+        // directionalLightの計算
+        void applyDirectionalLight(vec3 direction, vec3 diffuseColor, vec3 specularColor,
+                                   vec3 modelPosition, vec3 normal, out vec3 diffuse, out vec3 specular){
+          vec3 viewDirection = normalize(-modelPosition);
+          vec3 lightVector = (uViewMatrix * vec4(direction, 0.0)).xyz;
+          vec3 lightDir = normalize(lightVector);
+          // 色計算
+          vec3 lightColor = diffuseColor;
+          float diffuseFactor = lambertDiffuse(lightDir, normal);
+          diffuse += diffuseFactor * lightColor; // diffuse成分を足す。
+          if(uUseSpecular){
+            float specularFactor = phongSpecular(lightDir, viewDirection, normal);
+            specular += specularFactor * lightColor * specularColor;
+          }
+        }
+
+        // PointLight項の計算。attenuationも考慮。
+        void applyPointLight(vec3 location, vec3 diffuseColor, vec3 specularColor,
+                             vec3 modelPosition, vec3 normal, out vec3 diffuse, out vec3 specular){
+          vec3 viewDirection = normalize(-modelPosition);
+          vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz;
+          vec3 lightVector = modelPosition - lightPosition;
+          vec3 lightDir = normalize(lightVector);
+          float lightDistance = length(lightVector);
+          float d = lightDistance;
+          float lightFalloff = 1.0 / dot(uAttenuation, vec3(1.0, d, d*d));
+          // 色計算
+          vec3 lightColor = lightFalloff * diffuseColor;
+          float diffuseFactor = lambertDiffuse(lightDir, normal);
+          diffuse += diffuseFactor * lightColor; // diffuse成分を足す。
+          if(uUseSpecular){
+            float specularFactor = phongSpecular(lightDir, viewDirection, normal);
+            specular += specularFactor * lightColor * specularColor;
+          }
+        }
+
+        // SpotLight項の計算。attenuationは共通で。
+        // locationとdirectionが両方入っているうえ、光源の開き(angle)と集中度合い(conc)が追加されて複雑になってる。
+        void applySpotLight(vec3 location, vec3 direction, float angle, float conc, vec3 diffuseColor, vec3 specularColor,
+                            vec3 modelPosition, vec3 normal, out vec3 diffuse, out vec3 specular){
+          vec3 viewDirection = normalize(-modelPosition);
+          vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz; // locationは光の射出位置
+          vec3 lightVector = modelPosition - lightPosition; // 光源 → モデル位置
+          vec3 lightDir = normalize(lightVector);
+          float lightDistance = length(lightVector);
+          float d = lightDistance;
+          float lightFalloff = 1.0 / dot(uAttenuation, vec3(1.0, d, d*d));
+          // falloffは光それ自身の減衰で、これに加えてspot（angleで定義されるcone状の空間）からのずれによる減衰を考慮
+          float spotFalloff;
+          vec3 lightDirection = (uViewMatrix * vec4(direction, 0.0)).xyz;
+          // lightDirはモデルに向かうベクトル、lightDirectionはスポットライトの向きとしての光の向き。そこからのずれで減衰させる仕組み。
+          float spotDot = dot(lightDir, normalize(lightDirection));
+          if(spotDot < cos(angle)){
+            spotFalloff = 0.0;
+          }else{
+            spotFalloff = pow(spotDot, conc); // cosが大きいとは角度が小さいということ
+          }
+          lightFalloff *= spotFalloff;
+          // あとはpointLightと同じ計算を行ない最後にfalloffを考慮する
+          // 色計算
+          vec3 lightColor = lightFalloff * diffuseColor;
+          float diffuseFactor = lambertDiffuse(lightDir, normal);
+          diffuse += diffuseFactor * lightColor; // diffuse成分を足す。
+          if(uUseSpecular){
+            float specularFactor = phongSpecular(lightDir, viewDirection, normal);
+            specular += specularFactor * lightColor * specularColor;
+          }
+        }
+
+        // ライティングの計算
+        // diffuseの分にambient成分を足してrgbに掛けて色を出して
+        // specular成分を足して完成
+        // この中でrgb関連の処理を実行しrgbをそれで置き換える。
+        vec3 totalLight(vec3 modelPosition, vec3 normal, vec3 materialColor){
+          vec3 diffuse = vec3(0.0); // diffuse成分
+          vec3 specular = vec3(0.0); // ついでに
+          // directionalLightの影響を加味する
+          for(int i=0; i<uDirectionalLightCount; i++){
+            applyDirectionalLight(uLightingDirection[i], uDirectionalDiffuseColor[i], uDirectionalSpecularColor[i],
+                                  modelPosition, normal, diffuse, specular);
+          }
+          // pointLightの影響を加味する
+          for(int i=0; i<uPointLightCount; i++){
+            applyPointLight(uPointLightLocation[i], uPointLightDiffuseColor[i], uPointLightSpecularColor[i],
+                            modelPosition, normal, diffuse, specular);
+          }
+          // spotLightの影響を加味する
+          for(int i=0; i<uSpotLightCount; i++){
+            applySpotLight(uSpotLightLocation[i], uSpotLightDirection[i], uSpotLightAngle[i], uSpotLightConc[i],
+                           uSpotLightDiffuseColor[i], uSpotLightSpecularColor[i],
+                           modelPosition, normal, diffuse, specular);
+          }
+          diffuse *= diffuseCoefficient;
+          specular *= specularCoefficient;
+          vec3 result = diffuse + uAmbientColor;
+          result *= materialColor;
+          result += specular;
+          return result;
+        }
+      `,
+    hsv2rgb:
+      `
+        vec3 hsv2rgb(vec3 color){
+          vec3 rgb = clamp(abs(mod(color.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+          rgb = rgb * rgb * (3.0 - 2.0 * rgb);
+          return color.z * mix(vec3(1.0), rgb, color.y);
+        }
+      `,
+    overlay:
+      `
+        vec3 overLay(vec3 src, vec3 dst){
+          vec3 result;
+            if(dst.r < 0.5){ result.r = 2.0*src.r*dst.r; }else{ result.r = 2.0*(src.r+dst.r-src.r*dst.r)-1.0; }
+            if(dst.g < 0.5){ result.g = 2.0*src.g*dst.g; }else{ result.g = 2.0*(src.g+dst.g-src.g*dst.g)-1.0; }
+            if(dst.b < 0.5){ result.b = 2.0*src.b*dst.b; }else{ result.b = 2.0*(src.b+dst.b-src.b*dst.b)-1.0; }
+          return result;
+        }
+      `,
+    softLight:
+      `
+        // softLight.
+        vec3 softLight(vec3 src, vec3 dst){
+          vec3 result;
+          if(src.r < 0.5){ result.r = 2.0*src.r*dst.r + dst.r*dst.r*(1.0-2.0*src.r); }
+          else{ result.r = 2.0*dst.r*(1.0-src.r) + sqrt(dst.r)*(2.0*src.r-1.0); }
+          if(src.g < 0.5){ result.g = 2.0*src.g*dst.g + dst.g*dst.g*(1.0-2.0*src.g); }
+          else{ result.g = 2.0*dst.g*(1.0-src.g) + sqrt(dst.g)*(2.0*src.g-1.0); }
+          if(src.b < 0.5){ result.b = 2.0*src.b*dst.b + dst.b*dst.b*(1.0-2.0*src.b); }
+          else{ result.b = 2.0*dst.b*(1.0-src.b) + sqrt(dst.b)*(2.0*src.b-1.0); }
+          return result;
+        }
+      `
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
+  // ShaderSystem.
+  // 重複部分が多い場合、同じのをいちいち書くのが面倒なので、
+  // テンプレートを作りましょうって話。
+
+  // utilities.
+  function _convertAttributesToText(attrs, version = 2){
+    let result = ``;
+    const prefix = (version === 2 ? `in` : `attribute`);
+    for(let i=0; i<attrs.length; i++){
+      const attr = attrs[i];
+      result += prefix +  ` ` + attr.type + ` ` + attr.name + `;`;
+    }
+    return result;
+  }
+
+  function _convertVaryingsToText(varyings, location, version = 2){
+    let result = ``;
+    const prefix = (version === 1 ? `varying` : (location === `vs` ? `out` : `in`));
+    for(let i=0; i<varyings.length; i++){
+      const varying = varyings[i];
+      result += prefix +  ` ` + varying.type + ` ` + varying.name + `;`;
+    }
+    return result;
+  }
+
+  // addLocation: "vs"/"fs"
+  // addTarget: "routines", "preProcess", "mainProcess", "postProcess"
+  // たとえばmainにaddすることでライティングを適用した色をいじったりできる
+  // 必要があるかどうか知らないけど
+  class ShaderSystem{
+    constructor(){
+      this.attrs = [];
+      this.varyings = [];
+
+      this.vs = {};
+      this.vs.precisions = ``;
+      this.vs.constants = ``;
+      this.vs.uniforms = ``;
+      this.vs.routines = ``; // 関数群
+      this.vs.preProcess = ``;
+      this.vs.mainProcess = ``;
+      this.vs.postProcess = ``;
+
+      this.fs = {};
+      this.fs.precisions = ``;
+      this.fs.constants = ``;
+      this.fs.uniforms = ``;
+      this.fs.outputs = ``;
+      this.fs.routines = ``; // 関数群
+      this.fs.preProcess = ``;
+      this.fs.mainProcess = ``;
+      this.fs.postProcess = ``;
+    }
+    initialize(options = {}){}
+    addAttr(type, name){
+      this.attrs.push({type, name});
+      return this;
+    }
+    addVarying(type, name){
+      this.varyings.push({type, name});
+      return this;
+    }
+    addUniform(type, name, addLocation){
+      this[addLocation].uniforms +=
+        `
+          uniform ` + type + ` ` + name + `;
+        `;
+      return this;
+    }
+    addConstant(type, name, value, addLocation){
+      this[addLocation].uniforms +=
+        `
+          const ` + type + ` ` + name + ` = ` + value + `;
+        `;
+      return this;
+    }
+    addOutputs(type, name, outputLocation = -1){
+      // 主にMRTでの利用を想定...というより
+      // outputが複数ある＝MRTだけれどね
+      const prefix = (outputLocation >= 0 ? `layout (location = ` + outputLocation + `) ` : ``);
+      this.fs.outputs += `
+        ` + prefix + `out ` + type + ` ` + name + `;
+      `;
+    }
+    clearOutputs(){
+      // MRTを使うには一旦クリアするか
+      // outputが空っぽのTemplateを用意して全部自前で用意する感じですね
+      this.fs.outputs = ``;
+      return this;
+    }
+    addCode(content, addTarget, addLocation){
+      this[addLocation][addTarget] += content;
+      return this;
+    }
+    clearCode(clearTarget, clearLocation){
+      this[clearLocation][clearTarget] = ``;
+      return this;
+    }
+    registPainter(node, name){
+      let _vs =
+      `#version 300 es
+      `;
+      _vs += this.vs.precisions;
+      _vs += _convertAttributesToText(this.attrs);
+      _vs += this.vs.constants;
+      _vs += this.vs.uniforms;
+      _vs += _convertVaryingsToText(this.varyings, "vs");
+      _vs += this.vs.routines;
+      _vs +=
+      `
+        void main(){
+      `;
+      _vs += this.vs.preProcess;
+      _vs += this.vs.mainProcess;
+      _vs += this.vs.postProcess;
+      _vs +=
+      `
+        }
+      `;
+
+      let _fs =
+      `#version 300 es
+      `;
+      _fs += this.fs.precisions;
+      _fs += this.fs.constants;
+      _fs += this.fs.uniforms;
+      _fs += _convertVaryingsToText(this.varyings, "fs", 2);
+      _fs += this.fs.outputs;
+      _fs += this.fs.routines;
+      _fs +=
+      `
+        void main(){
+      `;
+      _fs += this.fs.preProcess;
+      _fs += this.fs.mainProcess;
+      _fs += this.fs.postProcess;
+      _fs +=
+      `
+        }
+      `;
+      node.registPainter(name, _vs, _fs);
+      return this;
+    }
+  }
+
+  // forwardRenderingのテンプレート
+  class LightingSystem extends ShaderSystem{
+    constructor(){
+      super();
+      this.lightingParams = {
+        use:false,
+        ambient:[0.5, 0.5, 0.5],
+        shininess:40,
+        attenuation:[1, 0, 0],
+        useSpecular:false
+      };
+      this.directionalLightParams = {
+        use:false,
+      count:1,
+      direction:[0, 0, -1],
+      diffuseColor:[0.5,0.5,0.5],
+      specularColor:[1, 1, 1]
+      };
+      this.pointLightParams = {
+        use:false,
+        count:1,
+        location:[0, 0, 0],
+        diffuseColor:[1, 1, 1],
+        specularColor:[1, 1, 1]
+      };
+      this.spotLightParams = {
+        use:false,
+      count:1,
+      location:[0, 0, 4],
+      direction:[0, 0, -1],
+      angle:Math.PI/4,
+      conc:100,
+      diffuseColor:[1, 1, 1],
+      specularColor:[1, 1, 1]
+      };
+    }
+    initialize(options = {}){
+      this.attrs = [
+        {type:"vec3", name:"aPosition"},
+        {type:"vec3", name:"aNormal"}
+      ];
+      this.varyings = [
+        {type:"vec3", name:"vLocalPosition"},
+        {type:"vec3", name:"vGlobalPosition"},
+        {type:"vec3", name:"vViewPosition"},
+        {type:"vec3", name:"vGlobalNormal"},
+        {type:"vec3", name:"vViewNormal"}
+      ];
+
+      this.vs.precisions = ``;
+      this.vs.constants = ``;
+      this.vs.uniforms =
+      `
+        uniform mat4 uModelMatrix;
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjMatrix;
+        uniform mat3 uNormalMatrix;
+        uniform mat3 uModelNormalMatrix;
+      `;
+
+      this.vs.routines = ``;
+      this.vs.preProcess =
+      `
+        vec3 position = aPosition;
+        vec3 normal = aNormal;
+      `;
+      this.vs.mainProcess =
+      `
+        // 位置と法線の計算
+        vLocalPosition = position;
+        vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
+        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
+        vViewPosition = viewModelPosition.xyz;
+        vViewNormal = normalize(uNormalMatrix * normal);
+        vGlobalNormal = normalize(uModelNormalMatrix * normal);
+
+        gl_Position = uProjMatrix * viewModelPosition;
+      `;
+      this.vs.postProcess = ``;
+
+      this.fs.precisions =
+      `
+        precision highp float;
+      `;
+      this.fs.constants =
+      `
+        const float diffuseCoefficient = 0.73;
+        const float specularCoefficient = 2.0;
+      `;
+
+      // optionで増やせるようにする
+      const {directionalLightCountMax = 5} = options;
+      const {pointLightCountMax = 5} = options;
+      const {spotLightCountMax = 5} = options;
+
+      this.fs.uniforms =
+      `
+        uniform mat4 uViewMatrix;
+
+        // 汎用色
+        uniform vec3 uAmbientColor;
+        uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
+        uniform vec3 uAttenuation; // デフォルトは1,0,0. pointLightで使う
+
+        // directionalLight関連
+        uniform int uDirectionalLightCount; // デフォ0なのでフラグ不要
+      ` +
+      `uniform vec3 uLightingDirection[` + directionalLightCountMax +`];` +
+      `uniform vec3 uDirectionalDiffuseColor[5];` +
+      `uniform vec3 uDirectionalSpecularColor[5];` +
+      `
+      // pointLight関連
+      uniform int uPointLightCount; // これがデフォルトゼロであることによりフラグが不要となる。
+      ` +
+      `uniform vec3 uPointLightLocation[` + pointLightCountMax +`];` +
+      `uniform vec3 uPointLightDiffuseColor[` + pointLightCountMax +`];` +
+      `uniform vec3 uPointLightSpecularColor[` + pointLightCountMax +`];` +
+      `
+        // spotLight関連
+        uniform int uSpotLightCount; // 0～5
+      ` +
+      `uniform vec3 uSpotLightDirection[` + spotLightCountMax +`];` +
+      `uniform vec3 uSpotLightLocation[` + spotLightCountMax +`];` +
+      `uniform float uSpotLightAngle[` + spotLightCountMax +`];` +
+      `uniform float uSpotLightConc[` + spotLightCountMax +`];` +
+      `uniform vec3 uSpotLightDiffuseColor[` + spotLightCountMax +`];` +
+      `uniform vec3 uSpotLightSpecularColor[` + spotLightCountMax +`];` +
+      `
+        // light flag.
+        uniform bool uUseLight;
+        uniform bool uUseSpecular; // デフォルトはfalse;
+        uniform vec4 uMonoColor; // monoColorの場合
+        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
+      `;
+
+      this.fs.outputs =
+      `
+        out vec4 fragColor;
+      `
+
+      this.fs.routines = snipet.lightingRoutines;
+      this.fs.preProcess =
+      `
+        vec3 position = vViewPosition;
+        vec3 normal = vViewNormal;
+        vec4 color = vec4(1.0);
+        if(uMaterialFlag == 0) {
+          color = uMonoColor;  // uMonoColor単色
+        }
+      `;
+      this.fs.mainProcess =
+      `
+        if (uUseLight) {
+          vec3 result = totalLight(position, normal, color.rgb);
+          color.rgb = result;
+        }
+      `;
+      this.fs.postProcess =
+      `
+        fragColor = color * vec4(vec3(color.a), 1.0);
+      `;
+
+      // たとえばvsPreProcessでvec4 color = aColor;とかして
+      // colorをいじって
+      // vsPostProcessでvColor = color;みたいにできる。
+      // texCoordでも同じことができる
+      const {useColor = false} = options;
+      const {useTexCoord = false} = options;
+      // colorを使う場合はaColorを追加.
+      if (useColor) {
+        // TODO
+        this.addAttr("vec4", "aColor");
+        this.addVarying("vec4", "vColor");
+        this.addCode(`
+          vec4 color = aColor;
+        `, "preProcess", "vs");
+        this.addCode(`
+          vColor = color;
+        `, "postProcess", "vs");
+      }
+      if (useTexCoord) {
+        // TODO
+        this.addAttr("vec2", "aTexCoord");
+        this.addVarying("vec2", "vTexCoord");
+        this.addCode(`
+          vec2 texCoord = aTexCoord;
+        `, "preProcess", "vs");
+        this.addCode(`
+          vTexCoord = texCoord;
+        `, "postProcess", "vs");
+      }
+      return this;
+    }
+    setLight(node, info = {}){
+      const keys = Object.keys(info);
+      for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
+      this.lightingParams.use = true;
+    }
+    // directionalLight.
+    setDirectionalLight(node, info = {}){
+      const keys = Object.keys(info);
+      for(const _key of keys){ this.directionalLightParams[_key] = info[_key]; }
+      if (this.directionalLightParams.count > 0) { this.directionalLightParams.use = true; }
+    }
+    // pointLight.
+    setPointLight(node, info = {}){
+      const keys = Object.keys(info);
+      for(const _key of keys){ this.pointLightParams[_key] = info[_key]; }
+      if (this.pointLightParams.count > 0) { this.pointLightParams.use = true; }
+    }
+    // spotLight.
+    setSpotLight(node, info = {}){
+      const keys = Object.keys(info);
+      for(const _key of keys){ this.spotLightParams[_key] = info[_key]; }
+      if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
+    }
+    lightOn(){
+      this.lightingParams.use = true;
+      return this;
+    }
+    lightOff(){
+      this.lightingParams.use = false;
+      return this;
+    }
+    setLightingUniforms(node){
+
+      node.setUniform("uUseLight", this.lightingParams.use);
+      node.setUniform("uAmbientColor", this.lightingParams.ambient);
+      node.setUniform("uShininess", this.lightingParams.shininess);
+      node.setUniform("uAttenuation", this.lightingParams.attenuation);
+      node.setUniform("uUseSpecular", this.lightingParams.useSpecular);
+
+      if (this.directionalLightParams.use){
+        node.setUniform("uDirectionalLightCount", this.directionalLightParams.count);
+        node.setUniform("uLightingDirection", this.directionalLightParams.direction);
+        node.setUniform("uDirectionalDiffuseColor", this.directionalLightParams.diffuseColor);
+        node.setUniform("uDirectionalSpecularColor", this.directionalLightParams.specularColor);
+      }
+
+      if(this.pointLightParams.use){
+        node.setUniform("uPointLightCount", this.pointLightParams.count);
+        node.setUniform("uPointLightLocation", this.pointLightParams.location);
+        node.setUniform("uPointLightDiffuseColor", this.pointLightParams.diffuseColor);
+        node.setUniform("uPointLightSpecularColor", this.pointLightParams.specularColor);
+      }
+
+      if (this.spotLightParams.use) {
+        node.setUniform("uSpotLightCount", this.spotLightParams.count);
+        node.setUniform("uSpotLightLocation", this.spotLightParams.location);
+        node.setUniform("uSpotLightDirection", this.spotLightParams.direction);
+        node.setUniform("uSpotLightAngle", this.spotLightParams.angle);
+        node.setUniform("uSpotLightConc", this.spotLightParams.conc);
+        node.setUniform("uSpotLightDiffuseColor", this.spotLightParams.diffuseColor);
+        node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
+      }
+    }
+    setMatrixUniforms(node, tf, cam){
+      const modelMat = tf.getModelMat();
+      const viewMat = cam.getViewMat();
+      const projMat = cam.getProjMat();
+      const modelViewMat = new ex.Mat4(ex.getMult4x4(modelMat.m, viewMat.m));
+      const normalMat = ex.getInverseTranspose3x3(modelViewMat.getMat3());
+      const modelNormalMat = ex.getInverseTranspose3x3(modelMat.getMat3());
+      node.setUniform("uModelMatrix", modelMat.m)
+          .setUniform("uViewMatrix", viewMat.m)
+          .setUniform("uModelViewMatrix", modelViewMat.m)
+          .setUniform("uProjMatrix", projMat.m)
+          .setUniform("uNormalMatrix", normalMat)
+          .setUniform("uModelNormalMatrix", modelNormalMat);
+    }
+    render(node, tf, cam, process, initializeTransform = true){
+      // デフォルトではtfをレンダーのたびに初期化します
+      if (initializeTransform) tf.initialize();
+      // トランスフォームの実行
+      for(let i=0; i<process.length; i++){
+        const tfElement = process[i];
+        const tfKind = Object.keys(tfElement)[0];
+        const tfData = tfElement[tfKind];
+        switch(tfKind){
+          case "t": tf.translate(...tfData); break;
+          case "rx": tf.rotateX(tfData); break;
+          case "ry": tf.rotateY(tfData); break;
+          case "rz": tf.rotateZ(tfData); break;
+          case "r": tf.rotate(...tfData); break;
+          case "s": tf.scale(...tfData); break;
+          case "ss": tf.scale(tfData, tfData, tfData); break;
+        }
+      }
+      this.setMatrixUniforms(node, tf, cam);
+      node.drawElements("triangles");
+      return this;
+    }
+  }
+
+  // deferedRenderingのテンプレート
+  // たとえばフォグとかに使える感じの
+
+  // ---------------------------------------------------------------------------------------------- //
+  // Export.
   const ex = {};
 
   // utility.
@@ -3727,6 +4383,20 @@ const p5wgex = (function(){
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
+
+  // geometry.
+  ex.getCubeMesh = getCubeMesh;
+  ex.getSphereMesh = getSphereMesh;
+  ex.getPlaneMesh = getPlaneMesh;
+  ex.getTorusMesh = getTorusMesh;
+  ex.registMesh = registMesh; // 登録用
+
+  // snipet.
+  ex.snipet = snipet; // glslのコードの略記用
+
+  // shaderSystem
+  ex.ShaderSystem = ShaderSystem;
+  ex.LightingSystem = LightingSystem;
 
   // class.
   ex.Timer = Timer;
