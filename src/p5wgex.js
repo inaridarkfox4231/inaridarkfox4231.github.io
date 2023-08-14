@@ -49,6 +49,9 @@
 // ほとんどのパートはTEXTURE_2DをTEXTURE_CUBE_MAPに変えるだけ。
 // 登録時に6枚要求するところ以外はほぼ一緒
 
+// getMat3を追加
+// ex.getInverseTranspose3x3を追加
+
 // orbitControlのパッチ
 // 回転のYと移動のYの向きを逆にしただけ
 // 参考：https://openprocessing.org/sketch/1886629
@@ -2914,6 +2917,13 @@ const p5wgex = (function(){
     getMat4(){
       return this.m;
     }
+    getMat3(){
+      return [
+        this.m[0], this.m[1], this.m[2],
+        this.m[4], this.m[5], this.m[6],
+        this.m[8], this.m[9], this.m[10]
+      ];
+    }
     mult(s){
       // sは長さ16の配列で、4x4行列とみなす。
       // sを左からmに掛けることでthis.mを変化させる
@@ -3714,6 +3724,7 @@ const p5wgex = (function(){
   ex.getNormals = getNormals;
   ex.getMult3x3 = getMult3x3; // 3x3の使い道があるかもしれない的な
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
+  ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
 
