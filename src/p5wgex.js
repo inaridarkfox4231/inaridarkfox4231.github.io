@@ -4040,7 +4040,7 @@ const p5wgex = (function(){
       this[clearLocation][clearTarget] = ``;
       return this;
     }
-    registPainter(node, name){
+    registPainter(node, name, options = {}){
       let _vs =
       `#version 300 es
       `;
@@ -4082,6 +4082,12 @@ const p5wgex = (function(){
       `
         }
       `;
+      // 出来上がったshaderを確認するためのオプション
+      const {showVertexShader = false} = options;
+      const {showFragmentShader = false} = options;
+      if (showVertexShader) { console.log(_vs); }
+      if (showFragmentShader) { console.log(_fs); }
+      // 登録
       node.registPainter(name, _vs, _fs);
       return this;
     }
@@ -4328,8 +4334,8 @@ const p5wgex = (function(){
       this.currentShader.clearCode(clearTarget, clearLocation);
       return this;
     }
-    registPainter(node, name){
-      this.currentShader.registPainter(node, name);
+    registPainter(node, name, options = {}){
+      this.currentShader.registPainter(node, name, options);
       return this;
     }
   }
