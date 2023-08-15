@@ -3930,7 +3930,7 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
-  // ShaderSystem.
+  // utility for ShaderPrototype.
   // 重複部分が多い場合、同じのをいちいち書くのが面倒なので、
   // テンプレートを作りましょうって話。
 
@@ -3955,11 +3955,20 @@ const p5wgex = (function(){
     return result;
   }
 
+  // ---------------------------------------------------------------------------------------------- //
+  // ShaderPrototype.
+  // Shaderの基本形を用意しておこうかと
+  // 完全ではないかもだけどね
+
   // addLocation: "vs"/"fs"
   // addTarget: "routines", "preProcess", "mainProcess", "postProcess"
   // たとえばmainにaddすることでライティングを適用した色をいじったりできる
-  // 必要があるかどうか知らないけど
-  class ShaderSystem{
+
+  // これのコンポジットでやるつもり
+  // その継承として書き直せたらいいですね
+  // Prototypeの継承を単独で使うこともできるし
+  // RenderingSystemの方を使ってもいい、柔軟性を獲得することを目指す。
+  class ShaderPrototype{
     constructor(){
       this.attrs = [];
       this.varyings = [];
@@ -3983,7 +3992,9 @@ const p5wgex = (function(){
       this.fs.mainProcess = ``;
       this.fs.postProcess = ``;
     }
-    initialize(options = {}){}
+    initialize(options = {}){
+      return this;
+    }
     addAttr(type, name){
       this.attrs.push({type, name});
       return this;
@@ -4013,6 +4024,7 @@ const p5wgex = (function(){
       this.fs.outputs += `
         ` + prefix + `out ` + type + ` ` + name + `;
       `;
+      return this;
     }
     clearOutputs(){
       // MRTを使うには一旦クリアするか
@@ -4075,41 +4087,9 @@ const p5wgex = (function(){
     }
   }
 
-  // forwardRenderingのテンプレート
-  class LightingSystem extends ShaderSystem{
+  class ForwardLightingShader extends ShaderPrototype{
     constructor(){
       super();
-      this.lightingParams = {
-        use:false,
-        ambient:[0.5, 0.5, 0.5],
-        shininess:40,
-        attenuation:[1, 0, 0],
-        useSpecular:false
-      };
-      this.directionalLightParams = {
-        use:false,
-      count:1,
-      direction:[0, 0, -1],
-      diffuseColor:[0.5,0.5,0.5],
-      specularColor:[1, 1, 1]
-      };
-      this.pointLightParams = {
-        use:false,
-        count:1,
-        location:[0, 0, 0],
-        diffuseColor:[1, 1, 1],
-        specularColor:[1, 1, 1]
-      };
-      this.spotLightParams = {
-        use:false,
-      count:1,
-      location:[0, 0, 4],
-      direction:[0, 0, -1],
-      angle:Math.PI/4,
-      conc:100,
-      diffuseColor:[1, 1, 1],
-      specularColor:[1, 1, 1]
-      };
     }
     initialize(options = {}){
       this.attrs = [
@@ -4268,6 +4248,157 @@ const p5wgex = (function(){
       }
       return this;
     }
+  }
+
+  // MRT前提のディファード用シェーダ
+  class DeferredPrepareShader extends ShaderPrototype{
+    constructor(){
+      super();
+    }
+    initialize(options = {}){
+      // TODO
+    }
+  }
+  // こっちはディファードをライティングするためのシェーダ
+  class DeferredLightingShader extends ShaderPrototype{
+    constructor(){
+      super();
+    }
+    initialize(options = {}){
+      // TODO
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
+  // RenderingSystem.
+
+  // Composite. 複数のShaderPrototypeを合わせて使うことを想定する。
+  // FilterSystemもこれでいける...かどうか知らないけど。
+  // 冗談みたいにコピペしまくってるけど許して
+  // こうすることでbindで切り替えできるでしょ。
+  class RenderingSystem{
+    constructor(){
+      this.shaders = {};
+      this.currentShader = undefined;
+    }
+    registShader(name, _shaderPrototype){
+      // 渡す前に作っておく
+      if (this.shaders[name] !== undefined) { return this; }
+      this.shaders[name] = _shaderPrototype;
+      this.bindShader(name);
+      return this;
+    }
+    bindShader(name){
+      this.currentShader = this.shaders[name];
+      return this;
+    }
+    initialize(options = {}){
+      // これは個別にいろいろやる感じでいいんじゃないかと思うけどね...
+      return this;
+    }
+    addAttr(type, name){
+      this.currentShader.addAttr(type, name);
+      return this;
+    }
+    addVarying(type, name){
+      this.currentShader.addVarying(type, name);
+      return this;
+    }
+    addUniform(type, name, addLocation){
+      this.currentShader.addUniform(type, name, addLocation);
+      return this;
+    }
+    addConstant(type, name, value, addLocation){
+      this.currentShader.addConstant(type, name, value, addLocation);
+      return this;
+    }
+    addOutputs(type, name, outputLocation = -1){
+      this.currentShader.addOutputs(type, name, outputLocation);
+      return this;
+    }
+    clearOutputs(){
+      this.currentShader.clearOutputs();
+      return this;
+    }
+    addCode(content, addTarget, addLocation){
+      this.currentShader.addCode(content, addTarget, addLocation);
+      return this;
+    }
+    clearCode(clearTarget, clearLocation){
+      this.currentShader.clearCode(clearTarget, clearLocation);
+      return this;
+    }
+    registPainter(node, name){
+      this.currentShader.registPainter(node, name);
+      return this;
+    }
+  }
+
+  // StandardLightingSystemです。はい。
+  class StandardLightingSystem extends RenderingSystem{
+    constructor(){
+      super();
+      this.registShader("forwardLight", new ForwardLightingShader());
+      this.registShader("deferredPrepare", new DeferredPrepareShader());
+      this.registShader("deferredLight", new DeferredLightingShader());
+      this.prepareLightingParameters();
+      this.renderingType = "forward";
+    }
+    initialize(options = {}){
+      const {
+        type = "forward", // forward/deferred
+        forwardLight = {},
+        deferredPrepare = {},
+        deferredLight = {}
+      } = options;
+      switch(type) {
+        case "forward":
+          this.shaders.forwardLight.initialize(forwardLight);
+          this.renderingType = "forward";
+          this.bindShader("forwardLight");
+          break;
+        case "deferred":
+          this.shaders.deferredPrepare.initialize(deferredPrepare);
+          this.shaders.deferredLight.initialize(deferredLight);
+          this.renderingType = "deferred";
+          this.bindShader("deferredPrepare");
+          break;
+      }
+      return this;
+    }
+    prepareLightingParameters(){
+      this.lightingParams = {
+        use:false,
+        ambient:[0.5, 0.5, 0.5],
+        shininess:40,
+        attenuation:[1, 0, 0],
+        useSpecular:false
+      };
+      this.directionalLightParams = {
+        use:false,
+        count:1,
+        direction:[0, 0, -1],
+        diffuseColor:[0.5,0.5,0.5],
+        specularColor:[1, 1, 1]
+      };
+      this.pointLightParams = {
+        use:false,
+        count:1,
+        location:[0, 0, 0],
+        diffuseColor:[1, 1, 1],
+        specularColor:[1, 1, 1]
+      };
+      this.spotLightParams = {
+        use:false,
+        count:1,
+        location:[0, 0, 4],
+        direction:[0, 0, -1],
+        angle:Math.PI/4,
+        conc:100,
+        diffuseColor:[1, 1, 1],
+        specularColor:[1, 1, 1]
+      };
+    }
     setLight(node, info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
@@ -4300,7 +4431,8 @@ const p5wgex = (function(){
       return this;
     }
     setLightingUniforms(node){
-
+      // forwardの場合は事前にやるんだけど
+      // deferredの場合は後回し
       node.setUniform("uUseLight", this.lightingParams.use);
       node.setUniform("uAmbientColor", this.lightingParams.ambient);
       node.setUniform("uShininess", this.lightingParams.shininess);
@@ -4332,20 +4464,29 @@ const p5wgex = (function(){
       }
     }
     setMatrixUniforms(node, tf, cam){
+      // deferredの場合はuViewMatrixを使わないので送らない
+      // もちろん用意することは可能でその場合はカスタマイズで何とかする
       const modelMat = tf.getModelMat();
       const viewMat = cam.getViewMat();
       const projMat = cam.getProjMat();
       const modelViewMat = new ex.Mat4(ex.getMult4x4(modelMat.m, viewMat.m));
       const normalMat = ex.getInverseTranspose3x3(modelViewMat.getMat3());
       const modelNormalMat = ex.getInverseTranspose3x3(modelMat.getMat3());
+      // forwardの場合は使うけどdeferredの場合は後でやる
+      // deferredの方、内部で法線計算とかしてて若干内容が古いので
+      // そのうち何とかします
+      if (this.renderingType === "forward") {
+        node.setUniform("uViewMatrix", viewMat.m);
+      }
       node.setUniform("uModelMatrix", modelMat.m)
-          .setUniform("uViewMatrix", viewMat.m)
           .setUniform("uModelViewMatrix", modelViewMat.m)
           .setUniform("uProjMatrix", projMat.m)
           .setUniform("uNormalMatrix", normalMat)
           .setUniform("uModelNormalMatrix", modelNormalMat);
     }
     render(node, tf, cam, process, initializeTransform = true){
+      // forwardは個別のレンダリング用。
+      // deferredはシーンを用意するだけ。
       // デフォルトではtfをレンダーのたびに初期化します
       if (initializeTransform) tf.initialize();
       // トランスフォームの実行
@@ -4367,10 +4508,10 @@ const p5wgex = (function(){
       node.drawElements("triangles");
       return this;
     }
+    output(){
+      // deferred用。そのうち準備する。
+    }
   }
-
-  // deferedRenderingのテンプレート
-  // たとえばフォグとかに使える感じの
 
   // ---------------------------------------------------------------------------------------------- //
   // Export.
@@ -4394,9 +4535,10 @@ const p5wgex = (function(){
   // snipet.
   ex.snipet = snipet; // glslのコードの略記用
 
-  // shaderSystem
-  ex.ShaderSystem = ShaderSystem;
-  ex.LightingSystem = LightingSystem;
+  // shaderPrototype.
+  ex.ShaderPrototype = ShaderPrototype;
+  ex.RenderingSystem = RenderingSystem;
+  ex.StandardLightingSystem = StandardLightingSystem;
 
   // class.
   ex.Timer = Timer;
