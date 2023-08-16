@@ -4490,7 +4490,7 @@ const p5wgex = (function(){
           .setUniform("uNormalMatrix", normalMat)
           .setUniform("uModelNormalMatrix", modelNormalMat);
     }
-    render(node, tf, cam, process, initializeTransform = true){
+    render(node, tf, cam, process = [], initializeTransform = true){
       // forwardは個別のレンダリング用。
       // deferredはシーンを用意するだけ。
       // デフォルトではtfをレンダーのたびに初期化します
