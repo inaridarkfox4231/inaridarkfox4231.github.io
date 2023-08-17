@@ -512,7 +512,7 @@ const foxIA = (function(){
 
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
-  fox.DampedAction = DampedAction;
+  fox.ScalarDampedAction = ScalarDampedAction;
 
   return fox;
 })();
