@@ -4659,6 +4659,7 @@ const p5wgex = (function(){
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
+  ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
 
   // geometry.
   ex.getCubeMesh = getCubeMesh;
@@ -4672,8 +4673,9 @@ const p5wgex = (function(){
 
   // shaderPrototype.
   ex.ShaderPrototype = ShaderPrototype;
+  ex.PlaneShader = PlaneShader; // 板ポリ芸用
   ex.RenderingSystem = RenderingSystem;
-  ex.StandardLightingSystem = StandardLightingSystem;
+  ex.StandardLightingSystem = StandardLightingSystem; // 古典的なフォン/ランバートのライティングによるフォワード/ディファードのライティングテンプレート
 
   // class.
   ex.Timer = Timer;
