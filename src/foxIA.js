@@ -139,6 +139,18 @@ Interaction:
 以上です。
 */
 
+/*
+e.codeを用いる場合のキー内容一覧（https://developer.mozilla.org/ja/docs/Web/API/KeyboardEvent/code を参照）
+アルファベット：keyA,keyB,...,keyZ.
+ShiftRight, ShiftLeft.
+Enter, CapsLock,Space,ControlLeft,ControlRight,ArrowUp,ArrowDown,ArrowLeft,ArrowRight.
+Numpad0,Numpad1,Numpad2,...,Numpad9.
+NumpadDecimal,NumpadEnter,NumpadAdd.
+上の方の数字キー：Digit0,Digit1,Digit2,...,Digit9.
+BackSpace,まあ、後は調べてください...
+あんま難しいこと考えても仕方ないですね。
+*/
+
 const foxIA = (function(){
   const fox = {};
 
@@ -456,7 +468,20 @@ const foxIA = (function(){
   // option = {friction:0.15} みたいにして指定できる。よ。
   // とはいえ実際にはvalueが正や負の値を取りつつ減衰するだけなので
   // これを単位ベクトルに掛ければ2次元でも使えなくはないと思う...よ。
-  class DampedAction{
+
+  // 使い方...難しいと思うんだけどね。
+  // ScalarDampedActionに改名しました
+  // actionCallBackはそのまま関数です。どんな関数でもいいわけではなくて、基本的に1変数です。
+  // そこに放り込まれる値というのが、このScalarDampedActionを実行するたびに減衰していって0になる。
+  // まあそういうこと。
+  // quitで0.0になることからわかるようにactionには0が入った場合は何もしないことが想定されていますね。
+  // たとえばですけどxを与えられた場合にあるものをxだけ動かす、そういった挙動が想定されているのでしょうね。
+  // だからベクトルだったら特定の方向に入力だけ動かす、そういった感じかと。思います。
+  // 適用事例：https://openprocessing.org/sketch/1923156
+  // 長方形をvalueだけ動かしていますね。制限を設けていますが。こういう使い方...
+  // ではあるんだけどね。関数を即席で作ってなおかつbindしてるのがあんま綺麗じゃないのよね。まあ柔軟性...
+  // あー、たとえば？関数の処理の一部、何かを動かす部分に、その、部分的に当てはめる使い方が想定されていますね。
+  class ScalarDampedAction{
     constructor(actionCallBack, option = {}){
       const {friction = 0.15} = option;
       this.value = 0.0;
@@ -480,6 +505,10 @@ const foxIA = (function(){
       this.value = 0.0;
     }
   }
+
+  // ScalarDampedAction
+  // VectorDampedAction
+  // 2つ用意するといいと思う
 
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
