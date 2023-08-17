@@ -3995,8 +3995,16 @@ const p5wgex = (function(){
     initialize(options = {}){
       return this;
     }
+    clearAttrs(){
+      this.attrs = [];
+      return this;
+    }
     addAttr(type, name){
       this.attrs.push({type, name});
+      return this;
+    }
+    clearVaryings(){
+      this.varyings = [];
       return this;
     }
     addVarying(type, name){
@@ -4275,6 +4283,38 @@ const p5wgex = (function(){
     }
   }
 
+  // -1～1にしたかったらこっちでvUv = 2.0*vUv-1.0;とかする。
+  // そのほうが柔軟性高そう。
+  // foxBoard使えばそのまま板ポリ芸に移行できる。
+
+  // foxBoardの利用を想定してる。
+  // data:[-1,-1,1,-1,-1,1,1,1]でtriangle_strip
+  // ですから"foxBoard"ってやればそこに落ちる
+  // もちろん描画先を別のfbにすることも可能。
+  // vUvのままではまずいのでuvを用意しましょう。
+  class PlaneShader extends ex.ShaderPrototype{
+    constructor(){
+      super();
+    }
+    initialize(options={}){
+      this.attrs =[{type:"vec2", name:"aPosition"}];
+      this.varyings =[{type:"vec2", name:"vUv"}];
+      this.fs.outputs =
+        `out vec4 fragColor;`;
+      this.vs.preProcess =
+        `vUv = aPosition * 0.5 + 0.5; vUv.y = 1.0 - vUv.y;`;
+      this.vs.mainProcess =
+        `gl_Position = vec4(aPosition, 0.0, 1.0);`;
+      this.fs.precisions =
+        `precision highp float;`;
+      this.fs.preProcess =
+        `vec4 color = vec4(1.0); vec2 uv = vUv;`;
+      this.fs.mainProcess =
+        `fragColor = color;`;
+      return this;
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------- //
   // RenderingSystem.
 
@@ -4516,6 +4556,95 @@ const p5wgex = (function(){
     }
     output(){
       // deferred用。そのうち準備する。
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
+  //　Performance checker
+  // 前でも後でもOKなフレームレート表示用関数
+  // クラスで定義します
+  // いい加減面倒になってきたので
+
+  // 作るときにキャンバスのサイズを指定します
+  // 必要ならレートも指定します
+  // options詳細
+  // wとhで枠のサイズ
+  // bgColorは背景色、グラデーションを使わないならこれ
+  // barColorはパフォーマンスバーの色。使わないなら0,0,0,0を指定
+  // gradationのflag:true, start,stopは初めの2つでオフセット、
+  // そのあとの4つで色指定。
+  // textはsize, style, alignを指定できる。p5に依存しまくり
+  // p5便利
+  // colorでtext色、offsetはalignにフィットさせる
+  // 以上です
+  class PerformanceChecker{
+    constructor(node, width, height, targetFrameRate = 60){
+      this.node = node;
+      this.w = width;
+      this.h = height;
+      this.targetFrameRate = targetFrameRate;
+      this.bgColor = [];
+      this.barColor = [];
+      this.gradationInfo = {};
+      this.textInfo = {};
+    }
+    loadGraphic(){
+      return this.node.getTextureSource("foxPerformanceChecker");
+    }
+    updateGraphic(){
+      this.node.updateTexture("foxPerformanceChecker");
+    }
+    initialize(options = {}){
+      const {w = 60} = options;
+      const {h = 28} = options;
+      this.node.registTexture("foxPerformanceChecker", {src:createGraphics(w, h)});
+      const {bgColor = [0,0,0,1]} = options; // nonGrad用背景色
+      this.bgColor = bgColor;
+      const {barColor = [1,1,1,0.3]} = options; // barColor.
+      this.barColor = barColor;
+      const {gradation = {}} = options;
+      const {flag = false} = gradation;
+      const {start = []} = gradation;
+      const {stop = []} = gradation;
+      this.gradationInfo = {flag, start, stop};
+      const {text = {}} = options;
+      const {style = ITALIC} = text;
+      const {size = 18} = text;
+      const {align = [CENTER, CENTER]} = text;
+      const {color = [1,1,1,1]} = text;
+      const {offset = [w/2, h/2]} = text;
+      this.textInfo = {color, offset};
+      const gr = this.loadGraphic();
+      gr.textStyle(style);
+      gr.textSize(size);
+      gr.textAlign(...align);
+      this.updateGraphic();
+    }
+    show(){
+      const gr = this.loadGraphic();
+      gr.clear();
+      const param = {};
+      param.name = "foxPerformanceChecker";
+      param.view = [0, 0, gr.width/this.w, gr.height/this.h];
+      if (this.gradationInfo.flag) {
+        param.gradationFlag = this.gradationInfo.flag;
+        param.gradationStart = this.gradationInfo.start;
+        param.gradationStop = this.gradationInfo.stop;
+      } else {
+        const c = this.bgColor;
+        gr.background(c[0]*255, c[1]*255, c[2]*255, c[3]*255);
+      }
+      const t = this.textInfo.color;
+      gr.fill(t[0]*255, t[1]*255, t[2]*255, t[3]*255);
+      const o = this.textInfo.offset;
+      const rate = frameRate();
+      gr.text(rate.toFixed(2), o[0], o[1]);
+      const b = this.barColor;
+      gr.fill(b[0]*255, b[1]*255, b[2]*255, b[3]*255);
+      const level = rate / this.targetFrameRate;
+      gr.rect(0,0, gr.width*level, gr.height);
+      this.updateGraphic();
+      copyPainter(this.node, {src:param});
     }
   }
 
