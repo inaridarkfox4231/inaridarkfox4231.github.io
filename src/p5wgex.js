@@ -4292,7 +4292,7 @@ const p5wgex = (function(){
   // ですから"foxBoard"ってやればそこに落ちる
   // もちろん描画先を別のfbにすることも可能。
   // vUvのままではまずいのでuvを用意しましょう。
-  class PlaneShader extends ex.ShaderPrototype{
+  class PlaneShader extends ShaderPrototype{
     constructor(){
       super();
     }
