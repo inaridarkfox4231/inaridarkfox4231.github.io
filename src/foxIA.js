@@ -385,11 +385,14 @@ const foxIA = (function(){
         const gPrevY = (p.prevY + q.prevY) * 0.5;
         const gDX = gx - gPrevX;
         const gDY = gy - gPrevY;
+        const curDistance = Math.hypot(p.x - q.x, p.y - q.y);
+        const prevDistance = Math.hypot(p.prevX - q.prevX, p.prevY - q.prevY)
         // 今の距離 - 前の距離
-        const value =
-          Math.hypot(p.x - q.x, p.y - q.y) -
-          Math.hypot(p.prevX - q.prevX, p.prevY - q.prevY);
-        this.touchPinchInOutAction(value, gx, gy, gPrevX, gPrevY);
+        const diff = curDistance - prevDistance;
+        // 今の距離 / 前の距離
+        const ratio = curDistance / prevDistance;
+        // 差も比も使えると思ったので仕様変更
+        this.touchPinchInOutAction(diff, ratio, gx, gy, gPrevX, gPrevY);
         this.touchMultiSwipeAction(gDX, gDY, gx, gy, gPrevX, gPrevY);
         // rotateは要検討
       }
@@ -412,9 +415,9 @@ const foxIA = (function(){
       // Interactionサイドの実行内容を書く。
       // dx,dyが変位。
     }
-    touchPinchInOutAction(value, x, y, px, py){
+    touchPinchInOutAction(diff, ratio, x, y, px, py){
       // Interactionサイドの実行内容を書く。
-      // valueは距離の変化。正の場合大きくなる。
+      // diffは距離の変化。正の場合大きくなる。ratioは距離の比。
     }
     touchMultiSwipeAction(dx, dy, x, y, px, py){
       // Interactionサイドの実行内容を書く。
