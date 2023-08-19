@@ -210,6 +210,9 @@ const foxIA = (function(){
   }
 
   // pointerの生成関数で初期化する。なければPointerPrototypeが使われる。
+  // 一部のメソッドはオプションで用意するかしないか決めることにしましょう
+  // mouseLeaveとかdoubleClickとか場合によっては使わないでしょう
+  // そこらへん
   class Interaction{
     constructor(factory = (() => new PointerPrototype())){
       this.pointers = [];
@@ -219,7 +222,7 @@ const foxIA = (function(){
       this.tapCount = 0; // ダブルタップ判定用
       this.firstTapped = {x:0, y:0};
     }
-    initialize(canvas){
+    initialize(canvas, options = {}){
       // 横幅縦幅を定義
       this.width = Number((canvas.style.width).split("px")[0]);
       this.height = Number((canvas.style.height).split("px")[0]);
@@ -235,19 +238,25 @@ const foxIA = (function(){
       canvas.addEventListener('mousedown', this.mouseDownAction.bind(this), {passive:false});
       canvas.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
       window.addEventListener('mouseup', this.mouseUpAction.bind(this), {passive:false});
-      canvas.addEventListener('mouseenter', this.mouseEnterAction.bind(this), {passive:false});
-      canvas.addEventListener('mouseleave', this.mouseLeaveAction.bind(this), {passive:false});
-      window.addEventListener('wheel', this.wheelAction.bind(this), {passive:false});
-      canvas.addEventListener('click', this.clickAction.bind(this), {passive:false});
-      canvas.addEventListener('dblclick', this.doubleClickAction.bind(this), {passive:false});
       // タッチ（ダブルタップは無いので自前で実装）
       canvas.addEventListener('touchstart', this.touchStartAction.bind(this), {passive:false});
       canvas.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
       window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
+      // ホイール
+      window.addEventListener('wheel', this.wheelAction.bind(this), {passive:false});
+
+      // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
+      const {mouseenter = false, mouseleave = false, click = false, dblclick = false, keydown = false, keyup = false} = options;
+      // マウスの出入り
+      if (mouseenter) { canvas.addEventListener('mouseenter', this.mouseEnterAction.bind(this), {passive:false}); }
+      if (mouseleave) { canvas.addEventListener('mouseleave', this.mouseLeaveAction.bind(this), {passive:false}); }
+      // クリック
+      if (click) { canvas.addEventListener('click', this.clickAction.bind(this), {passive:false}); }
+      if (dblclick) { canvas.addEventListener('dblclick', this.doubleClickAction.bind(this), {passive:false}); }
       // キー(keypressは非推奨とのこと）
       // いわゆる押しっぱなしの時の処理についてはフラグの切り替えのために両方必要になるわね
-      window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false});
-      window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false});
+      if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
+      if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
     }
     mouseDownAction(e){
       this.mouseDownPointerAction(e);
