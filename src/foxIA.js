@@ -151,6 +151,16 @@ BackSpace,まあ、後は調べてください...
 あんま難しいこと考えても仕方ないですね。
 */
 
+/*
+もちろん
+p5のようにイベントごとにリスナーを用意する道もあるんですけど
+あるんですけどね
+たとえばmousePressedだけ用意するにしてもタッチにもってなった場合
+そっちも用意しないといけないので
+いろいろめんどくさいので
+やめましょうってことになったわけです。
+*/
+
 const foxIA = (function(){
   const fox = {};
 
@@ -234,16 +244,21 @@ const foxIA = (function(){
       // optionsになったのね。じゃあそうか。passiveの規定値はfalseのようです。指定する必要、ないのか。
       // そして1回のみの場合はonceをtrueにするようです。
       // たとえば警告なんかに使えるかもしれないですね。ていうか明示した方がいいのか。
-      // マウス
-      canvas.addEventListener('mousedown', this.mouseDownAction.bind(this), {passive:false});
-      canvas.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
-      window.addEventListener('mouseup', this.mouseUpAction.bind(this), {passive:false});
-      // タッチ（ダブルタップは無いので自前で実装）
-      canvas.addEventListener('touchstart', this.touchStartAction.bind(this), {passive:false});
-      canvas.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
-      window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
+      // 以降はdefaultIAと名付ける、これがtrueデフォルトで、falseにするとこれらを用意しないようにできる。
+      // たとえば考えにくいけどホイールしか要らないよって場合とか。
+      const {defaultIA = true, wheel = true} = options;
+      if (defaultIA) {
+        // マウス
+        canvas.addEventListener('mousedown', this.mouseDownAction.bind(this), {passive:false});
+        canvas.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
+        window.addEventListener('mouseup', this.mouseUpAction.bind(this), {passive:false});
+        // タッチ（ダブルタップは無いので自前で実装）
+        canvas.addEventListener('touchstart', this.touchStartAction.bind(this), {passive:false});
+        canvas.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
+        window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
+      }
       // ホイール
-      window.addEventListener('wheel', this.wheelAction.bind(this), {passive:false});
+      if (wheel) { window.addEventListener('wheel', this.wheelAction.bind(this), {passive:false}); }
 
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
       const {mouseenter = false, mouseleave = false, click = false, dblclick = false, keydown = false, keyup = false} = options;
