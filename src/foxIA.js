@@ -161,6 +161,12 @@ p5のようにイベントごとにリスナーを用意する道もあるんで
 やめましょうってことになったわけです。
 */
 
+// windowにした
+// pavelさんのコードは全画面前提なので
+// 全画面だとどっちでもいいんですけど
+// ここをcanvasにしてしまうと画面内でインタラクションが開始された後で画面外に抜けるときに止まってしまうので
+// それを回避するための処理です
+
 const foxIA = (function(){
   const fox = {};
 
@@ -250,11 +256,11 @@ const foxIA = (function(){
       if (defaultIA) {
         // マウス
         canvas.addEventListener('mousedown', this.mouseDownAction.bind(this), {passive:false});
-        canvas.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
+        window.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
         window.addEventListener('mouseup', this.mouseUpAction.bind(this), {passive:false});
         // タッチ（ダブルタップは無いので自前で実装）
         canvas.addEventListener('touchstart', this.touchStartAction.bind(this), {passive:false});
-        canvas.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
+        window.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
         window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
       }
       // ホイール

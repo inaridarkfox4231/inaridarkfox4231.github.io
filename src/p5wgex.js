@@ -4881,11 +4881,11 @@ const foxIA = (function(){
       if (defaultIA) {
         // マウス
         canvas.addEventListener('mousedown', this.mouseDownAction.bind(this), {passive:false});
-        canvas.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
+        window.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
         window.addEventListener('mouseup', this.mouseUpAction.bind(this), {passive:false});
         // タッチ（ダブルタップは無いので自前で実装）
         canvas.addEventListener('touchstart', this.touchStartAction.bind(this), {passive:false});
-        canvas.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
+        window.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
         window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
       }
       // ホイール
