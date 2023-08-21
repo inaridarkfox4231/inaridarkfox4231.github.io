@@ -2357,9 +2357,14 @@ const p5wgex = (function(){
       {name:"aNormal", size:3, data:mesh.n},
       {name:"aTexCoord", size:2, data:mesh.uv}
     );
+    // これだとインスタンシングやトラフィーに対応できないのでそのままぶち込めばいい
+    /*
     for(const attr of otherAttrs){
       attrData.push({name:attr.name, size:attr.size, data:attr.data});
     }
+    */
+    attrData.push(...otherAttrs);
+    // そのうえでregistFigureすればいい
     node.registFigure(meshName, attrData);
     node.registIBO(meshName + "IBO", {data:mesh.f});
   }
@@ -4535,7 +4540,9 @@ const p5wgex = (function(){
           .setUniform("uNormalMatrix", normalMat)
           .setUniform("uModelNormalMatrix", modelNormalMat);
     }
-    render(node, tf, cam, process = [], initializeTransform = true){
+    renderPrepare(node, tf, cam, process = [], initializeTransform = true){
+      // render改めrenderPrepare.
+      // ここでは準備するだけにしよう。
       // forwardは個別のレンダリング用。
       // deferredはシーンを用意するだけ。
       // デフォルトではtfをレンダーのたびに初期化します
@@ -4556,7 +4563,9 @@ const p5wgex = (function(){
         }
       }
       this.setMatrixUniforms(node, tf, cam);
-      node.drawElements("triangles");
+      // いろんなケースに対応するのがしんどいので（重複部分が多いので）
+      // ここは外から命令しましょう
+      //node.drawElements("triangles");
       return this;
     }
     output(){
