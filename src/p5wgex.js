@@ -4468,18 +4468,23 @@ const p5wgex = (function(){
       for(const _key of keys){ this.spotLightParams[_key] = info[_key]; }
       if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
     }
-    lightOn(){
+    lightOn(node){
+      // 即時的に切り替える処理にする
       this.lightingParams.use = true;
+      node.setUniform("uUseLight", this.lightingParams.use);
       return this;
     }
-    lightOff(){
+    lightOff(node){
       this.lightingParams.use = false;
+      node.setUniform("uUseLight", this.lightingParams.use);
       return this;
     }
     setLightingUniforms(node){
       // forwardの場合は事前にやるんだけど
       // deferredの場合は後回し
       node.setUniform("uUseLight", this.lightingParams.use);
+      if (!this.lightingParams.use) { return; } // noLights.
+
       node.setUniform("uAmbientColor", this.lightingParams.ambient);
       node.setUniform("uShininess", this.lightingParams.shininess);
       node.setUniform("uAttenuation", this.lightingParams.attenuation);
