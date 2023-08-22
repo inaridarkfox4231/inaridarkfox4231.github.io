@@ -295,8 +295,8 @@ const foxIA = (function(){
         window.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
         window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
       }
-      // ホイール
-      if (wheel) { window.addEventListener('wheel', this.wheelAction.bind(this), {passive:false}); }
+      // ホイールはキャンバス外で実行することはまずないですね...canvasでいいかと。
+      if (wheel) { canvas.addEventListener('wheel', this.wheelAction.bind(this), {passive:false}); }
 
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
       const {mouseenter = false, mouseleave = false, click = false, dblclick = false, keydown = false, keyup = false} = options;
