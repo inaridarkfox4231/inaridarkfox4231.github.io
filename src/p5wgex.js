@@ -3973,8 +3973,12 @@ const p5wgex = (function(){
   // その継承として書き直せたらいいですね
   // Prototypeの継承を単独で使うこともできるし
   // RenderingSystemの方を使ってもいい、柔軟性を獲得することを目指す。
+
+  // node渡さないとね
   class ShaderPrototype{
-    constructor(){
+    constructor(node){
+      this.node = node;
+
       this.attrs = [];
       this.varyings = [];
 
@@ -4053,7 +4057,7 @@ const p5wgex = (function(){
       this[clearLocation][clearTarget] = ``;
       return this;
     }
-    registPainter(node, name, options = {}){
+    registPainter(name, options = {}){
       let _vs =
       `#version 300 es
       `;
@@ -4101,14 +4105,14 @@ const p5wgex = (function(){
       if (showVertexShader) { console.log(_vs); }
       if (showFragmentShader) { console.log(_fs); }
       // 登録
-      node.registPainter(name, _vs, _fs);
+      this.node.registPainter(name, _vs, _fs);
       return this;
     }
   }
 
   class ForwardLightingShader extends ShaderPrototype{
-    constructor(){
-      super();
+    constructor(node){
+      super(node);
     }
     initialize(options = {}){
       this.attrs = [
@@ -4271,8 +4275,8 @@ const p5wgex = (function(){
 
   // MRT前提のディファード用シェーダ
   class DeferredPrepareShader extends ShaderPrototype{
-    constructor(){
-      super();
+    constructor(node){
+      super(node);
     }
     initialize(options = {}){
       // TODO
@@ -4280,8 +4284,8 @@ const p5wgex = (function(){
   }
   // こっちはディファードをライティングするためのシェーダ
   class DeferredLightingShader extends ShaderPrototype{
-    constructor(){
-      super();
+    constructor(node){
+      super(node);
     }
     initialize(options = {}){
       // TODO
@@ -4298,8 +4302,8 @@ const p5wgex = (function(){
   // もちろん描画先を別のfbにすることも可能。
   // vUvのままではまずいのでuvを用意しましょう。
   class PlaneShader extends ShaderPrototype{
-    constructor(){
-      super();
+    constructor(node){
+      super(node);
     }
     initialize(options={}){
       this.attrs =[{type:"vec2", name:"aPosition"}];
@@ -4327,8 +4331,12 @@ const p5wgex = (function(){
   // FilterSystemもこれでいける...かどうか知らないけど。
   // 冗談みたいにコピペしまくってるけど許して
   // こうすることでbindで切り替えできるでしょ。
+
+  // nodeをこっちにも渡す
+  // 同じnodeである必要が...あるはず。
   class RenderingSystem{
-    constructor(){
+    constructor(node){
+      this.node = node;
       this.shaders = {};
       this.currentShader = undefined;
     }
@@ -4379,19 +4387,19 @@ const p5wgex = (function(){
       this.currentShader.clearCode(clearTarget, clearLocation);
       return this;
     }
-    registPainter(node, name, options = {}){
-      this.currentShader.registPainter(node, name, options);
+    registPainter(name, options = {}){
+      this.currentShader.registPainter(name, options);
       return this;
     }
   }
 
   // StandardLightingSystemです。はい。
   class StandardLightingSystem extends RenderingSystem{
-    constructor(){
-      super();
-      this.registShader("forwardLight", new ForwardLightingShader());
-      this.registShader("deferredPrepare", new DeferredPrepareShader());
-      this.registShader("deferredLight", new DeferredLightingShader());
+    constructor(node){
+      super(node);
+      this.registShader("forwardLight", new ForwardLightingShader(node));
+      this.registShader("deferredPrepare", new DeferredPrepareShader(node));
+      this.registShader("deferredLight", new DeferredLightingShader(node));
       this.prepareLightingParameters();
       this.renderingType = "forward";
     }
@@ -4450,76 +4458,76 @@ const p5wgex = (function(){
         specularColor:[1, 1, 1]
       };
     }
-    setLight(node, info = {}){
+    setLight(info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
       this.lightingParams.use = true;
     }
     // directionalLight.
-    setDirectionalLight(node, info = {}){
+    setDirectionalLight(info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.directionalLightParams[_key] = info[_key]; }
       if (this.directionalLightParams.count > 0) { this.directionalLightParams.use = true; }
     }
     // pointLight.
-    setPointLight(node, info = {}){
+    setPointLight(info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.pointLightParams[_key] = info[_key]; }
       if (this.pointLightParams.count > 0) { this.pointLightParams.use = true; }
     }
     // spotLight.
-    setSpotLight(node, info = {}){
+    setSpotLight(info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.spotLightParams[_key] = info[_key]; }
       if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
     }
-    lightOn(node){
+    lightOn(){
       // 即時的に切り替える処理にする
       this.lightingParams.use = true;
-      node.setUniform("uUseLight", this.lightingParams.use);
+      this.node.setUniform("uUseLight", this.lightingParams.use);
       return this;
     }
-    lightOff(node){
+    lightOff(){
       this.lightingParams.use = false;
-      node.setUniform("uUseLight", this.lightingParams.use);
+      this.node.setUniform("uUseLight", this.lightingParams.use);
       return this;
     }
-    setLightingUniforms(node){
+    setLightingUniforms(){
       // forwardの場合は事前にやるんだけど
       // deferredの場合は後回し
-      node.setUniform("uUseLight", this.lightingParams.use);
+      this.node.setUniform("uUseLight", this.lightingParams.use);
       if (!this.lightingParams.use) { return; } // noLights.
 
-      node.setUniform("uAmbientColor", this.lightingParams.ambient);
-      node.setUniform("uShininess", this.lightingParams.shininess);
-      node.setUniform("uAttenuation", this.lightingParams.attenuation);
-      node.setUniform("uUseSpecular", this.lightingParams.useSpecular);
+      this.node.setUniform("uAmbientColor", this.lightingParams.ambient);
+      this.node.setUniform("uShininess", this.lightingParams.shininess);
+      this.node.setUniform("uAttenuation", this.lightingParams.attenuation);
+      this.node.setUniform("uUseSpecular", this.lightingParams.useSpecular);
 
       if (this.directionalLightParams.use){
-        node.setUniform("uDirectionalLightCount", this.directionalLightParams.count);
-        node.setUniform("uLightingDirection", this.directionalLightParams.direction);
-        node.setUniform("uDirectionalDiffuseColor", this.directionalLightParams.diffuseColor);
-        node.setUniform("uDirectionalSpecularColor", this.directionalLightParams.specularColor);
+        this.node.setUniform("uDirectionalLightCount", this.directionalLightParams.count);
+        this.node.setUniform("uLightingDirection", this.directionalLightParams.direction);
+        this.node.setUniform("uDirectionalDiffuseColor", this.directionalLightParams.diffuseColor);
+        this.node.setUniform("uDirectionalSpecularColor", this.directionalLightParams.specularColor);
       }
 
       if(this.pointLightParams.use){
-        node.setUniform("uPointLightCount", this.pointLightParams.count);
-        node.setUniform("uPointLightLocation", this.pointLightParams.location);
-        node.setUniform("uPointLightDiffuseColor", this.pointLightParams.diffuseColor);
-        node.setUniform("uPointLightSpecularColor", this.pointLightParams.specularColor);
+        this.node.setUniform("uPointLightCount", this.pointLightParams.count);
+        this.node.setUniform("uPointLightLocation", this.pointLightParams.location);
+        this.node.setUniform("uPointLightDiffuseColor", this.pointLightParams.diffuseColor);
+        this.node.setUniform("uPointLightSpecularColor", this.pointLightParams.specularColor);
       }
 
       if (this.spotLightParams.use) {
-        node.setUniform("uSpotLightCount", this.spotLightParams.count);
-        node.setUniform("uSpotLightLocation", this.spotLightParams.location);
-        node.setUniform("uSpotLightDirection", this.spotLightParams.direction);
-        node.setUniform("uSpotLightAngle", this.spotLightParams.angle);
-        node.setUniform("uSpotLightConc", this.spotLightParams.conc);
-        node.setUniform("uSpotLightDiffuseColor", this.spotLightParams.diffuseColor);
-        node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
+        this.node.setUniform("uSpotLightCount", this.spotLightParams.count);
+        this.node.setUniform("uSpotLightLocation", this.spotLightParams.location);
+        this.node.setUniform("uSpotLightDirection", this.spotLightParams.direction);
+        this.node.setUniform("uSpotLightAngle", this.spotLightParams.angle);
+        this.node.setUniform("uSpotLightConc", this.spotLightParams.conc);
+        this.node.setUniform("uSpotLightDiffuseColor", this.spotLightParams.diffuseColor);
+        this.node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
       }
     }
-    setMatrixUniforms(node, tf, cam){
+    setMatrixUniforms(tf, cam){
       // deferredの場合はuViewMatrixを使わないので送らない
       // もちろん用意することは可能でその場合はカスタマイズで何とかする
       const modelMat = tf.getModelMat();
@@ -4532,15 +4540,15 @@ const p5wgex = (function(){
       // deferredの方、内部で法線計算とかしてて若干内容が古いので
       // そのうち何とかします
       if (this.renderingType === "forward") {
-        node.setUniform("uViewMatrix", viewMat.m);
+        this.node.setUniform("uViewMatrix", viewMat.m);
       }
-      node.setUniform("uModelMatrix", modelMat.m)
-          .setUniform("uModelViewMatrix", modelViewMat.m)
-          .setUniform("uProjMatrix", projMat.m)
-          .setUniform("uNormalMatrix", normalMat)
-          .setUniform("uModelNormalMatrix", modelNormalMat);
+      this.node.setUniform("uModelMatrix", modelMat.m)
+               .setUniform("uModelViewMatrix", modelViewMat.m)
+               .setUniform("uProjMatrix", projMat.m)
+               .setUniform("uNormalMatrix", normalMat)
+               .setUniform("uModelNormalMatrix", modelNormalMat);
     }
-    renderPrepare(node, tf, cam, process = [], initializeTransform = true){
+    renderPrepare(tf, cam, process = [], initializeTransform = true){
       // render改めrenderPrepare.
       // ここでは準備するだけにしよう。
       // forwardは個別のレンダリング用。
@@ -4562,7 +4570,7 @@ const p5wgex = (function(){
           case "ss": tf.scale(tfData, tfData, tfData); break;
         }
       }
-      this.setMatrixUniforms(node, tf, cam);
+      this.setMatrixUniforms(tf, cam);
       // いろんなケースに対応するのがしんどいので（重複部分が多いので）
       // ここは外から命令しましょう
       //node.drawElements("triangles");
@@ -4637,6 +4645,7 @@ const p5wgex = (function(){
     show(){
       const gr = this.loadGraphic();
       gr.clear();
+      // prepare gradation bg
       const param = {};
       param.name = "foxPerformanceChecker";
       param.view = [0, 0, gr.width/this.w, gr.height/this.h];
@@ -4648,16 +4657,21 @@ const p5wgex = (function(){
         const c = this.bgColor;
         gr.background(c[0]*255, c[1]*255, c[2]*255, c[3]*255);
       }
-      const t = this.textInfo.color;
-      gr.fill(t[0]*255, t[1]*255, t[2]*255, t[3]*255);
-      const o = this.textInfo.offset;
+      // get frameRate
       const rate = frameRate();
-      gr.text(rate.toFixed(2), o[0], o[1]);
+      // draw bar
       const b = this.barColor;
       gr.fill(b[0]*255, b[1]*255, b[2]*255, b[3]*255);
       const level = rate / this.targetFrameRate;
       gr.rect(0,0, gr.width*level, gr.height);
+      // draw rate
+      const t = this.textInfo.color;
+      gr.fill(t[0]*255, t[1]*255, t[2]*255, t[3]*255);
+      const o = this.textInfo.offset;
+      gr.text(rate.toFixed(2), o[0], o[1]);
+      // update
       this.updateGraphic();
+      // draw result
       copyPainter(this.node, {src:param});
     }
   }
