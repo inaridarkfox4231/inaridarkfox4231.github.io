@@ -96,11 +96,14 @@ pointerPrototype:
 
 Interaction:
   mouseDownDefaultAction(e):
-    e.offsetXやe.offsetYを使って、マウスダウンの際の一般的なイベントを記述
-  mouseMoveDefaultAction(e):
-    e.offsetXやe.offsetYを使って...
-    e.movementXやe.movementYも使うかも？マウスはポインタが1つしか
-    ないからそういう選択肢もあるわね
+    とにかくマウスがダウンされたらなんか開始する、その処理を記述する
+    これをx,yで書かないのは、要するにタッチだとそれがあちこちになるので不整合、
+    そこら辺を考慮してる。詳しくやりたいならPointerを継承すべき。
+  mouseMoveDefaultAction(dx, dy, x, y):
+    e.clientX/Yからキャンバスの位置座標を引いて計算する
+    マウスポインタが存在しなくても実行されるようにする必要があるのでそういう形になる
+    なるんだけど
+    それだけ用意してもタッチサイドでは何もできないのでう～んって感じではあるわね
   mouseUpDefaultAction():
     マウスアップの際の一般的な処理
     上記2つもそうだがInteraction独自の処理を書くことの方が多いです
@@ -119,8 +122,7 @@ Interaction:
     ダブルクリックで併用できるが、これが用意されている場合
     タッチではこっちが優先される
   touchStartDefaultAction(e):
-    eの扱いは検討中
-    とにかくタッチがスタートした場合の一般的な処理（あんま使わない？）
+    とにかくタッチがスタートしたらなんかする、その場合の処理を記述
   touchSwipeAction(dx, dy, x, y, px, py):
     指一本で動かす場合の処理
   touchPinchInOutAction(value, x, y, px, py):
@@ -186,13 +188,15 @@ const foxIA = (function(){
       this.dy = 0;
       this.prevX = 0;
       this.prevY = 0;
-      this.canvasLeft = 0; // touch用
-      this.canvasTop = 0; // touch用
+      this.canvasLeft = 0;
+      this.canvasTop = 0;
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
-    mouseInitialize(e){
-      this.x = e.offsetX;
-      this.y = e.offsetY;
+    mouseInitialize(e, left, top){
+      this.x = e.clientX - left;
+      this.y = e.clientY - top;
+      this.canvasLeft = left;
+      this.canvasTop = top;
       this.prevX = this.x;
       this.prevY = this.y;
       this.button = e.button; // 0:left, 1:center, 2:right
@@ -202,10 +206,10 @@ const foxIA = (function(){
     mouseUpdate(e){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (e.offsetX - this.x);
-      this.dy = (e.offsetY - this.y);
-      this.x = e.offsetX;
-      this.y = e.offsetY;
+      this.dx = (e.clientX - this.canvasLeft - this.x);
+      this.dy = (e.clientY - this.canvasTop - this.y);
+      this.x = e.clientX - this.canvasLeft;
+      this.y = e.clientY - this.canvasTop;
     }
     mouseMoveAction(e){
     }
@@ -221,7 +225,7 @@ const foxIA = (function(){
       this.prevY = this.y;
     }
     updateCanvasData(left, top){
-      if (this.button < 0){ return; } // マウスの場合
+      // マウスでもタッチでも実行する
       const prevLeft = this.canvasLeft;
       const prevTop = this.canvasTop;
       this.canvasLeft = left;
@@ -332,7 +336,7 @@ const foxIA = (function(){
     }
     mouseMoveAction(e){
       this.mouseMovePointerAction(e);
-      this.mouseMoveDefaultAction(e);
+      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.canvasLeft, e.clientY - this.canvasTop);
     }
     mouseMovePointerAction(e){
       if(this.pointers.length == 0){ return; }
@@ -340,7 +344,7 @@ const foxIA = (function(){
       p.mouseUpdate(e);
       p.mouseMoveAction(e);
     }
-    mouseMoveDefaultAction(e){
+    mouseMoveDefaultAction(dx, dy, x, y){
       // Interactionサイドの実行内容を書く
     }
     mouseUpAction(){
