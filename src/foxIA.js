@@ -327,7 +327,7 @@ const foxIA = (function(){
     }
     mouseDownPointerAction(e){
       const p = this.factory();
-      p.mouseInitialize(e);
+      p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
       p.mouseDownAction(e);
       this.pointers.push(p);
     }
