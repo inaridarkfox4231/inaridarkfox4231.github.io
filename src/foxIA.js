@@ -167,6 +167,13 @@ p5のようにイベントごとにリスナーを用意する道もあるんで
 // ここをcanvasにしてしまうと画面内でインタラクションが開始された後で画面外に抜けるときに止まってしまうので
 // それを回避するための処理です
 
+// いくつか変更
+// InteractionとpointerPrototypeにcanvasLeft/Topを設けました
+// これがないと全画面でない場合にきちんとキャンバス上の座標を取得できません
+// またtouchMovepointerActionのpreventDefaultを切りました
+// スマホなどで画面外を操作したときのスクロールができなくなっていたので。
+// 最後に、リサイズ時にcanvasLeft/Topが更新されるようにしました。
+
 const foxIA = (function(){
   const fox = {};
 
@@ -179,6 +186,8 @@ const foxIA = (function(){
       this.dy = 0;
       this.prevX = 0;
       this.prevY = 0;
+      this.canvasLeft = 0; // touch用
+      this.canvasTop = 0; // touch用
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
     mouseInitialize(e){
@@ -202,22 +211,35 @@ const foxIA = (function(){
     }
     mouseUpAction(){
     }
-    touchInitialize(t){
+    touchInitialize(t, left, top){
       this.id = t.identifier;
-      this.x = t.pageX; // 要するにmouseX的なやつ
-      this.y = t.pageY; // 要するにmouseY的なやつ
+      this.x = t.pageX - left; // 要するにmouseX的なやつ
+      this.y = t.pageY - top; // 要するにmouseY的なやつ
+      this.canvasLeft = left;
+      this.canvasTop = top;
       this.prevX = this.x;
       this.prevY = this.y;
+    }
+    updateCanvasData(left, top){
+      if (this.button < 0){ return; } // マウスの場合
+      const prevLeft = this.canvasLeft;
+      const prevTop = this.canvasTop;
+      this.canvasLeft = left;
+      this.canvasTop = top;
+      this.x += prevLeft - left;
+      this.y += prevTop - top;
+      this.prevX += prevLeft - left;
+      this.prevY += prevTop - top;
     }
     touchStartAction(t){
     }
     touchUpdate(t){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (t.pageX - this.x);
-      this.dy = (t.pageY - this.y);
-      this.x = t.pageX;
-      this.y = t.pageY;
+      this.dx = (t.pageX - this.canvasLeft - this.x);
+      this.dy = (t.pageY - this.canvasTop - this.y);
+      this.x = t.pageX - this.canvasLeft;
+      this.y = t.pageY - this.canvasTop;
     }
     touchMoveAction(t){
     }
@@ -235,6 +257,8 @@ const foxIA = (function(){
       this.factory = factory;
       this.width = 0;
       this.height = 0;
+      this.canvasLeft = 0; // touch用
+      this.canvasTop = 0; // touch用
       this.tapCount = 0; // ダブルタップ判定用
       this.firstTapped = {x:0, y:0};
     }
@@ -242,10 +266,14 @@ const foxIA = (function(){
       // 横幅縦幅を定義
       this.width = Number((canvas.style.width).split("px")[0]);
       this.height = Number((canvas.style.height).split("px")[0]);
+      // touchの場合はこうしないときちんとキャンバス上の座標が取得できない
+      const rect = canvas.getBoundingClientRect();
+      this.canvasLeft = rect.left;
+      this.canvasTop = rect.top;
       // 右クリック時のメニュー表示を殺す
       document.oncontextmenu = (e) => { e.preventDefault(); }
       // touchのデフォルトアクションを殺す
-      canvas.style["touch-action"] = "none";
+      //canvas.style["touch-action"] = "none";
       // イベントリスナー
       // optionsになったのね。じゃあそうか。passiveの規定値はfalseのようです。指定する必要、ないのか。
       // そして1回のみの場合はonceをtrueにするようです。
@@ -278,6 +306,16 @@ const foxIA = (function(){
       // いわゆる押しっぱなしの時の処理についてはフラグの切り替えのために両方必要になるわね
       if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
       if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
+      // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
+      window.addEventListener('resize', (function(){
+        const newRect = canvas.getBoundingClientRect();
+        this.updateCanvasData(newRect.left, newRect.top);
+      }).bind(this));
+    }
+    updateCanvasData(left, top){
+      this.canvasLeft = left;
+      this.canvasTop = top;
+      for(const p of this.pointers){ p.updateCanvasData(left, top); }
     }
     mouseDownAction(e){
       this.mouseDownPointerAction(e);
@@ -384,7 +422,7 @@ const foxIA = (function(){
         }
         if(!equalFlag){
           const p = this.factory();
-          p.touchInitialize(currentTouches[i]);
+          p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
           p.touchStartAction(currentTouches[i]);
           newPointers.push(p);
         }
@@ -428,7 +466,7 @@ const foxIA = (function(){
       }
     }
     touchMovePointerAction(e){
-      e.preventDefault();
+      //e.preventDefault();
       const currentTouches = e.targetTouches;
       for (let i = 0; i < currentTouches.length; i++){
         const t = currentTouches[i];
