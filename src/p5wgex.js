@@ -2350,7 +2350,9 @@ const p5wgex = (function(){
   // たとえば{name:"aColor", size:4, data:頂点色データ}
   // こんな感じ。要するに普通にattrを追加するだけ。
   // IBOは普通にname + IBOになるので注意しましょう
-  function registMesh(node, mesh, meshName, otherAttrs = []){
+  // IBOが複数ある場合に対応させるのと
+  // largeを自動的に付与させるように仕様変更
+  function registMesh(node, mesh, meshName, optionalData = {}){
     const attrData = [];
     attrData.push(
       {name:"aPosition", size:3, data:mesh.v},
@@ -2363,10 +2365,20 @@ const p5wgex = (function(){
       attrData.push({name:attr.name, size:attr.size, data:attr.data});
     }
     */
-    attrData.push(...otherAttrs);
+    const {otherAttrs = [], otherIndices = []} = optionalData;
+    if (otherAttrs.length > 0) { attrData.push(...otherAttrs); }
     // そのうえでregistFigureすればいい
     node.registFigure(meshName, attrData);
-    node.registIBO(meshName + "IBO", {data:mesh.f});
+    // fのIBOを設定する。無くてもいいようにする。
+    if (mesh.f !== undefined) {
+      node.registIBO(meshName + "IBO", {data:mesh.f, large:(mesh.f.length > 65535)});
+    }
+    // 追加でIBOがあればそれも登録する。
+    if (otherIndices.length > 0) {
+      for (const iboData of otherIndices) {
+        node.registIBO(iboData.name + "IBO", {data:iboData.data, large:(iboData.length > 65535)});
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
