@@ -1609,6 +1609,72 @@ const p5wgex = (function(){
     copy(){
       return new Vec3(this.x, this.y, this.z); // copy欲しいです
     }
+    slerp(v, amt){
+      // 自分とvのamtの補間で得られるベクトルで自分を置き換える感じ
+      // edge cases.
+      if (amt === 0) { return this; }
+      if (amt === 1) { return this.set(v); }
+
+      // calculate magnitudes
+      const selfMag = this.mag();
+      const vMag = v.mag();
+      const magmag = selfMag * vMag;
+      // if either is a zero vector, linearly interpolate by these vectors
+      if (magmag === 0) {
+        this.mult(1 - amt).add(v.x * amt, v.y * amt, v.z * amt);
+        return this;
+      }
+      // the cross product of 'this' and 'v' is the axis of rotation
+      const axis = this.copy().cross(v);
+      const axisMag = axis.mag();
+      // Calculates the angle between 'this' and 'v'
+      const theta = Math.atan2(axisMag, this.dot(v));
+
+      // However, if the norm of axis is 0, normalization cannot be performed,
+      // so we will divide the cases
+      if (axisMag > 0) {
+        axis.x /= axisMag;
+        axis.y /= axisMag;
+        axis.z /= axisMag;
+      } else if (theta < Math.PI * 0.5) {
+        // if the norm is 0 and the angle is less than PI/2,
+        // the angle is very close to 0, so do linear interpolation.
+        this.mult(1 - amt).add(v.x * amt, v.y * amt, v.z * amt);
+        return this;
+      } else {
+        // If the norm is 0 and the angle is more than PI/2, the angle is
+        // very close to PI.
+        // In this case v can be regarded as '-this', so take any vector
+        // that is orthogonal to 'this' and use that as the axis.
+        if (this.z === 0 && v.z === 0) {
+          // if both this and v are 2D vectors, use (0,0,1)
+          // this makes the result also a 2D vector.
+          axis.set(0, 0, 1);
+        } else if (this.x !== 0) {
+          // if the x components is not 0, use (y, -x, 0)
+          axis.set(this.y, -this.x, 0).normalize();
+        } else {
+          // if the x components is 0, use (1,0,0)
+          axis.set(1, 0, 0);
+        }
+      }
+
+      // Since 'axis' is a unit vector, ey is a vector of the same length as 'this'.
+      const ey = axis.copy().cross(this);
+      // interpolate the length with 'this' and 'v'.
+      const lerpedMagFactor = (1 - amt) + amt * vMag / selfMag;
+      // imagine a situation where 'axis', 'this', and 'ey' are pointing
+      // along the z, x, and y axes, respectively.
+      // rotates 'this' around 'axis' by amt * theta towards 'ey'.
+      const cosMultiplier = lerpedMagFactor * Math.cos(amt * theta);
+      const sinMultiplier = lerpedMagFactor * Math.sin(amt * theta);
+      // then, calculate 'result'.
+      this.x = this.x * cosMultiplier + ey.x * sinMultiplier;
+      this.y = this.y * cosMultiplier + ey.y * sinMultiplier;
+      this.z = this.z * cosMultiplier + ey.z * sinMultiplier;
+
+      return this;
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
