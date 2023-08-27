@@ -1609,6 +1609,13 @@ const p5wgex = (function(){
     copy(){
       return new Vec3(this.x, this.y, this.z); // copy欲しいです
     }
+    lerp(v, amt){
+      // 自分自身とvをlerpで補間する
+      this.x = this.x * (1-amt) + v.x * amt;
+      this.y = this.y * (1-amt) + v.y * amt;
+      this.z = this.z * (1-amt) + v.z * amt;
+      return this;
+    }
     slerp(v, amt){
       // 自分とvのamtの補間で得られるベクトルで自分を置き換える感じ
       // edge cases.
