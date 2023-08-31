@@ -2588,8 +2588,8 @@ const p5wgex = (function(){
   // params: radius=100, detail={x=16,y=16}, angle={start=0,stop=2pi}, fillType="open"
   // radiusは半径です。詳しくはellipsoidの項にて。
   function sphereMesh(params = {}){
-    const {size:s = 100} = params;
-    params.size = {x:s, y:s, z:s};
+    const {radius:r = 100} = params;
+    params.size = {x:r, y:r, z:r};
     return ellipsoidMesh(params);
   }
 
