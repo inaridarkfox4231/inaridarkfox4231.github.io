@@ -2300,6 +2300,1133 @@ const p5wgex = (function(){
   // ---------------------------------------------------------------------------------------------- //
   // Meshes.
 
+  // もう全部ここにまとめてしまおう。
+  const meshUtil = {
+    cube:cubeMesh,
+    box:boxMesh,
+    sphere:sphereMesh,
+    ellipsoid:ellipsoidMesh,
+    torus:torusMesh,
+    plane:planeMesh,
+    quad:quadMesh,
+    triangle:triangleMesh,
+    circle:circleMesh,
+    ellipse:ellipseMesh,
+    cylinder:cylinderMesh,
+    truncatedCone:truncatedConeMesh,
+    cone:coneMesh,
+    curve:curveMesh,
+    band:bandMesh,
+    torusKnot:torusKnotMesh,
+    icosahedron:icosahedronMesh,
+    icoSphere:icoSphereMesh,
+    fs:getFrenetSerret, // 一応。func,t,deltaが引数。
+    regist:registMesh,
+    create:(() => {return new Geometry()})
+  }
+
+  // Partition用の補助関数
+
+  // quadMeshPartition.
+  // v0,v1,v2,v3はそれぞれ{v:Vec3, uv:Vec3}というオブジェクトで、
+  // dtxとdtyに応じて分割される。結果がmeshに登録される。新たに頂点が追加され、
+  // それに基づいて面の番号が追加される。
+  function quadMeshPartition(mesh, v0, v1, v2, v3, dtx, dty){
+    const vn = mesh.v.length/3; // これがベース. 3で割ってね。
+    const dx = v1.v.copy().sub(v0.v);
+    const dy = v2.v.copy().sub(v0.v);
+    const normalVector = dx.copy().cross(dy).normalize();
+    for(let k=0; k<=dty; k++){
+      const ratioY = k/dty;
+      for(let i=0; i<=dtx; i++){
+        const ratioX = i/dtx;
+        const v01 = v0.v.copy().lerp(v1.v, ratioX);
+        const v23 = v2.v.copy().lerp(v3.v, ratioX);
+        const v0123 = v01.lerp(v23, ratioY);
+        mesh.v.push(...v0123.toArray());
+        mesh.n.push(...normalVector.toArray());
+        const uv01 = v0.uv.copy().lerp(v1.uv, ratioX);
+        const uv23 = v2.uv.copy().lerp(v3.uv, ratioX);
+        const uv0123 = uv01.lerp(uv23, ratioY);
+        mesh.uv.push(uv0123.x, uv0123.y);
+      }
+    }
+    // 下から上へ
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    for(let k=0; k<dty; k++){
+      for(let i=0; i<dtx; i++){
+        const ld = vn + (dtx+1)*k + i;
+        const rd = vn + (dtx+1)*k + i+1;
+        const lu = vn + (dtx+1)*(k+1) + i;
+        const ru = vn + (dtx+1)*(k+1) + i+1;
+        mesh.f.push(ld, rd, lu, lu, rd, ru);
+        mesh.l.push(ld, rd, rd, lu, ld, lu);
+        if (i === dtx-1){
+          mesh.l.push(rd, ru);
+        }
+        if (k === dty-1){
+          mesh.l.push(lu, ru);
+        }
+      }
+    }
+  }
+
+  // squareMeshPartition.
+  // quadでv3がv0とv1から平行四辺形を為すように決まる場合。
+  function squareMeshPartition(mesh, v0, v1, v2, dtx, dty){
+    const v3 = {};
+    const dx = v1.v.copy().sub(v0.v);
+    v3.v = v2.v.copy().add(dx);
+    const uvx = v1.uv.copy().sub(v0.uv);
+    v3.uv = v2.uv.copy().add(uvx);
+    quadMeshPartition(mesh, v0, v1, v2, v3, dtx, dty);
+  }
+
+  // triangleMeshPartition.
+  // v0,v1,v2が反時計回りになるように法線が決まる。分割もできる。meshに登録する。
+  // dt:1...(0,0),(1,0),(0,1)
+  // dt:2...(0,0),(1,0),(0,1),(2,0),(1,1),(0,2)って感じです。
+  function triangleMeshPartition(mesh, v0, v1, v2, dt){
+    const vn = mesh.v.length/3; // これがベース. 3で割ってね。
+    const dx = v1.v.copy().sub(v0.v);
+    const dy = v2.v.copy().sub(v0.v);
+    const normalVector = dx.copy().cross(dy).normalize();
+    const uvx = v1.uv.copy().sub(v0.uv);
+    const uvy = v2.uv.copy().sub(v0.uv);
+    const indices = [];
+    let curIndex = 0;
+    for(let k=0; k<=dt; k++){
+      const ratioY = k/dt;
+      indices[k] = [];
+      for(let i=0; i<=dt-k; i++){ // i+k=dt
+        const ratioX = i/dt;
+        const partV = v0.v.copy().addScalar(dx, ratioX).addScalar(dy, ratioY);
+        const partUV = v0.uv.copy().addScalar(uvx, ratioX).addScalar(uvy, ratioY);
+        mesh.v.push(...partV.toArray());
+        mesh.n.push(...normalVector.toArray());
+        mesh.uv.push(partUV.x, partUV.y);
+        indices[k].push(curIndex++);
+      }
+    }
+    // faceについては想像すればわかるようにi<dt-kのすべてについて計算される形
+    // kはdtまで動いていい
+    // でもk=dtだと計算されないので実質k<dtか
+    // rd,ld,ru,luは一応全部用意する
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    // ただし、i+k<dt-1の場合だけ。i+k=dt-1の場合、ruは存在しない。
+    // ruが存在する場合は逆向きの三角形の面が必要。
+    // 線については順方向だけ全部用意すればいい。
+    // ldは1を足すだけ。ruが難しい。？kに1を足せばいいのか。
+    // iとkからインデックスを出すのは難しいので...インチキする。
+    // テーブルを作ってしまえばいい。
+    for(let k=0; k<dt; k++){
+      for(let i=0; i<dt-k; i++){
+        const ld = vn + indices[k][i];
+        const rd = vn + indices[k][i+1];
+        const lu = vn + indices[k+1][i];
+        mesh.f.push(ld, rd, lu);
+        if (i+k<dt-1) {
+          const ru = vn + indices[k+1][i+1];
+          mesh.f.push(lu, rd, ru);
+        }
+        mesh.l.push(ld, rd, rd, lu, lu, ld); // ひとつだけでOK
+      }
+    }
+  }
+
+  // planeMesh.
+  // params: size={x=100,y=100}, auv=[0,1], buv=[1,1], cuv=[0,0], duv=[1,0], detail={x=1,y=1}.
+  // sizeは横と縦の幅の半分、detailは横と縦のdetail(1がデフォルト)
+  // p5は最小を2としているが不自然なので単純にマスの数にしています
+  // auv,buv,cuv,duvはUVを指定するオプションです。
+  // 第3引数は使わないので[0,1]とか[1,1]で問題ないです。
+  // デフォルトは左下、右下、左上、右上で(0,1),(1,1),(0,0),(1,0).
+  function planeMesh(params = {}){
+    const {size = {}} = params;
+    const {x:sx = 100, y:sy = 100} = size;
+    params.a = [-sx, -sy, 0];
+    params.b = [sx, -sy, 0];
+    params.c = [-sx, sy, 0];
+    params.d = [sx, sy, 0];
+    return quadMesh(params);
+  }
+
+  // quadMesh.
+  // params: a=[0,0,0], b=[100,0,0], c=[0,100,0], d=[100,100,0],
+  //         auv=[0,1], buv=[1,1], cuv=[0,0], duv=[1,0], detail={x=1,y=1}.
+  // a,b,c,dは引数としてVec3を生成するので{x,y,z}でも[i,j,k]でもいいです。
+  // これらのuvをauv,buv,...で指定します。デフォルトはplaneと同じ。
+  // c----d
+  // |    |
+  // a----b uvも準じる。
+  // uvについては第3引数は使わないので[0,1]とか[1,1]で問題ないです。
+  function quadMesh(params = {}){
+    const {
+      a = [0,0,0], b = [100,0,0], c = [0,100,0], d = [100,100,0],
+      auv = [0,1,0], buv = [1,1,0], cuv = [0,0,0], duv = [1,0,0],
+      detail = {}
+    } = params;
+    const {x:dtx = 1, y:dty = 1} = detail;
+    const mesh = new Geometry();
+    const v0 = new Vec3(a);
+    const v1 = new Vec3(b);
+    const v2 = new Vec3(c);
+    const v3 = new Vec3(d);
+    const uv0 = new Vec3(auv);
+    const uv1 = new Vec3(buv);
+    const uv2 = new Vec3(cuv);
+    const uv3 = new Vec3(duv);
+    quadMeshPartition(
+      mesh, {v:v0, uv:uv0}, {v:v1, uv:uv1}, {v:v2, uv:uv2}, {v:v3, uv:uv3}, dtx, dty
+    );
+    return mesh;
+  }
+
+  // triangleMesh.
+  // params: a=[0,0,0], b=[100,0,0], c=[0,100,0], auv=[0,1,0], buv=[1,1,0], cuv=[0,0,0], detail=1.
+  // デフォルトでは3つの頂点のUVが左下、右下、左上となっているがオプションで指定できるようにはなってる。
+  // 指定の仕方はVec3の引数になるように。[0,0,0]でも{x:0,y:0,z:0}でもVec3()でも自由。
+  // uvについては第3引数は使わないので[0,1]とか[1,1]で問題ないです。
+  function triangleMesh(params = {}){
+    const {
+      a = [0,0,0], b = [100,0,0], c = [0,100,0],
+      auv = [0,1,0], buv = [1,1,0], cuv = [0,0,0], detail = 1
+    } = params;
+    const mesh = new Geometry();
+    const v0 = new Vec3(a);
+    const v1 = new Vec3(b);
+    const v2 = new Vec3(c);
+    const uv0 = new Vec3(auv);
+    const uv1 = new Vec3(buv);
+    const uv2 = new Vec3(cuv);
+    triangleMeshPartition(
+      mesh, {v:v0, uv:uv0}, {v:v1, uv:uv1}, {v:v2, uv:uv2}, detail
+    );
+    return mesh;
+  }
+
+  // cubeMesh.
+  // params: size=100, detail=1
+  // sizeは1辺の長さの半分でdetailは何分割するかです
+  // UVはboxと一緒、展開図方式です。
+  function cubeMesh(params = {}){
+    const {size:s = 100, detail:dt = 1} = params;
+
+    return boxMesh({
+      size:{x:s, y:s, z:s},
+      detail:{x:dt, y:dt, z:dt}
+    });
+  }
+
+  // boxMesh.
+  // params: size:{x=100,y=100,z=100}, detail:{x=1,y=1,z=1}
+  // x,y,zでそれぞれの軸方向の長さの半分を指定、detailでその方向のディテールを指定します。
+  // UVはこんな感じ
+  // ・・・x-x-・・・
+  // ・・・x-x-・・・
+  // ・y-y-z+z+y+y+・
+  // ・y-y-z+z+y+y+・
+  // ・・・x+x+・・・
+  // ・・・x+x+・・・
+  // ・・・z-z-・・・
+  // ・・・z-z-・・・
+  function boxMesh(params = {}){
+    const {size = {}, detail = {}} = params;
+    const {x:sx = 100, y:sy = 100, z:sz = 100} = size;
+    const {x:dtx = 1, y:dty = 1, z:dtz = 1} = detail;
+    const mesh = new Geometry();
+    const vVerts = [];
+    const uvVerts = [];
+    const addV = (array, x, y, z) => {
+      array.push(new Vec3(x, y, z));
+    }
+    addV(vVerts, -sx, -sy, sz);
+    addV(vVerts, sx, -sy, sz);
+    addV(vVerts, -sx, sy, sz);
+    addV(vVerts, sx, sy, sz);
+    addV(vVerts, -sx, -sy, -sz);
+    addV(vVerts, sx, -sy, -sz);
+    addV(vVerts, -sx, sy, -sz);
+    addV(vVerts, sx, sy, -sz);
+    addV(uvVerts, 3/8, 0, 0);
+    addV(uvVerts, 5/8, 0, 0);
+    addV(uvVerts, 3/8, 1/4, 0);
+    addV(uvVerts, 5/8, 1/4, 0);
+    addV(uvVerts, 3/8, 2/4, 0);
+    addV(uvVerts, 5/8, 2/4, 0);
+    addV(uvVerts, 3/8, 3/4, 0);
+    addV(uvVerts, 5/8, 3/4, 0);
+    addV(uvVerts, 3/8, 1, 0);
+    addV(uvVerts, 5/8, 1, 0);
+    addV(uvVerts, 1/8, 1/4, 0);
+    addV(uvVerts, 7/8, 1/4, 0);
+    addV(uvVerts, 1/8, 2/4, 0);
+    addV(uvVerts, 7/8, 2/4, 0);
+    const smp = (i0, i1, i2, k0, k1, k2, dt1, dt2) => {
+      squareMeshPartition(
+        mesh,
+        {v:vVerts[i0], uv:uvVerts[k0]},
+        {v:vVerts[i1], uv:uvVerts[k1]},
+        {v:vVerts[i2], uv:uvVerts[k2]},
+        dt1, dt2
+      );
+    }
+    smp(0,2,4,2,3,0, dty, dtz);
+    smp(1,3,0,4,5,2, dty, dtx);
+    smp(5,7,1,6,7,4, dty, dtz);
+    smp(4,6,5,8,9,6, dty, dtx);
+    smp(5,1,4,12,4,10, dtz, dtx);
+    smp(3,7,2,5,13,3, dtz, dtx); // 誤字ミス
+    return mesh;
+  }
+
+  // sphereMesh.
+  // params: radius=100, detail={x=16,y=16}, angle={start=0,stop=2pi}, fillType="open"
+  // radiusは半径です。詳しくはellipsoidの項にて。
+  function sphereMesh(params = {}){
+    const {size:s = 100} = params;
+    params.size = {x:s, y:s, z:s};
+    return ellipsoidMesh(params);
+  }
+
+  // ellipsoidMesh.
+  // params: size={x=100,y=100,z=100}, detail={x=16,y=16}, angle={start=0,stop=2pi}, fillType="open"
+  // sizeはx,y,zそれぞれの方向の半径。要するに楕円球。ラグビーボール。
+  // detailはxが経度のdetailでyが緯度のdetail
+  // angleは経度を指定する。半球とかできるわけ。1/4球とか。スイカのイメージ。
+  // fillTypeはその際に切り口を埋めるかどうか。
+  // UVですが、fillが"open"の場合正方形で、横と縦は角度です。
+  // fillする場合はそれが長方形となり、下に半径0.25の円が出来ます。右半分がstart側、左半分がstop側の領域で、つながっています。
+  function ellipsoidMesh(params = {}){
+    const {size = {}, detail = {}, angle = {}, fillType = "open"} = params;
+    const {x:sx = 100, y:sy = 100, z:sz = 100} = size;
+    const {x:dtx = 16, y:dty = 16} = detail;
+    const {start:angleStart = 0, stop:angleStop = Math.PI*2} = angle;
+    const mesh = new Geometry();
+
+    // 北極と南極の頂点は重複させる（風呂敷のイメージ）
+    for(let k=0; k<=dty; k++){
+      const theta = Math.PI*k/dty;
+      for(let i=0; i<=dtx; i++){
+        const phi = angleStart + (angleStop - angleStart) * i/dtx;
+        const x = Math.sin(theta)*Math.cos(phi);
+        const y = Math.sin(theta)*Math.sin(phi);
+        const z = Math.cos(theta);
+        mesh.v.push(sx*x, sy*y, sz*z);
+        mesh.n.push(x, y, z);
+        mesh.uv.push(i/dtx, k/dty);
+      }
+    }
+    // 線と面
+    // 面は一番上と一番下は片方だけ、中間は両方用意する
+    // 線は...まあ適当に。
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    for(let k=0; k<dty; k++){
+      for(let i=0; i<dtx; i++){
+        const lu = k*(dtx+1) + i;
+        const ld = (k+1)*(dtx+1) + i;
+        const ru = lu+1;
+        const rd = ld+1;
+        // lu,ld,rdの三角形はk===dty-1のときは用意しない
+        // lu,rd,ruの三角形はk===0のときは用意しない
+        if (k < dty-1) {
+          mesh.f.push(lu, ld, rd);
+        }
+        if (k > 0) {
+          mesh.f.push(lu, rd, ru);
+        }
+        // 線について。縦は全部。横はk>0だけ。
+        // 斜めについても頂点が重複しているので問題ないですね。0<k<dty-1だけ。
+        mesh.l.push(lu, ld);
+        if (k > 0) {
+          mesh.l.push(lu, ru);
+        }
+        if (k > 0 && k < dty-1) {
+          mesh.l.push(lu, rd);
+        }
+      }
+    }
+
+    // 側面
+    // ellipseMeshを作った方がいいと思う。
+    // 正円ならcircleでいいんだけどむずいね
+    // ああーーわかったわ
+    // 角度計算atan2でやらないとミスるんだ
+    if (fillType === "fill") {
+      mesh.scaleUV(1, 0.5);
+      const startX = sx*Math.cos(angleStart);
+      const startY = sy*Math.sin(angleStart);
+      const startRadius = Math.hypot(startX, startY);
+      const startEllipse = ellipseMesh({
+        radius:{a:startRadius, b:sz}, detail:dty,
+        angle:{start:-Math.PI/2, stop:Math.PI/2}
+      });
+      // x軸で回転した後z軸で回転。UVは小さくしてから中央下へ
+      startEllipse.rotateX(Math.PI/2).rotateZ(Math.atan2(startY, startX));
+      startEllipse.scaleUV(0.5, 0.5).translateUV(0.25, 0.5);
+      mesh.composite(startEllipse);
+
+      const stopX = sx*Math.cos(angleStop);
+      const stopY = sy*Math.sin(angleStop);
+      const stopRadius = Math.hypot(stopX, stopY);
+      const stopEllipse = ellipseMesh({
+        radius:{a:stopRadius, b:sz}, detail:dty,
+        angle:{start:Math.PI/2, stop:Math.PI*3/2}
+      });
+      // x軸で回転した後z軸で回転、UVは小さくしてから中央下へ
+      stopEllipse.rotateX(Math.PI/2).rotateZ(Math.PI + Math.atan2(stopY, stopX));
+      stopEllipse.scaleUV(0.5, 0.5).translateUV(0.25, 0.5);
+      mesh.composite(stopEllipse);
+    }
+    return mesh;
+  }
+
+  // torusMesh.
+  // params: size={a=100,b=30}, detail={a=16,b=16}, angle={start:0,stop=2pi},
+  //         fillType={start="open",stop="open"}, uvSwap=false, thetaoffset=0
+  // sizeのa,bは長半径、短半径でz軸の周りにトーラスを作る。detailのa,bはそれに応じており、
+  // aが外周の分割数、bが筒方向の分割数。angleで部分トーラスにできる。fillTypeで閉じるかどうか決められる。
+  // uvはどうなってるかというとfillが共にopenのデフォルトの場合は正方形で
+  // uvSwapがfalseのデフォルトの場合は長さ方向がvになる横長の形、uvSwapする場合は筒方向がvになる縦長。
+  // thetaOffsetで筒方向の開始点をずらすことができる。
+  // fillする場合これが縦が半分の長方形となり、下に半径0.25の円が左右に1個ずつ用意されてそれぞれ
+  // start側とstop側の断面の円になる。
+  function torusMesh(params = {}){
+    const {size = {}, detail = {}, angle = {}, fillType = {}, uvSwap = false, thetaOffset = 0} = params;
+    const {a:sa = 100, b:sb = 30} = size;
+    const {a:dta = 16, b:dtb = 16} = detail;
+    const {start:angleStart = 0, stop:angleStop = Math.PI*2} = angle;
+    const {start:fillStart = "open", stop:fillStop = "open"} = fillType;
+    const mesh = new Geometry();
+
+    // aは長い方でbは短い方です。
+    // 頂点は左から右に並んでいますね
+    for(let k=0; k<=dta; k++){
+      const phi = angleStart + (angleStop - angleStart) * k/dta;
+      for(let i=0; i<=dtb; i++){
+        const theta = thetaOffset + Math.PI*2*i/dtb;
+        const px = Math.cos(phi);
+        const py = Math.sin(phi);
+        const nx = Math.sin(theta)*px;
+        const ny = Math.sin(theta)*py;
+        const nz = Math.cos(theta);
+        const x = sa*px + sb*nx;
+        const y = sa*py + sb*ny;
+        const z = sb*nz;
+        mesh.v.push(x, y, z);
+        mesh.n.push(nx, ny, nz);
+        if (!uvSwap) {
+          // デフォルト（横長）
+          mesh.uv.push(k/dta, i/dtb);
+        } else {
+          // 逆バージョン（縦長）
+          mesh.uv.push(i/dtb, 1-k/dta);
+        }
+      }
+    }
+
+    // 先にdから計算するところが違う。
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    for(let k=0; k<dta; k++){
+      for(let i=0; i<dtb; i++){
+        const ld = k*(dtb+1) + i;
+        const lu = (k+1)*(dtb+1) + i;
+        const rd = ld+1;
+        const ru = lu+1;
+        mesh.f.push(ld, rd, lu, lu, rd, ru);
+        // 線はすべてのld,rd,luで用意すれば足りる。
+        mesh.l.push(ld, rd, rd, lu, lu, ld);
+      }
+    }
+    // 以下は埋める場合
+    if (fillStart === "fill" || fillStop === "fill"){
+      mesh.scaleUV(1, 0.5);
+      if (fillStart === "fill"){
+        const startCircle = circleMesh({radius:sb, detail:dtb});
+        startCircle.rotateX(Math.PI/2).translate(sa, 0, 0).rotateZ(angleStart);
+        startCircle.scaleUV(0.5, 0.5).translateUV(0, 0.5);
+        mesh.composite(startCircle);
+      }
+      if (fillStop === "fill"){
+        const stopCircle = circleMesh({radius:sb, detail:dtb});
+        stopCircle.rotateX(Math.PI/2).rotateZ(Math.PI)
+                  .translate(sa, 0, 0).rotateZ(angleStop);
+        stopCircle.scaleUV(0.5, 0.5).translateUV(0.5, 0.5);
+        mesh.composite(stopCircle);
+      }
+    }
+    return mesh;
+  }
+
+  // circleMesh.
+  // params: radius=50, detail=16, angle={start=0,stop=2pi}
+  // radiusは半径。detailは分割数。詳しくはellipseで。
+  function circleMesh(params){
+    const {radius:r = 50} = params;
+    params.radius = {a:r, b:r};
+    return ellipseMesh(params);
+  }
+
+  // ellipseMesh.
+  // params: radius={a=50,b=50}, detail=16, angle={start=0,stop=2pi}
+  // radiusは横と縦の半径。xy平面に平行。angleでstartとstopを指定できる。
+  // どんな形でもuvは内接円になる。
+  function ellipseMesh(params){
+    const {radius = {}, detail:dt = 16, angle = {}} = params;
+    const {a:ra = 50, b:rb = 50} = radius;
+    const {start:angleStart = 0, stop:angleStop = Math.PI*2} = angle;
+    const mesh = new Geometry();
+    mesh.v.push(0,0,0);
+    mesh.uv.push(0.5,0.5);
+    mesh.n.push(0,0,1);
+    for(let i=0; i<=dt; i++){
+      const currentAngle = angleStart + (angleStop - angleStart) * i/dt;
+      const x = Math.cos(currentAngle);
+      const y = Math.sin(currentAngle);
+      mesh.v.push(ra*x, rb*y, 0);
+      // uvは上下逆にする（注意）
+      mesh.uv.push(0.5 + 0.5*x, 0.5 - 0.5*y);
+      mesh.n.push(0,0,1);
+    }
+    // 1,2,3,..,dt+1.
+    // 0,1,2の0,2,3の...,0,dt,dt+1でフィニッシュ
+    for(let i=1; i<=dt; i++){
+      mesh.f.push(0,i,i+1);
+      mesh.l.push(0,i,i,i+1);
+    }
+    mesh.l.push(0,dt+1);
+    return mesh;
+  }
+
+  // cylinderMesh.
+  // params: top=100, bottom=0, radius=50, detail={x=16,y=16},
+  //         fillType={upper="fill",lower="fill",side="open"}, angle={start=0,stop=2pi}
+  // radiusで上下の円の半径を同時に指定する以外はtruncatedConeと完全に同じなので略
+  function cylinderMesh(params){
+    const {radius:r = 50} = params;
+    params.radius = {upper:r, lower:r};
+    return truncatedConeMesh(params);
+  }
+
+  // truncatedConeMesh.
+  // params: top=100, bottom=0, radius={upper=50,lower=50}, detail={x=16,y=16},
+  //         fillType={upper="fill",lower="fill",side="open"}, angle={start=0,stop=2pi}
+  // いわゆる台柱。プリン型。
+  // topとbottomでz軸方向の位置を指定できる。radiusは上下の円の半径。detailはxが横分割数、yが縦分割数。
+  // fillTypeは上面を埋めるかどうか、下面を埋めるかどうか、angleがデフォルトでない場合に断面を埋めるかどうか。
+  // UVは若干複雑。上下の円を埋めないなら全体になるが、両サイドも埋めないなら正方形で側面全体。
+  // 両サイドを埋める場合、断面のUVは台形となり、これに合わせてUVの設定領域が指定される。側面は横に1/2に圧縮される。
+  // さらに上下の円も埋めるならば、これら全体が縦に1/2となり上に移動し、左下と右下に小さい円が2つ。これらが上と下の円になる。
+  function truncatedConeMesh(params, isCone = false){
+    const {top = 100, bottom = 0, radius = {}, detail = {}, fillType = {}, angle = {}} = params;
+    const {upper:upperRadius = 50, lower:lowerRadius = 50} = radius;
+    const {x:dtx = 16, y:dty = 16} = detail;
+    const {upper:fillUpper = "fill", lower:fillLower = "fill", side:fillSide = "open"} = fillType;
+    const {start:angleStart = 0, stop:angleStop = Math.PI*2} = angle;
+
+    const mesh = new Geometry();
+
+    // 側面
+    // sideはdtyで横切りにする
+    // 先にQuad用意しましょ
+    for(let k=0; k<=dty; k++){
+      for(let i=0; i<=dtx; i++){
+        const angle = angleStart + (angleStop - angleStart)*i/dtx;
+        const h = top * (1-k/dty) + bottom * k/dty;
+        const r = upperRadius * (1-k/dty) + lowerRadius * k/dty;
+        const theta = Math.atan2(lowerRadius - upperRadius, top - bottom);
+        mesh.v.push(r*Math.cos(angle), r*Math.sin(angle), h);
+        mesh.n.push(
+          Math.cos(angle) * Math.sin(theta),
+          Math.sin(angle) * Math.sin(theta),
+          Math.cos(theta)
+        );
+        mesh.uv.push(i/dtx, k/dty); // 基本的には全体
+        // つまり側面のない円柱の場合UVは正方形全体
+      }
+    }
+    for(let k=0; k<dty; k++){
+      for(let i=0; i<dtx; i++){
+        const lu = k*(dtx+1) + i;
+        const ld = (k+1)*(dtx+1) + i;
+        const ru = lu + 1;
+        const rd = ld + 1;
+        mesh.f.push(lu, ld, rd, lu, rd, ru);
+        mesh.l.push(lu, ld, lu, rd);
+        if (k>0) {
+          mesh.l.push(lu, ru);
+        }
+      }
+    }
+    // sideがあれば追加する。この場合横に1/2拡大する。
+    // coneの場合は三角形にしたい。
+    // 頂点が左側は左寄せ、右側は右寄せになっている。
+    // そこで通常のtruncatedConeに対しても若干側面のUVをいじることにする。
+    // そのまま長方形だと差があるときに歪むので、寄せて台形にする。
+    const upperUVLength = (upperRadius < lowerRadius ? upperRadius/lowerRadius : 1);
+    const lowerUVLength = (upperRadius < lowerRadius ? 1 : lowerRadius / upperRadius);
+
+    if(fillSide === "fill"){
+      mesh.scaleUV(0.5, 1).translateUV(0.25, 0);
+
+      const startSide = (!isCone ? quadMesh({
+        a:[0, 0, bottom], b:[lowerRadius, 0, bottom],
+        c:[0, 0, top], d:[upperRadius, 0, top],
+        auv:[0,1,0], buv:[lowerUVLength,1,0],
+        cuv:[0,0,0], duv:[upperUVLength,0,0], detail:{x:1, y:dty}
+      }) : triangleMesh({
+        a:[0, 0, bottom], b:[lowerRadius, 0, bottom], c:[0, 0, top],
+        auv:[0,1,0], buv:[1,1,0], cuv:[0,0,0], detail:dty
+      }));
+      const stopSide = (!isCone ? quadMesh({
+        a:[-lowerRadius, 0, bottom], b:[0, 0, bottom],
+        c:[-upperRadius, 0, top], d:[0, 0, top],
+        auv:[1-lowerUVLength,1,0], buv:[1,1,0],
+        cuv:[1-upperUVLength,0,0], duv:[1,0,0], detail:{x:1, y:dty}
+      }) : triangleMesh({
+        a:[-lowerRadius, 0, bottom], b:[0, 0, bottom], c:[0, 0, top],
+        auv:[0,1,0], buv:[1,1,0], cuv:[1,0,0], detail:dty
+      }));
+
+      startSide.rotateZ(angleStart);
+      startSide.scaleUV(0.25, 1);
+      mesh.composite(startSide);
+      stopSide.rotateZ(Math.PI + angleStop);
+      stopSide.scaleUV(0.25, 1).translateUV(0.75, 0);
+      mesh.composite(stopSide);
+    }
+    // 上面か下面があれば追加する
+    if(fillUpper === "fill" || fillLower === "fill"){
+      mesh.scaleUV(1, 0.5); // 上半分に動かす
+      if (fillUpper === "fill"){
+        const upperCircle = circleMesh(
+          {radius:upperRadius, detail:dtx, angle:{start:angleStart, stop:angleStop}}
+        );
+        upperCircle.translate(0, 0, top);
+        upperCircle.scaleUV(0.5, 0.5).translateUV(0, 0.5);
+        mesh.composite(upperCircle);
+      }
+      if (fillLower === "fill"){
+        const lowerCircle = circleMesh(
+          {radius:lowerRadius, detail:dtx, angle:{start:-angleStop, stop:-angleStart}}
+        );
+        lowerCircle.rotateX(Math.PI).translate(0, 0, bottom);
+        lowerCircle.scaleUV(0.5, 0.5).translateUV(0.5, 0.5);
+        mesh.composite(lowerCircle);
+      }
+    }
+    return mesh;
+  }
+
+  // coneMesh.
+  // params: top=100, bottom=0, radius=50,, detail={x=16,y=16},
+  //         fillType={lower="fill",side="open"}, angle={start=0,stop=2pi}
+  // 円錐。truncatedConeの特殊ケースとして扱う。
+  // UVですが、この場合三角形のメッシュを用いないと綺麗にならないのでそうすることにした。
+  function coneMesh(params){
+    const {radius:r = 50, fillType = {}} = params;
+    const {lower:fillLower = "fill", side:fillSide = "open"} = fillType;
+    params.fillType.upper = "open";
+    params.radius = {upper:0, lower:r};
+    // coneの場合は側面のUVを三角形にする。でないと汚くなる。
+    return truncatedConeMesh(params, isCone = true);
+  }
+
+  // getFrenetSerret.
+  // funcは1パラメータの曲線で、値はx,y,zを成分にもつ。
+  // 接線ベクトルの微分が常に0にならないという条件の下で各ポイントにおける
+  // フレネ・セレ標構を取得する為の関数。
+  // pnorm,bnorm,tangがx,y,z軸になるイメージ。
+  function getFrenetSerret(func, t, delta){
+    const cur = new Vec3(func(t));
+    const next = new Vec3(func(t+delta));
+    const prev = new Vec3(func(t-delta));
+    const diffNext = next.copy().sub(cur).normalize();
+    const diffPrev = cur.copy().sub(prev).normalize();
+    const pnorm = diffNext.copy().sub(diffPrev).normalize();
+    const tang = diffNext.copy().normalize();
+    const bnorm = tang.copy().cross(pnorm);
+    return {cur, pnorm, bnorm, tang};
+  }
+
+  // curveMesh.
+  // params: func=半径100の円関数, detail={x=16,y=64}, radius=16, end={start=0,stop=1},
+  //         fillType={start="open",stop="open"}, uvSwap=false
+  // funcは接線ベクトルの微分が0にならない3次元曲線の関数で
+  // それの基本0～1の部分に対して筒を作る。そのメッシュ。radiusで半径。detailのxは筒方向、yは長さ方向のdetail.
+  // fillTypeで断面を埋めるかどうか決める。uvSwapしないならuvは横長になる。断面を含めたUVの詳細はトーラスと一緒。
+  function curveMesh(params = {}){
+    // デフォルトの円（トーラスになる）
+    const circleFunc = (t) => {return {x:100*Math.cos(Math.PI*2*t), y:100*Math.sin(Math.PI*2*t), z:0}};
+    const {func = circleFunc, detail = {}, radius:r = 10, end = {}, fillType = {}, uvSwap = false} = params;
+    // dtxは筒の幅、dtyは曲線方向。
+    const {x:dtx = 16, y:dty = 64} = detail;
+    const {start:a = 0, stop:b = 1} = end;
+    const {start:fillStart = "open", stop:fillStop = "open"} = fillType;
+
+    const mesh = new Geometry();
+    const startSystem = {};
+    const stopSystem = {};
+
+    for(let k=0; k<=dty; k++){
+      const t = a + (b-a) * k/dty;
+      const delta = (b-a)/dty;
+      const fs = getFrenetSerret(func, t, delta);
+      // これで基底ができる。tang, pnorm, bnorm.
+      if (k===0) {
+        startSystem.ax = fs.pnorm.copy();
+        startSystem.ay = fs.bnorm.copy();
+        startSystem.az = fs.tang.copy();
+      }
+      if (k===dty) {
+        stopSystem.ax = fs.pnorm.copy();
+        stopSystem.ay = fs.bnorm.copy();
+        stopSystem.az = fs.tang.copy();
+      }
+      for(let i=0; i<=dtx; i++){
+        const phi = Math.PI*2*i/dtx;
+        const n = fs.pnorm.copy().mult(Math.cos(phi)).addScalar(fs.bnorm, Math.sin(phi));
+        const p = fs.cur.copy().addScalar(n, r);
+        mesh.v.push(p.x, p.y, p.z);
+        mesh.n.push(n.x, n.y, n.z);
+        // xが長さ方向の方が都合がいい場合もあるのでオプションで。
+        if (!uvSwap) {
+          mesh.uv.push(k/dty, i/dtx); // デフォルト。横長。
+        }else{
+          mesh.uv.push(i/dtx, 1-k/dty); // 縦長。オプションで。
+        }
+        // ここ以外は特に変更ないです
+      }
+    }
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    for(let k=0; k<dty; k++){
+      for(let i=0; i<dtx; i++){
+        const ld = k*(dtx+1) + i;
+        const lu = (k+1)*(dtx+1) + i;
+        const rd = ld+1;
+        const ru = lu+1;
+        mesh.f.push(ld, rd, lu, lu, rd, ru);
+        // 線はすべてのld,rd,luで用意すれば足りる。
+        mesh.l.push(ld, rd, rd, lu, lu, ld);
+      }
+    }
+    // fill.
+    if (fillStart === "fill" || fillStop === "fill"){
+      mesh.scaleUV(1, 0.5);
+      if (fillStart === "fill") {
+        const startCircle = circleMesh({
+          radius:r, detail:dtx
+        });
+        startCircle.rotateX(Math.PI).rotateZ(Math.PI)
+                   .applyMatrix(startSystem.ax, startSystem.ay, startSystem.az)
+                   .translate(func(a));
+        startCircle.scaleUV(0.5, 0.5).translateUV(0, 0.5);
+        mesh.composite(startCircle);
+      }
+      if (fillStop === "fill") {
+        const stopCircle = circleMesh({
+          radius:r, detail:dtx
+        });
+        stopCircle.applyMatrix(stopSystem.ax, stopSystem.ay, stopSystem.az)
+                  .translate(func(b));
+        stopCircle.scaleUV(0.5, 0.5).translateUV(0.5, 0.5);
+        mesh.composite(stopCircle);
+      }
+    }
+
+    return mesh;
+  }
+
+  // bandMesh.
+  // params: func:半径100の円関数, bandWidth=100, detail=256, angleOffset=0, angleRotation=0,
+  //         end={start=0,stop=2pi}, uvSwap=false.
+  // 帯です。bandWidthは幅の半分の長さ。
+  // angleOffsetで初期状態の角度の変化を指定し、angleRotationで周回終了時の角度の変化を指定する。
+  // たとえば4piなら2回転して戻る。detailは分割数。
+  // UVは基本進行方向をvとする横長。swapで縦長にもできる。
+  // デフォルトではシャンプーハットみたいになる。たとえばそこに名前を外に向かって連ねたりとか、そういうことができる。
+  function bandMesh(params = {}){
+    // デフォルトの円（トーラスになる）
+    const circleFunc = (t) => {return {x:100*Math.cos(Math.PI*2*t), y:100*Math.sin(Math.PI*2*t), z:0}};
+    const {func = circleFunc, bandWidth = 100, detail:dt = 256, angleOffset = 0, angleRotation = 0, end = {}, uvSwap = false} = params;
+    const {start:a = 0, stop:b = 1} = end;
+    const mesh = new Geometry();
+
+    for(let k=0; k<=dt; k++){
+      const t = a + (b-a) * k/dt;
+      const delta = (b-a)/dt;
+      const fs = getFrenetSerret(func, t, delta);
+      // これで基底ができる。tang, pnorm, bnorm.
+      // 基本的には長方形をつなげていく
+      const currentAngle = angleOffset + angleRotation * k/dt;
+      // pnorm方向の±bandWidth/2に頂点を置く。
+      // 法線の向きはcos(angle)*bnorm-sin(angle)*pnormです。
+      const bandDirection = fs.pnorm.copy().mult(Math.cos(currentAngle)).addScalar(fs.bnorm, Math.sin(currentAngle));
+      const leftVertice = fs.cur.copy().addScalar(bandDirection, bandWidth/2);
+      const rightVertice = fs.cur.copy().addScalar(bandDirection, -bandWidth/2);
+      const bandNormal = fs.bnorm.copy().mult(Math.cos(currentAngle)).addScalar(fs.pnorm, -Math.sin(currentAngle));
+      mesh.v.push(...leftVertice.toArray());
+      mesh.v.push(...rightVertice.toArray());
+      mesh.n.push(...bandNormal.toArray());
+      mesh.n.push(...bandNormal.toArray());
+      if (!uvSwap) {
+        mesh.uv.push(k/dt, 0);
+        mesh.uv.push(k/dt, 1);
+      } else {
+        mesh.uv.push(0, 1-k/dt);
+        mesh.uv.push(1, 1-k/dt);
+      }
+    }
+    // これで下から順に0,1,2,3,...
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    for(let k=0; k<dt; k++){
+      const ld = k*2;
+      const lu = (k+1)*2;
+      const rd = ld+1;
+      const ru = lu+1;
+      mesh.f.push(ld, rd, lu, lu, rd, ru);
+      // 線はすべてのld,rd,luで用意すれば足りる。
+      mesh.l.push(ld, rd, rd, lu, lu, ld);
+    }
+    return mesh;
+  }
+
+  // torusKnotMesh.
+  // params: size={a=100, b=30}, detail={x=16, y=16}, radius=16, p=3, q=2, uvSwap=false
+  // いわゆるトーラスノット
+  // p,qで決まる。公式にはpが周回数でqがそれに伴う巻き数。なので、
+  // qの方が大きい、すなわち巻き数の方が大きいとコイル状になる。
+  // 逆に周回数の方が大きいとロープをまとめたみたいになる。
+  // fillTypeとendとfuncが固定。なのでUVは必然的に正方形になる。
+  function torusKnotMesh(params = {}){
+    const {size = {}, p = 3, q = 2} = params;
+    const {a = 100, b = 30} = size;
+    const torusKnotFunction = ((t) => {
+      const l = a + b * Math.cos(q * t);
+      return {
+        x:l * Math.cos(p * t),
+        y:l * Math.sin(p * t),
+        z:b * Math.sin(q * t)
+    }});
+    params.func = torusKnotFunction;
+    params.end = {start:0, stop:Math.PI*2};
+    params.fillType = {start:"open", stop:"open"}; // torusKnotはopen/open
+    return curveMesh(params);
+  }
+
+  // icosahedronMesh.
+  // params: radius=100, detail=1
+  // 正二十面体。ディテールで各面が三角形分割される。UVは全部ゼロ。
+  function icosahedronMesh(params = {}){
+    const {radius:r = 100, detail:dt = 1} = params;
+    const g = (1 + Math.sqrt(5)) / 4;
+    const h = 0.5;
+    const l = r/Math.sqrt(g*g+h*h);
+    const a = g*l;
+    const b = h*l;
+    const mesh = new Geometry();
+
+    const vVerts = [];
+    const addV = (array, x, y, z) => {
+      array.push(new Vec3(x, y, z));
+    }
+    const zero = new Vec3(0,0,0);
+    addV(vVerts, 0, a, b);
+    addV(vVerts, b, 0, a);
+    addV(vVerts, a, b, 0);
+    addV(vVerts, 0, a, -b);
+    addV(vVerts, -a, b, 0);
+    addV(vVerts, -b, 0, a);
+    addV(vVerts, 0, -a, b);
+    addV(vVerts, a, -b, 0);
+    addV(vVerts, b, 0, -a);
+    addV(vVerts, -b, 0, -a);
+    addV(vVerts, -a, -b, 0);
+    addV(vVerts, 0, -a, -b);
+    const makeTriangle = (i, j, k) => {
+      triangleMeshPartition(
+        mesh,
+        {v:vVerts[i], uv:zero},
+        {v:vVerts[j], uv:zero},
+        {v:vVerts[k], uv:zero},
+        dt);
+    }
+    const faces = [[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 5],
+                   [0, 5, 1], [1, 7, 2], [2, 8, 3], [3, 9, 4],
+                   [4, 10, 5], [5, 6, 1], [1, 6, 7], [2, 7, 8],
+                   [3, 8, 9], [4, 9, 10], [5, 10, 6], [6, 11, 7],
+                   [7, 11, 8], [8, 11, 9], [9, 11, 10], [10, 11, 6]];
+    for(const face of faces){
+      makeTriangle(face[0], face[1], face[2]);
+    }
+    return mesh;
+  }
+
+  // icoSphereMesh.
+  // いわゆるico球。paramsは同じ。
+  // icosahedronの小さい三角形をすべて球面上に張り付けたもの。
+  // 法線は面に垂直なのできれいにモザイクになる。UVは引き続き死んでる。基本的には法線とか別の方法で彩色する。
+  function icoSphereMesh(params = {}){
+    const {radius:r = 100} = params;
+    const icosa = icosahedronMesh(params);
+    // mesh.fの3つを取り出してそれに相当するvを3つずつぶちこんで
+    // 正規化しつつ法線を計算してnに以下略
+    // lについてですが、もとのインデックスから新しいインデックスへのマップを
+    // 作ってそれで変換すればいい。
+    const mesh = new Geometry();
+    const _v = icosa.v;
+    const _f = icosa.f;
+    const indexMap = new Array(_v.length/3); // 元のindexから新しいindexへのmap
+    for(let i=0; i < _f.length/3; i++){
+      const v0i = _f[3*i];
+      const v1i = _f[3*i+1];
+      const v2i = _f[3*i+2];
+      indexMap[v0i] = 3*i;
+      indexMap[v1i] = 3*i+1;
+      indexMap[v2i] = 3*i+2;
+      const v0 = new ex.Vec3(_v[3*v0i], _v[3*v0i+1], _v[3*v0i+2]).normalize().mult(r);
+      const v1 = new ex.Vec3(_v[3*v1i], _v[3*v1i+1], _v[3*v1i+2]).normalize().mult(r);
+      const v2 = new ex.Vec3(_v[3*v2i], _v[3*v2i+1], _v[3*v2i+2]).normalize().mult(r);
+      mesh.v.push(...v0.toArray());
+      mesh.v.push(...v1.toArray());
+      mesh.v.push(...v2.toArray());
+      mesh.f.push(3*i, 3*i+1, 3*i+2);
+      v1.sub(v0);
+      v2.sub(v0);
+      const normalVector = v1.cross(v2).normalize();
+      mesh.n.push(...normalVector.toArray());
+      mesh.n.push(...normalVector.toArray());
+      mesh.n.push(...normalVector.toArray());
+    }
+    for(let k=0; k<icosa.l.length; k++){
+      mesh.l.push(indexMap[icosa.l[k]]);
+    }
+    mesh.uv = icosa.uv; // uvは死んでます。
+    return mesh;
+  }
+
+  // Geometryのクラス。
+  // v,n,uv,f,lだけ用意する。
+  // メッシュ関数はこれを元にプリミティブを構成して返している。
+  // 単独で用いることもできる。
+  // translate, rotateXなどの位置変更関数を持つ。
+  // invertNormalで法線の向きをすべて逆にしたりできる。UVをいじったり。compositeはいわゆるマージ用。
+  // 一部のメッシュ関数はこれを使って円や三角形のメッシュを再利用している。
+  class Geometry{
+    constructor(){
+      this.v = [];
+      this.n = [];
+      this.uv = [];
+      this.f = [];
+      this.l = [];
+    }
+    translate(x, y, z){
+      // xが配列かベクトルの場合はそれの成分を使う
+      // 数の場合はすべて数とみなし省略は許さない
+      const t = Geometry.validateParameter(x, y, z);
+      for(let i=0; i<this.v.length/3; i++){
+        this.v[3*i] += t.x;
+        this.v[3*i+1] += t.y;
+        this.v[3*i+2] += t.z;
+      }
+      return this;
+    }
+    rotateX(angle){
+      // グローバルのx軸の周りに全体を回転させる(xの先っちょから見て反時計)
+      for(let i=0; i<this.v.length/3; i++){
+        const y = this.v[3*i+1];
+        const z = this.v[3*i+2];
+        this.v[3*i+1] = y*Math.cos(angle) - z*Math.sin(angle);
+        this.v[3*i+2] = y*Math.sin(angle) + z*Math.cos(angle);
+        const ny = this.n[3*i+1];
+        const nz = this.n[3*i+2];
+        this.n[3*i+1] = ny*Math.cos(angle) - nz*Math.sin(angle);
+        this.n[3*i+2] = ny*Math.sin(angle) + nz*Math.cos(angle);
+      }
+      return this;
+    }
+    rotateY(angle){
+      // グローバルのy軸の周りに全体を回転させる
+      for(let i=0; i<this.v.length/3; i++){
+        const z = this.v[3*i+2];
+        const x = this.v[3*i];
+        this.v[3*i+2] = z*Math.cos(angle) - x*Math.sin(angle);
+        this.v[3*i] = z*Math.sin(angle) + x*Math.cos(angle);
+        const nz = this.n[3*i+2];
+        const nx = this.n[3*i];
+        this.n[3*i+2] = nz*Math.cos(angle) - nx*Math.sin(angle);
+        this.n[3*i] = nz*Math.sin(angle) + nx*Math.cos(angle);
+      }
+      return this;
+    }
+    rotateZ(angle){
+      // グローバルのz軸の周りに全体を回転させる
+      for(let i=0; i<this.v.length/3; i++){
+        const x = this.v[3*i];
+        const y = this.v[3*i+1];
+        this.v[3*i] = x*Math.cos(angle) - y*Math.sin(angle);
+        this.v[3*i+1] = x*Math.sin(angle) + y*Math.cos(angle);
+        const nx = this.n[3*i];
+        const ny = this.n[3*i+1];
+        this.n[3*i] = nx*Math.cos(angle) - ny*Math.sin(angle);
+        this.n[3*i+1] = nx*Math.sin(angle) + ny*Math.cos(angle);
+      }
+      return this;
+    }
+    applyMatrix(ax, ay, az){
+      // x軸、y軸、z軸をベクトルax,ay,azになるように全体を変換する
+      // rotateX,rotateY,rotateZはすべてこれの特殊ケースになる
+      // ax,ay,azはベクトルでもいいしx,y,z成分を持っていれば何でもOK
+      for(let i=0; i<this.v.length/3; i++){
+        const x = this.v[3*i];
+        const y = this.v[3*i+1];
+        const z = this.v[3*i+2];
+        this.v[3*i] = x*ax.x + y*ay.x + z*az.x;
+        this.v[3*i+1] = x*ax.y + y*ay.y + z*az.y;
+        this.v[3*i+2] = x*ax.z + y*ay.z + z*az.z;
+        const nx = this.n[3*i];
+        const ny = this.n[3*i+1];
+        const nz = this.n[3*i+2];
+        this.n[3*i] = nx*ax.x + ny*ay.x + nz*az.x;
+        this.n[3*i+1] = nx*ax.y + ny*ay.y + nz*az.y;
+        this.n[3*i+2] = nx*ax.z + ny*ay.z + nz*az.z;
+      }
+      return this;
+    }
+    rotate(angle, x, y, z){
+      // バリデーションは一緒
+      // グローバルのベクトル(x,y,z)の周りに全体を回転させる。
+      // たとえばrotateXは(angle,1,0,0)と同値。
+      const axis = Geometry.validateParameter(x, y, z);
+      // おいおいね。
+      const L = Math.hypot(axis.x, axis.y, axis.z);
+      const a = axis.x/L;
+      const b = axis.y/L;
+      const c = axis.z/L;
+      const s = 1 - Math.cos(angle);
+      const t = Math.cos(angle);
+      const u = Math.sin(angle);
+      // m[0],m[1],m[2]が左、m[3],m[4],m[5]が中央、m[6],m[7],m[8]が右の列ベクトル。
+      this.applyMatrix(
+        {x:s*a*a + t, y:s*a*b + u*c, z:s*a*c - u*b},
+        {x:s*a*b - u*c, y:s*b*b + t, z:s*b*c + u*a},
+        {x:s*a*c + u*b, y:s*b*c - u*a, z:s*c*c + t}
+      );
+      return this;
+    }
+    scale(sx, sy, sz){
+      // 引数が一つの場合は全部同じにしましょう
+      // 法線どうしようね...
+      // 各成分をs.x,s.y,s.zで割って正規化すればいいはず。
+      // たとえば2,1,1の場合はx成分だけ2で割って正規化する。
+      const s = Geometry.validateParameter(sx, sy, sz);
+      for(let i=0; i<this.v.length/3; i++){
+        this.v[3*i] *= s.x;
+        this.v[3*i+1] *= s.y;
+        this.v[3*i+2] *= s.z;
+        const nx = this.n[3*i] / s.x;
+        const ny = this.n[3*i+1] / s.y;
+        const nz = this.n[3*i+2] / s.z;
+        const _norm = Math.hypot(nx, ny, nz);
+        this.n[3*i] = nx/_norm;
+        this.n[3*i+1] = ny/_norm;
+        this.n[3*i+2] = nz/_norm;
+      }
+      return this;
+    }
+    invertNormal(){
+      // 法線の向きを全部逆にする処理
+      // たとえば球やトーラスの内側で描画したい場合など
+      for(let i=0; i<this.n.length; i++){
+        this.n[i] *= -1;
+      }
+      return this;
+    }
+    translateUV(u, v){
+      // UVのtranslate
+      // 特にバリデーションはかけません
+      for(let i=0; i<this.uv.length/2; i++){
+        this.uv[2*i] += u;
+        this.uv[2*i+1] += v;
+      }
+      return this;
+    }
+    scaleUV(su, sv){
+      // UVのscale
+      // 特にバリデーションはかけません
+      for(let i=0; i<this.uv.length/2; i++){
+        this.uv[2*i] *= su;
+        this.uv[2*i+1] *= sv;
+      }
+      return this;
+    }
+    normalize(radius = 100){
+      // 一片の長さがradius*2の立方体の中に落とす。
+      // x,y,zのmaxとminを取って差を取って最大値を取って2で割ってそれがradiusに
+      // なるように中心に対してあれしてあれする
+      let xMin = Infinity;
+      let xMax = -Infinity;
+      let yMin = Infinity;
+      let yMax = -Infinity;
+      let zMin = Infinity;
+      let zMax = -Infinity;
+      for(let i=0;i<this.v.length/3; i++){
+        xMin = Math.min(this.v[3*i], xMin);
+        xMax = Math.max(this.v[3*i], xMax);
+        yMin = Math.min(this.v[3*i+1], yMin);
+        yMax = Math.max(this.v[3*i+1], yMax);
+        zMin = Math.min(this.v[3*i+2], zMin);
+        zMax = Math.max(this.v[3*i+2], zMax);
+      }
+      const xMid = (xMax + xMin) * 0.5;
+      const yMid = (yMax + yMin) * 0.5;
+      const zMid = (zMax + zMin) * 0.5;
+      const _size = Math.max(Math.max((xMax-xMin)*0.5, (yMax-yMin)*0.5), (zMax-zMin)*0.5);
+      this.translate(xMid, yMid, zMid);
+      this.scale(radius/_size, radius/_size, radius/_size);
+      return this;
+    }
+    composite(mesh){
+      // 別のメッシュを結合する。UVもそのままドッキングさせる。
+      // 事前に動かしておきましょう。
+      const vn = this.v.length/3; // 何で3で割るのを忘れるの？？？？？
+      this.v.push(...mesh.v);
+      this.n.push(...mesh.n);
+      this.uv.push(...mesh.uv);
+      // vnだけ全体的にシフトする
+      this.f.push(...mesh.f.map((x) => x + vn));
+      this.l.push(...mesh.l.map((x) => x + vn));
+      return this;
+    }
+    static validateParameter(x, y, z, _default = 0){
+      if (x === undefined) { x = _default; }
+      const result = {};
+      if (typeof x === 'number') {
+        result.x = x;
+        result.y = (y === undefined ? x : y);
+        result.z = (z === undefined ? y : z);
+      } else if (x instanceof Array || x instanceof Float32Array || x instanceof Uint8Array){
+        result.x = x[0];
+        result.y = x[1];
+        result.z = x[2];
+      }
+      if (result.x !== undefined) return result;
+      return x; // xがすでにベクトルなどの場合
+    }
+  }
+
   // 立方体
   // まあキューブマップ使いましょうね
   function getCubeMesh(_size = 1){
@@ -2314,7 +3441,7 @@ const p5wgex = (function(){
              -1,1,1, -1,1,-1, 1,1,1, 1,1,-1] // y-plus.
     for(let i=0; i<v.length; i++) { v[i] *= _size; }
     const f = [0,2,3, 0,3,1, 4,6,7, 4,7,5, 8,10,11, 8,11,9, 12,14,15, 12,15,13, 16,18,19, 16,19,17, 20,22,23, 20,23,21];
-    const n = ex.getNormals(v, f);
+    const n = getNormals(v, f);
     const createUV = (a,b) => { return [a, b, a+0.25, b, a, b+0.25, a+0.25, b+0.25]; }
     const uv = [];
     uv.push(...createUV(0.375, 0));
@@ -4618,9 +5745,9 @@ const p5wgex = (function(){
       const modelMat = tf.getModelMat();
       const viewMat = cam.getViewMat();
       const projMat = cam.getProjMat();
-      const modelViewMat = new ex.Mat4(ex.getMult4x4(modelMat.m, viewMat.m));
-      const normalMat = ex.getInverseTranspose3x3(modelViewMat.getMat3());
-      const modelNormalMat = ex.getInverseTranspose3x3(modelMat.getMat3());
+      const modelViewMat = new Mat4(getMult4x4(modelMat.m, viewMat.m));
+      const normalMat = getInverseTranspose3x3(modelViewMat.getMat3());
+      const modelNormalMat = getInverseTranspose3x3(modelMat.getMat3());
       // forwardの場合は使うけどdeferredの場合は後でやる
       // deferredの方、内部で法線計算とかしてて若干内容が古いので
       // そのうち何とかします
@@ -4780,6 +5907,8 @@ const p5wgex = (function(){
   ex.getPlaneMesh = getPlaneMesh;
   ex.getTorusMesh = getTorusMesh;
   ex.registMesh = registMesh; // 登録用
+
+  ex.meshUtil = meshUtil; // 最終的にはここにすべてまとめる。registMeshも廃止する方向で。
 
   // snipet.
   ex.snipet = snipet; // glslのコードの略記用
