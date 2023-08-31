@@ -2706,16 +2706,17 @@ const p5wgex = (function(){
     const mesh = new Geometry();
 
     // aは長い方でbは短い方です。
-    // 頂点は左から右に並んでいますね
+    // 頂点は左から右に並んでいますね。
+    // 内側を始点にしたいわね。それをデフォルトにしたい。で、時計回り。
     for(let k=0; k<=dta; k++){
       const phi = angleStart + (angleStop - angleStart) * k/dta;
       for(let i=0; i<=dtb; i++){
         const theta = thetaOffset + Math.PI*2*i/dtb;
         const px = Math.cos(phi);
         const py = Math.sin(phi);
-        const nx = Math.sin(theta)*px;
-        const ny = Math.sin(theta)*py;
-        const nz = Math.cos(theta);
+        const nx = -Math.cos(theta)*px;
+        const ny = -Math.cos(theta)*py;
+        const nz = Math.sin(theta);
         const x = sa*px + sb*nx;
         const y = sa*py + sb*ny;
         const z = sb*nz;
