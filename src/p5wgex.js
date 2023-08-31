@@ -2320,6 +2320,7 @@ const p5wgex = (function(){
     torusKnot:torusKnotMesh,
     icosahedron:icosahedronMesh,
     icoSphere:icoSphereMesh,
+    surface:surfaceMesh,
     fs:getFrenetSerret, // 一応。func,t,deltaが引数。
     regist:registMesh,
     create:(() => {return new Geometry()})
@@ -3215,6 +3216,65 @@ const p5wgex = (function(){
       mesh.l.push(indexMap[icosa.l[k]]);
     }
     mesh.uv = icosa.uv; // uvは死んでます。
+    return mesh;
+  }
+
+  // sとtを元にして曲面を作る
+  // 法線は微分で出す感じ
+  // ベクトル値2変数関数を引数に取るのだ
+  // sが右でtが上のイメージ
+  // デフォルトは平面の一部分
+  // func:(s,t)=>Vec3(s,t,0);end:{x:{start:0, stop:1}, y:{start:0, stop:1}}
+  function surfaceMesh(params = {}){
+    const defaultPlaneFunction = (s,t) => { return new Vec3(100*s, 100*t, 0)}
+    const {func = defaultPlaneFunction, end = {}, detail = {}} = params;
+    const {x:dtx = 32, y:dty = 32} = detail;
+    const {x = {}, y = {}} = end;
+    const {start:a = 0, stop:b = 1} = x;
+    const {start:c = 0, stop:d = 1} = y;
+
+    const mesh = new Geometry();
+    for(let k=0; k<=dty; k++){
+      for(let i=0; i<=dtx; i++){
+        const s = a + (b-a)*i/dtx;
+        const t = c + (d-c)*k/dty;
+        const deltaX = (b-a)/dtx;
+        const deltaY = (d-c)/dty;
+        const cur = new Vec3(func(s, t));
+        mesh.v.push(cur.x, cur.y, cur.z);
+        mesh.uv.push(i/dtx, 1-k/dty);
+        const sNext = new Vec3(func(s + deltaX, t));
+        const tNext = new Vec3(func(s, t + deltaY));
+        const sTang = sNext.sub(cur);
+        const tTang = tNext.sub(cur);
+        if (sTang.mag() == 0 || tTang.mag() == 0){
+          mesh.n.push(0,0,0); continue;
+        }
+        sTang.normalize();
+        tTang.normalize();
+        const normalVector = sTang.cross(tTang);
+        mesh.n.push(...normalVector.toArray());
+      }
+    }
+    // lu --- ru
+    // || --- ||
+    // ld --- rd
+    for(let k=0; k<dty; k++){
+      for(let i=0; i<dtx; i++){
+        const ld = (dtx+1)*k + i;
+        const rd = (dtx+1)*k + i+1;
+        const lu = (dtx+1)*(k+1) + i;
+        const ru = (dtx+1)*(k+1) + i+1;
+        mesh.f.push(ld, rd, lu, lu, rd, ru);
+        mesh.l.push(ld, rd, rd, lu, ld, lu);
+        if (i === dtx-1){
+          mesh.l.push(rd, ru);
+        }
+        if (k === dty-1){
+          mesh.l.push(lu, ru);
+        }
+      }
+    }
     return mesh;
   }
 
