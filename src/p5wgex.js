@@ -2265,6 +2265,10 @@ const p5wgex = (function(){
       v0.set(u0).cross(u1);
       v1.set(u0).cross(u2);
       v2.set(u1).cross(u2);
+      // ここでv0,v1,v2のmagはすべて三角形の面積で同一のはず...だけど。
+      // それを第一引数とし、第二引数を内積にすれば、0~PIの角度がすべて得られるはず。
+      // やってることは2つ。法線はひとつしかないのでそれをv0として出している。それを角度により重み付けしてる。
+      // 角度の計算はそれでいいはず。たとえばu0とu1の内積を使ってangle2を出せる。
       sin0 = v0.mag() / (m0 * m1);
       sin1 = v1.mag() / (m0 * m2);
       sin2 = v2.mag() / (m1 * m2);
@@ -3469,6 +3473,62 @@ const p5wgex = (function(){
       // vnだけ全体的にシフトする
       this.f.push(...mesh.f.map((x) => x + vn));
       this.l.push(...mesh.l.map((x) => x + vn));
+      return this;
+    }
+    calcNormal(useMerge = false){
+      // 法線を計算する
+      // useMergeがtrueでかつmergeDataがUnionFindにより用意されているなら
+      // そのデータを使ってrootの頂点のみ法線計算しその結果を引き戻す
+      // とりあえず今はナイーブ方式で計算する
+      // 大きさは最終的に単純な角度の和となるため、
+      // 寄与が小さい場合は無視してかまわないと思う。
+      // step1: Nの受け皿を用意
+      const vn = this.v.length/3;
+      const normals = [];
+      for(let i=0; i<vn; i++) normals.push(new ex.Vec3(0,0,0));
+      const v0 = new ex.Vec3();
+      const v1 = new ex.Vec3();
+      const v2 = new ex.Vec3();
+      const v01 = new ex.Vec3();
+      const v02 = new ex.Vec3();
+      const v12 = new ex.Vec3();
+      const v012 = new ex.Vec3();
+      // step2: fの走査
+      const fn = this.f.length/3;
+      for(let i=0; i<fn; i++){
+        const ids = this.f.slice(3*i, 3*i+3);
+        v0.set(this.v.slice(3*ids[0], 3*ids[0]+3));
+        v1.set(this.v.slice(3*ids[1], 3*ids[1]+3));
+        v2.set(this.v.slice(3*ids[2], 3*ids[2]+3));
+        v01.set(v1).sub(v0);
+        v02.set(v2).sub(v0);
+        v12.set(v2).sub(v1);
+        v012.set(v01).cross(v02);
+        const area = v012.mag();
+        if (area < 0.000001) {
+          continue; // 0割回避
+        }
+        const angle0 = Math.atan2(area, v01.dot(v02));   // 0におけるなす角
+        const angle1 = Math.atan2(area, -v01.dot(v12));  // 1におけるなす角
+        const angle2 = Math.atan2(area, v02.dot(v12));   // 2におけるなす角
+        v012.normalize();
+        normals[ids[0]].addScalar(v012, angle0);
+        normals[ids[1]].addScalar(v012, angle1);
+        normals[ids[2]].addScalar(v012, angle2);
+      }
+      // step3: 正規化
+      for(let i=0; i<vn; i++){
+        const v = normals[i];
+        const m = v.mag();
+        if (m < 0.000001) {
+          v.set(0,0,0);
+        } else {
+          v.divide(m);
+        }
+        this.n[3*i] = v.x;
+        this.n[3*i+1] = v.y;
+        this.n[3*i+2] = v.z;
+      }
       return this;
     }
     static validateParameter(x, y, z, _default = 0){
@@ -5954,7 +6014,8 @@ const p5wgex = (function(){
   const ex = {};
 
   // utility.
-  ex.getNormals = getNormals;
+  ex.getNormals = getNormals; // 廃止する予定
+
   ex.getMult3x3 = getMult3x3; // 3x3の使い道があるかもしれない的な
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
@@ -5963,13 +6024,13 @@ const p5wgex = (function(){
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
 
   // geometry.
-  ex.getCubeMesh = getCubeMesh;
-  ex.getSphereMesh = getSphereMesh;
-  ex.getPlaneMesh = getPlaneMesh;
-  ex.getTorusMesh = getTorusMesh;
-  ex.registMesh = registMesh; // 登録用
+  ex.getCubeMesh = getCubeMesh; // 廃止する予定
+  ex.getSphereMesh = getSphereMesh; // 廃止する予定
+  ex.getPlaneMesh = getPlaneMesh; // 廃止する予定
+  ex.getTorusMesh = getTorusMesh; // 廃止する予定
+  ex.registMesh = registMesh; // 廃止する予定
 
-  ex.meshUtil = meshUtil; // 最終的にはここにすべてまとめる。registMeshも廃止する方向で。
+  ex.meshUtil = meshUtil; // 最終的にはここにすべてまとめる。registMeshも廃止する方向で。getNormalsも不要です。
 
   // snipet.
   ex.snipet = snipet; // glslのコードの略記用
