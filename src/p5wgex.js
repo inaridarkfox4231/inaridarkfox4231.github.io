@@ -6019,6 +6019,7 @@ const p5wgex = (function(){
   ex.getMult3x3 = getMult3x3; // 3x3の使い道があるかもしれない的な
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
+  ex.getTranspose3x3 = getTranspose3x3; // これ必要ですね...
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
