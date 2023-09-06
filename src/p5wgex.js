@@ -52,314 +52,526 @@
 // getMat3を追加
 // ex.getInverseTranspose3x3を追加
 
-// orbitControlのパッチ
-// 回転のYと移動のYの向きを逆にしただけ
-// 参考：https://openprocessing.org/sketch/1886629
-p5.prototype.orbitControl = function(
-  sensitivityX,
-  sensitivityY,
-  sensitivityZ,
-  options
-) {
-  this._assert3d('orbitControl');
-  p5._validateParameters('orbitControl', arguments);
+// 20230906
+// foxIA移植
+// OrbitControlのパッチを削除（もう要らない）
 
-  const cam = this._renderer._curCamera;
+/*
+外部から上書きするメソッドの一覧
+pointerPrototype:
+  mouseDownAction(e):
+    e.offsetXとe.offsetYでそのときのマウス位置
+    それによりなんかしたい場合に使います
+  mouseMoveAction(e):
+    e.offsetXとe.offsetYでマウスの位置
+    e.movementXとe.movementYで前との位置の変化...
+    ただこれに相当するタッチの方のあれが見当たらないので使わない方がいいかも
+  mouseUpAction():
+    マウスアップで何かしたい場合
+  touchStartAction(t):
+    t.pageXとt.pageYでそのポインタの位置です（使わないかも）
+    initializeでxとyになんか入るので使わないんだよね
+    消しちゃうか...
+  touchMoveAction(t):
+  touchEndAction(t):
 
-  if (typeof sensitivityX === 'undefined') {
-    sensitivityX = 1;
+Interaction:
+  mouseDownDefaultAction(e):
+    とにかくマウスがダウンされたらなんか開始する、その処理を記述する
+    これをx,yで書かないのは、要するにタッチだとそれがあちこちになるので不整合、
+    そこら辺を考慮してる。詳しくやりたいならPointerを継承すべき。
+  mouseMoveDefaultAction(dx, dy, x, y):
+    e.clientX/Yからキャンバスの位置座標を引いて計算する
+    マウスポインタが存在しなくても実行されるようにする必要があるのでそういう形になる
+    なるんだけど
+    それだけ用意してもタッチサイドでは何もできないのでう～んって感じではあるわね
+  mouseUpDefaultAction():
+    マウスアップの際の一般的な処理
+    上記2つもそうだがInteraction独自の処理を書くことの方が多いです
+  wheelAction(e):
+    e.offsetXやe.offsetYで位置、
+    e.deltaYでホイールの変化。下に回すと大きな値。
+  clickAction():
+    clickイベント。クリックは左前提なので注意。
+  mouseEnterAction():
+    マウスがキャンバスに入った時の処理
+  mouseLeaveAction():
+    マウスがキャンバスから出て行った時の処理
+  doubleClickAction():
+    ダブルクリック。まあ、非推奨って言われてるけどね。
+  doubleTapAction():
+    ダブルクリックで併用できるが、これが用意されている場合
+    タッチではこっちが優先される
+  touchStartDefaultAction(e):
+    とにかくタッチがスタートしたらなんかする、その場合の処理を記述
+  touchSwipeAction(dx, dy, x, y, px, py):
+    指一本で動かす場合の処理
+  touchPinchInOutAction(value, x, y, px, py):
+    指二本で動かす場合の、距離が離れた場合の処理
+  touchMultiSwipeAction(dx, dy, x, y, px, py):
+    指二本で動かす場合の、重心が移動した場合の処理
+  touchEndDefaultAction(e):
+    これもよくわからん。使わないのでは？
+  keyDownAction(e):
+    キーダウン時。これもデスクトップ用。主にデバッグ用？
+    blenderで多用されてる。
+    e.keyよりe.codeを使った方がいい
+    ShiftやCtrlの左右を区別してくれる優れもの
+  keyUpAction(e):
+    同様。
+以上です。
+*/
+
+/*
+e.codeを用いる場合のキー内容一覧（https://developer.mozilla.org/ja/docs/Web/API/KeyboardEvent/code を参照）
+アルファベット：keyA,keyB,...,keyZ.
+ShiftRight, ShiftLeft.
+Enter, CapsLock,Space,ControlLeft,ControlRight,ArrowUp,ArrowDown,ArrowLeft,ArrowRight.
+Numpad0,Numpad1,Numpad2,...,Numpad9.
+NumpadDecimal,NumpadEnter,NumpadAdd.
+上の方の数字キー：Digit0,Digit1,Digit2,...,Digit9.
+BackSpace,まあ、後は調べてください...
+あんま難しいこと考えても仕方ないですね。
+*/
+
+/*
+もちろん
+p5のようにイベントごとにリスナーを用意する道もあるんですけど
+あるんですけどね
+たとえばmousePressedだけ用意するにしてもタッチにもってなった場合
+そっちも用意しないといけないので
+いろいろめんどくさいので
+やめましょうってことになったわけです。
+*/
+
+// windowにした
+// pavelさんのコードは全画面前提なので
+// 全画面だとどっちでもいいんですけど
+// ここをcanvasにしてしまうと画面内でインタラクションが開始された後で画面外に抜けるときに止まってしまうので
+// それを回避するための処理です
+
+// いくつか変更
+// InteractionとpointerPrototypeにcanvasLeft/Topを設けました
+// これがないと全画面でない場合にきちんとキャンバス上の座標を取得できません
+// またtouchMovepointerActionのpreventDefaultを切りました
+// スマホなどで画面外を操作したときのスクロールができなくなっていたので。
+// 最後に、リサイズ時にcanvasLeft/Topが更新されるようにしました。
+
+const foxIA = (function(){
+  const fox = {};
+
+  class PointerPrototype{
+    constructor(){
+      this.id = -1;
+      this.x = 0;
+      this.y = 0;
+      this.dx = 0;
+      this.dy = 0;
+      this.prevX = 0;
+      this.prevY = 0;
+      this.canvasLeft = 0;
+      this.canvasTop = 0;
+      this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
+    }
+    mouseInitialize(e, left, top){
+      this.x = e.clientX - left;
+      this.y = e.clientY - top;
+      this.canvasLeft = left;
+      this.canvasTop = top;
+      this.prevX = this.x;
+      this.prevY = this.y;
+      this.button = e.button; // 0:left, 1:center, 2:right
+    }
+    mouseDownAction(e){
+    }
+    mouseUpdate(e){
+      this.prevX = this.x;
+      this.prevY = this.y;
+      this.dx = (e.clientX - this.canvasLeft - this.x);
+      this.dy = (e.clientY - this.canvasTop - this.y);
+      this.x = e.clientX - this.canvasLeft;
+      this.y = e.clientY - this.canvasTop;
+    }
+    mouseMoveAction(e){
+    }
+    mouseUpAction(){
+    }
+    touchInitialize(t, left, top){
+      this.id = t.identifier;
+      this.x = t.pageX - left; // 要するにmouseX的なやつ
+      this.y = t.pageY - top; // 要するにmouseY的なやつ
+      this.canvasLeft = left;
+      this.canvasTop = top;
+      this.prevX = this.x;
+      this.prevY = this.y;
+    }
+    updateCanvasData(left, top){
+      // マウスでもタッチでも実行する
+      const prevLeft = this.canvasLeft;
+      const prevTop = this.canvasTop;
+      this.canvasLeft = left;
+      this.canvasTop = top;
+      this.x += prevLeft - left;
+      this.y += prevTop - top;
+      this.prevX += prevLeft - left;
+      this.prevY += prevTop - top;
+    }
+    touchStartAction(t){
+    }
+    touchUpdate(t){
+      this.prevX = this.x;
+      this.prevY = this.y;
+      this.dx = (t.pageX - this.canvasLeft - this.x);
+      this.dy = (t.pageY - this.canvasTop - this.y);
+      this.x = t.pageX - this.canvasLeft;
+      this.y = t.pageY - this.canvasTop;
+    }
+    touchMoveAction(t){
+    }
+    touchEndAction(t){
+    }
   }
-  if (typeof sensitivityY === 'undefined') {
-    sensitivityY = sensitivityX;
-  }
-  if (typeof sensitivityZ === 'undefined') {
-    sensitivityZ = 1;
-  }
-  if (typeof options !== 'object') {
-    options = {};
-  }
 
-  // default right-mouse and mouse-wheel behaviors (context menu and scrolling,
-  // respectively) are disabled here to allow use of those events for panning and
-  // zooming. However, whether or not to disable touch actions is an option.
-
-  // disable context menu for canvas element and add 'contextMenuDisabled'
-  // flag to p5 instance
-  if (this.contextMenuDisabled !== true) {
-    this.canvas.oncontextmenu = () => false;
-    this._setProperty('contextMenuDisabled', true);
-  }
-
-  // disable default scrolling behavior on the canvas element and add
-  // 'wheelDefaultDisabled' flag to p5 instance
-  if (this.wheelDefaultDisabled !== true) {
-    this.canvas.onwheel = () => false;
-    this._setProperty('wheelDefaultDisabled', true);
-  }
-
-  // disable default touch behavior on the canvas element and add
-  // 'touchActionsDisabled' flag to p5 instance
-  const { disableTouchActions = true } = options;
-  if (this.touchActionsDisabled !== true && disableTouchActions) {
-    this.canvas.style['touch-action'] = 'none';
-    this._setProperty('touchActionsDisabled', true);
-  }
-
-  // If option.freeRotation is true, the camera always rotates freely in the direction
-  // the pointer moves. default value is false (normal behavior)
-  const { freeRotation = false } = options;
-
-  // get moved touches.
-  const movedTouches = [];
-
-  this.touches.forEach(curTouch => {
-    this._renderer.prevTouches.forEach(prevTouch => {
-      if (curTouch.id === prevTouch.id) {
-        const movedTouch = {
-          x: curTouch.x,
-          y: curTouch.y,
-          px: prevTouch.x,
-          py: prevTouch.y
-        };
-        movedTouches.push(movedTouch);
+  // pointerの生成関数で初期化する。なければPointerPrototypeが使われる。
+  // 一部のメソッドはオプションで用意するかしないか決めることにしましょう
+  // mouseLeaveとかdoubleClickとか場合によっては使わないでしょう
+  // そこらへん
+  class Interaction{
+    constructor(factory = (() => new PointerPrototype())){
+      this.pointers = [];
+      this.factory = factory;
+      this.width = 0;
+      this.height = 0;
+      this.canvasLeft = 0; // touch用
+      this.canvasTop = 0; // touch用
+      this.tapCount = 0; // ダブルタップ判定用
+      this.firstTapped = {x:0, y:0};
+    }
+    initialize(canvas, options = {}){
+      // 横幅縦幅を定義
+      this.width = Number((canvas.style.width).split("px")[0]);
+      this.height = Number((canvas.style.height).split("px")[0]);
+      // touchの場合はこうしないときちんとキャンバス上の座標が取得できない
+      const rect = canvas.getBoundingClientRect();
+      this.canvasLeft = rect.left;
+      this.canvasTop = rect.top;
+      // 右クリック時のメニュー表示を殺す
+      document.oncontextmenu = (e) => { e.preventDefault(); }
+      // touchのデフォルトアクションを殺す
+      //canvas.style["touch-action"] = "none";
+      // イベントリスナー
+      // optionsになったのね。じゃあそうか。passiveの規定値はfalseのようです。指定する必要、ないのか。
+      // そして1回のみの場合はonceをtrueにするようです。
+      // たとえば警告なんかに使えるかもしれないですね。ていうか明示した方がいいのか。
+      // 以降はdefaultIAと名付ける、これがtrueデフォルトで、falseにするとこれらを用意しないようにできる。
+      // たとえば考えにくいけどホイールしか要らないよって場合とか。
+      const {defaultIA = true, wheel = true} = options;
+      if (defaultIA) {
+        // マウス
+        canvas.addEventListener('mousedown', this.mouseDownAction.bind(this), {passive:false});
+        window.addEventListener('mousemove', this.mouseMoveAction.bind(this), {passive:false});
+        window.addEventListener('mouseup', this.mouseUpAction.bind(this), {passive:false});
+        // タッチ（ダブルタップは無いので自前で実装）
+        canvas.addEventListener('touchstart', this.touchStartAction.bind(this), {passive:false});
+        window.addEventListener('touchmove', this.touchMoveAction.bind(this), {passive:false});
+        window.addEventListener('touchend', this.touchEndAction.bind(this), {passive:false});
       }
-    });
-  });
+      // ホイールはキャンバス外で実行することはまずないですね...canvasでいいかと。
+      if (wheel) { canvas.addEventListener('wheel', this.wheelAction.bind(this), {passive:false}); }
 
-  this._renderer.prevTouches = this.touches;
-
-  // The idea of using damping is based on the following website. thank you.
-  // https://github.com/freshfork/p5.EasyCam/blob/9782964680f6a5c4c9bee825c475d9f2021d5134/p5.easycam.js#L1124
-
-  // variables for interaction
-  let deltaRadius = 0;
-  let deltaTheta = 0;
-  let deltaPhi = 0;
-  let moveDeltaX = 0;
-  let moveDeltaY = 0;
-  // constants for dampingProcess
-  const damping = 0.85;
-  const rotateAccelerationFactor = 0.6;
-  const moveAccelerationFactor = 0.15;
-  // For touches, the appropriate scale is different
-  // because the distance difference is multiplied.
-  const mouseZoomScaleFactor = 0.01;
-  const touchZoomScaleFactor = 0.0004;
-  const scaleFactor = this.height < this.width ? this.height : this.width;
-  // Flag whether the mouse or touch pointer is inside the canvas
-  let pointersInCanvas = false;
-
-  // calculate and determine flags and variables.
-  if (movedTouches.length > 0) {
-    /* for touch */
-    // if length === 1, rotate
-    // if length > 1, zoom and move
-
-    // for touch, it is calculated based on one moved touch pointer position.
-    pointersInCanvas =
-      movedTouches[0].x > 0 && movedTouches[0].x < this.width &&
-      movedTouches[0].y > 0 && movedTouches[0].y < this.height;
-
-    if (movedTouches.length === 1) {
-      const t = movedTouches[0];
-      deltaTheta = -sensitivityX * (t.x - t.px) / scaleFactor;
-      deltaPhi = -sensitivityY * (t.y - t.py) / scaleFactor;
-    } else {
-      const t0 = movedTouches[0];
-      const t1 = movedTouches[1];
-      const distWithTouches = Math.hypot(t0.x - t1.x, t0.y - t1.y);
-      const prevDistWithTouches = Math.hypot(t0.px - t1.px, t0.py - t1.py);
-      const changeDist = distWithTouches - prevDistWithTouches;
-      // move the camera farther when the distance between the two touch points
-      // decreases, move the camera closer when it increases.
-      deltaRadius = -changeDist * sensitivityZ * touchZoomScaleFactor;
-      // Move the center of the camera along with the movement of
-      // the center of gravity of the two touch points.
-      moveDeltaX = 0.5 * (t0.x + t1.x) - 0.5 * (t0.px + t1.px);
-      moveDeltaY = 0.5 * (t0.y + t1.y) - 0.5 * (t0.py + t1.py);
+      // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
+      const {mouseenter = false, mouseleave = false, click = false, dblclick = false, keydown = false, keyup = false} = options;
+      // マウスの出入り
+      if (mouseenter) { canvas.addEventListener('mouseenter', this.mouseEnterAction.bind(this), {passive:false}); }
+      if (mouseleave) { canvas.addEventListener('mouseleave', this.mouseLeaveAction.bind(this), {passive:false}); }
+      // クリック
+      if (click) { canvas.addEventListener('click', this.clickAction.bind(this), {passive:false}); }
+      if (dblclick) { canvas.addEventListener('dblclick', this.doubleClickAction.bind(this), {passive:false}); }
+      // キー(keypressは非推奨とのこと）
+      // いわゆる押しっぱなしの時の処理についてはフラグの切り替えのために両方必要になるわね
+      if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
+      if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
+      // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
+      window.addEventListener('resize', (function(){
+        const newRect = canvas.getBoundingClientRect();
+        this.updateCanvasData(newRect.left, newRect.top);
+      }).bind(this));
     }
-    if (this.touches.length > 0) {
-      if (pointersInCanvas) {
-        // Initiate an interaction if touched in the canvas
-        this._renderer.executeRotateAndMove = true;
-        this._renderer.executeZoom = true;
+    updateCanvasData(left, top){
+      this.canvasLeft = left;
+      this.canvasTop = top;
+      for(const p of this.pointers){ p.updateCanvasData(left, top); }
+    }
+    mouseDownAction(e){
+      this.mouseDownPointerAction(e);
+      this.mouseDownDefaultAction(e);
+    }
+    mouseDownPointerAction(e){
+      const p = this.factory();
+      p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
+      p.mouseDownAction(e);
+      this.pointers.push(p);
+    }
+    mouseDownDefaultAction(e){
+      // Interactionサイドの実行内容を書く
+    }
+    mouseMoveAction(e){
+      this.mouseMovePointerAction(e);
+      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.canvasLeft, e.clientY - this.canvasTop);
+    }
+    mouseMovePointerAction(e){
+      if(this.pointers.length == 0){ return; }
+      const p = this.pointers[0];
+      p.mouseUpdate(e);
+      p.mouseMoveAction(e);
+    }
+    mouseMoveDefaultAction(dx, dy, x, y){
+      // Interactionサイドの実行内容を書く
+    }
+    mouseUpAction(){
+      this.mouseUpPointerAction();
+      this.mouseUpDefaultAction();
+    }
+    mouseUpPointerAction(){
+      if(this.pointers.length == 0){ return; }
+      // ここで排除するpointerに何かさせる...
+      const p = this.pointers[0];
+      p.mouseUpAction();
+      this.pointers.pop();
+    }
+    mouseUpDefaultAction(){
+      // Interactionサイドの実行内容を書く
+    }
+    wheelAction(e){
+      // Interactionサイドの実行内容を書く
+      // e.deltaXとかe.deltaYが使われる。下にホイールするとき正の数、上にホイールするとき負の数。
+      // 速くホイールすると大きな数字が出る。おそらく仕様によるもので-1000～1000の100の倍数になった。0.01倍して使うといいかもしれない。
+      // 当然だが、拡大縮小に使う場合は対数を使った方が挙動が滑らかになるしスケールにもよらないのでおすすめ。
+    }
+    clickAction(){
+      // Interactionサイドの実行内容を書く。クリック時。左クリック。
+    }
+    mouseEnterAction(){
+      // Interactionサイドの実行内容を書く。enter時。
+    }
+    mouseLeaveAction(){
+      // Interactionサイドの実行内容を書く。leave時。
+    }
+    doubleClickAction(){
+      // Interactionサイドの実行内容を書く。ダブルクリック時。
+    }
+    doubleTapAction(){
+      // Interactionサイドの実行内容を書く。ダブルタップ時。自前で実装するしかないようです。初めて知った。
+    }
+    touchStartAction(e){
+      this.touchStartPointerAction(e);
+      this.touchStartDefaultAction(e);
+
+      // 以下、ダブルタップ用
+      // マルチタップ時にはイベントキャンセル（それはダブルタップではない）
+      if(this.pointers.length > 1){ this.tapCount = 0; return; }
+      // シングルタップの場合、0ならカウントを増やしつつ350ms後に0にするカウントダウンを開始
+      if(this.tapCount === 0){
+        // thisをbindしないとおかしなことになると思う
+        setTimeout((function(){ this.tapCount = 0; }).bind(this), 350);
+        this.tapCount++;
+        this.firstTapped.x = this.pointers[0].x;
+        this.firstTapped.y = this.pointers[0].y;
+      } else {
+        this.tapCount++;
+        // 最初のタップした場所とあまりに離れている場合はダブルとみなさない
+        // 25くらいあってもいい気がしてきた
+        const {x, y} = this.pointers[0];
+        if(Math.hypot(this.firstTapped.x - x, this.firstTapped.y - y) > 25){ this.tapCount = 0; return; }
+        if(this.tapCount === 2){
+          this.doubleTapAction();
+          this.tapCount = 0;
+        }
       }
-    } else {
-      // End an interaction when the touch is released
-      this._renderer.executeRotateAndMove = false;
-      this._renderer.executeZoom = false;
     }
-  } else {
-    /* for mouse */
-    // if wheelDeltaY !== 0, zoom
-    // if mouseLeftButton is down, rotate
-    // if mouseRightButton is down, move
-
-    // For mouse, it is calculated based on the mouse position.
-    pointersInCanvas =
-      (this.mouseX > 0 && this.mouseX < this.width) &&
-      (this.mouseY > 0 && this.mouseY < this.height);
-
-    if (this._mouseWheelDeltaY !== 0) {
-      // zoom the camera depending on the value of _mouseWheelDeltaY.
-      // move away if positive, move closer if negative
-      deltaRadius = Math.sign(this._mouseWheelDeltaY) * sensitivityZ;
-      deltaRadius *= mouseZoomScaleFactor;
-      this._mouseWheelDeltaY = 0;
-      // start zoom when the mouse is wheeled within the canvas.
-      if (pointersInCanvas) this._renderer.executeZoom = true;
-    } else {
-      // quit zoom when you stop wheeling.
-      this._renderer.zoomFlag = false;
-    }
-    if (this.mouseIsPressed) {
-      if (this.mouseButton === this.LEFT) {
-        deltaTheta = -sensitivityX * this.movedX / scaleFactor;
-        deltaPhi = -sensitivityY * this.movedY / scaleFactor;
-      } else if (this.mouseButton === this.RIGHT) {
-        moveDeltaX = this.movedX;
-        moveDeltaY = this.movedY;
+    touchStartPointerAction(e){
+      e.preventDefault();
+      // targetTouchesを使わないとcanvas外のタッチオブジェクトを格納してしまう
+      const currentTouches = e.targetTouches; // touchオブジェクトの配列
+      const newPointers = [];
+      // 新入りがいないかどうか調べていたら増やす感じですね
+      // targetTouchesのうちでpointersに入ってないものを追加する処理です
+      // 入ってないかどうかはidで調べます
+      for (let i = 0; i < currentTouches.length; i++){
+        let equalFlag = false;
+        for (let j = 0; j < this.pointers.length; j++){
+          if (currentTouches[i].identifier === this.pointers[j].id){
+            equalFlag = true;
+            break;
+          }
+        }
+        if(!equalFlag){
+          const p = this.factory();
+          p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
+          p.touchStartAction(currentTouches[i]);
+          newPointers.push(p);
+        }
       }
-      // start rotate and move when mouse is pressed within the canvas.
-      if (pointersInCanvas) this._renderer.executeRotateAndMove = true;
-    } else {
-      // quit rotate and move if mouse is released.
-      this._renderer.executeRotateAndMove = false;
+      this.pointers.push(...newPointers);
+    }
+    touchStartDefaultAction(e){
+      // Interactionサイドの実行内容を書く。touchがスタートした時
+    }
+    touchMoveAction(e){
+      // pointerごとにupdateする
+      this.touchMovePointerAction(e);
+      if (this.pointers.length === 1) {
+        // swipe.
+        const p0 = this.pointers[0];
+        this.touchSwipeAction(
+          p0.x - p0.prevX, p0.y - p0.prevY, p0.x, p0.y, p0.prevX, p0.prevY
+        );
+      } else if (this.pointers.length > 1) {
+        // pinch in/out.
+        const p = this.pointers[0];
+        const q = this.pointers[1];
+        // pとqから重心の位置と変化、距離の変化を
+        // 計算して各種アクションを実行する
+        const gx = (p.x + q.x) * 0.5;
+        const gPrevX = (p.prevX + q.prevX) * 0.5;
+        const gy = (p.y + q.y) * 0.5;
+        const gPrevY = (p.prevY + q.prevY) * 0.5;
+        const gDX = gx - gPrevX;
+        const gDY = gy - gPrevY;
+        const curDistance = Math.hypot(p.x - q.x, p.y - q.y);
+        const prevDistance = Math.hypot(p.prevX - q.prevX, p.prevY - q.prevY)
+        // 今の距離 - 前の距離
+        const diff = curDistance - prevDistance;
+        // 今の距離 / 前の距離
+        const ratio = curDistance / prevDistance;
+        // 差も比も使えると思ったので仕様変更
+        this.touchPinchInOutAction(diff, ratio, gx, gy, gPrevX, gPrevY);
+        this.touchMultiSwipeAction(gDX, gDY, gx, gy, gPrevX, gPrevY);
+        // rotateは要検討
+      }
+    }
+    touchMovePointerAction(e){
+      //e.preventDefault();
+      const currentTouches = e.targetTouches;
+      for (let i = 0; i < currentTouches.length; i++){
+        const t = currentTouches[i];
+        for (let j = 0; j < this.pointers.length; j++){
+          if (t.identifier === this.pointers[j].id){
+            const p = this.pointers[j];
+            p.touchUpdate(t);
+            p.touchMoveAction(t);
+          }
+        }
+      }
+    }
+    touchSwipeAction(dx, dy, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // dx,dyが変位。
+    }
+    touchPinchInOutAction(diff, ratio, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // diffは距離の変化。正の場合大きくなる。ratioは距離の比。
+    }
+    touchMultiSwipeAction(dx, dy, x, y, px, py){
+      // Interactionサイドの実行内容を書く。
+      // dx,dyは重心の変位。
+    }
+    touchRotateAction(value, x, y, px, py){
+      // TODO.
+    }
+    touchEndAction(e){
+      // End時のアクション。
+      this.touchEndPointerAction(e);
+      this.touchEndDefaultAction(e);
+    }
+    touchEndPointerAction(e){
+      const changedTouches = e.changedTouches;
+      for (let i = 0; i < changedTouches.length; i++){
+        for (let j = this.pointers.length-1; j >= 0; j--){
+          if (changedTouches[i].identifier === this.pointers[j].id){
+            // ここで排除するpointerに何かさせる...
+            const p = this.pointers[j];
+            p.touchEndAction(changedTouches[i]);
+            this.pointers.splice(j, 1);
+          }
+        }
+      }
+    }
+    touchEndDefaultAction(e){
+      // Interactionサイドの実行内容を書く。touchEndが発生した場合。
+      // とはいえ難しいだろうので、おそらくpointersが空っぽの時とかそういう感じになるかと。
+    }
+    keyDownAction(e){
+      // Interactionサイドの実行内容を書く。
+      // キーが押されたとき
+    }
+    keyUpAction(e){
+      // Interactionサイドの実行内容を書く。
+      // キーが離れた時
+      //console.log(e.code);
+    }
+    getPointers(){
+      return this.pointers;
     }
   }
 
-  // interactions
+  // dampedAction.
+  // 汎用的なモーション作成ツール
+  // 要するに力を加えた時に速度が発生してそれによりなんか動かすのに
+  // 使えるわけです
+  // ベクトル版作ったら面白い？一次元なので。
+  // 0.85は摩擦部分でここを大きくするといわゆる「滑り」が大きくなるのね
+  // option = {friction:0.15} みたいにして指定できる。よ。
+  // とはいえ実際にはvalueが正や負の値を取りつつ減衰するだけなので
+  // これを単位ベクトルに掛ければ2次元でも使えなくはないと思う...よ。
 
-  // zoom process
-  if (deltaRadius !== 0 && this._renderer.executeZoom) {
-    // accelerate zoom velocity
-    this._renderer.zoomVelocity += deltaRadius;
-  }
-  if (Math.abs(this._renderer.zoomVelocity) > 0.001) {
-    // if freeRotation is true, we use _orbitFree() instead of _orbit()
-    if (freeRotation) {
-      cam._orbitFree(
-        0, 0, this._renderer.zoomVelocity
-      );
-    } else {
-      cam._orbit(
-        0, 0, this._renderer.zoomVelocity
-      );
+  // 使い方...難しいと思うんだけどね。
+  // ScalarDampedActionに改名しました
+  // actionCallBackはそのまま関数です。どんな関数でもいいわけではなくて、基本的に1変数です。
+  // そこに放り込まれる値というのが、このScalarDampedActionを実行するたびに減衰していって0になる。
+  // まあそういうこと。
+  // quitで0.0になることからわかるようにactionには0が入った場合は何もしないことが想定されていますね。
+  // たとえばですけどxを与えられた場合にあるものをxだけ動かす、そういった挙動が想定されているのでしょうね。
+  // だからベクトルだったら特定の方向に入力だけ動かす、そういった感じかと。思います。
+  // 適用事例：https://openprocessing.org/sketch/1923156
+  // 長方形をvalueだけ動かしていますね。制限を設けていますが。こういう使い方...
+  // ではあるんだけどね。関数を即席で作ってなおかつbindしてるのがあんま綺麗じゃないのよね。まあ柔軟性...
+  // あー、たとえば？関数の処理の一部、何かを動かす部分に、その、部分的に当てはめる使い方が想定されていますね。
+  class ScalarDampedAction{
+    constructor(actionCallBack, option = {}){
+      const {friction = 0.15} = option;
+      this.value = 0.0;
+      this.damping = 1.0 - friction; // デフォルトは0.85になります
+      this.action = actionCallBack;
     }
-    // In orthogonal projection, the scale does not change even if
-    // the distance to the gaze point is changed, so the projection matrix
-    // needs to be modified.
-    if (cam.projMatrix.mat4[15] !== 0) {
-      cam.projMatrix.mat4[0] *= Math.pow(
-        10, -this._renderer.zoomVelocity
-      );
-      cam.projMatrix.mat4[5] *= Math.pow(
-        10, -this._renderer.zoomVelocity
-      );
-      // modify uPMatrix
-      this._renderer.uPMatrix.mat4[0] = cam.projMatrix.mat4[0];
-      this._renderer.uPMatrix.mat4[5] = cam.projMatrix.mat4[5];
+    addForce(force){
+      this.value += force;
     }
-    // damping
-    this._renderer.zoomVelocity *= damping;
-  } else {
-    this._renderer.zoomVelocity = 0;
-  }
-
-  // rotate process
-  if ((deltaTheta !== 0 || deltaPhi !== 0) &&
-  this._renderer.executeRotateAndMove) {
-    // accelerate rotate velocity
-    this._renderer.rotateVelocity.add(
-      deltaTheta * rotateAccelerationFactor,
-      deltaPhi * rotateAccelerationFactor
-    );
-  }
-  if (this._renderer.rotateVelocity.magSq() > 0.000001) {
-    // if freeRotation is true, the camera always rotates freely in the direction the pointer moves
-    if (freeRotation) {
-      cam._orbitFree(
-        -this._renderer.rotateVelocity.x,
-        this._renderer.rotateVelocity.y,
-        0
-      );
-    } else {
-      cam._orbit(
-        this._renderer.rotateVelocity.x,
-        this._renderer.rotateVelocity.y,
-        0
-      );
+    step(){
+      const active = (this.value * this.value > 1e-6);
+      if(active){
+        this.action(this.value);
+        this.value *= this.damping;
+      }else{
+        this.quit();
+      }
+      return active;
     }
-    // damping
-    this._renderer.rotateVelocity.mult(damping);
-  } else {
-    this._renderer.rotateVelocity.set(0, 0);
-  }
-
-  // move process
-  if ((moveDeltaX !== 0 || moveDeltaY !== 0) &&
-  this._renderer.executeRotateAndMove) {
-    // Normalize movement distance
-    const ndcX = moveDeltaX * 2/this.width;
-    const ndcY = moveDeltaY * 2/this.height;
-    // accelerate move velocity
-    this._renderer.moveVelocity.add(
-      ndcX * moveAccelerationFactor,
-      ndcY * moveAccelerationFactor
-    );
-  }
-  if (this._renderer.moveVelocity.magSq() > 0.000001) {
-    // Translate the camera so that the entire object moves
-    // perpendicular to the line of sight when the mouse is moved
-    // or when the centers of gravity of the two touch pointers move.
-    const local = cam._getLocalAxes();
-
-    // Calculate the z coordinate in the view coordinates of
-    // the center, that is, the distance to the view point
-    const diffX = cam.eyeX - cam.centerX;
-    const diffY = cam.eyeY - cam.centerY;
-    const diffZ = cam.eyeZ - cam.centerZ;
-    const viewZ = Math.sqrt(diffX * diffX + diffY * diffY + diffZ * diffZ);
-
-    // position vector of the center.
-    let cv = new p5.Vector(cam.centerX, cam.centerY, cam.centerZ);
-
-    // Calculate the normalized device coordinates of the center.
-    cv = cam.cameraMatrix.multiplyPoint(cv);
-    cv = this._renderer.uPMatrix.multiplyAndNormalizePoint(cv);
-
-    // Move the center by this distance
-    // in the normalized device coordinate system.
-    cv.x -= this._renderer.moveVelocity.x;
-    cv.y -= this._renderer.moveVelocity.y;
-
-    // Calculate the translation vector
-    // in the direction perpendicular to the line of sight of center.
-    let dx, dy;
-    const uP = this._renderer.uPMatrix.mat4;
-
-    if (uP[15] === 0) {
-      dx = ((uP[8] + cv.x)/uP[0]) * viewZ;
-      dy = ((uP[9] + cv.y)/uP[5]) * viewZ;
-    } else {
-      dx = (cv.x - uP[12])/uP[0];
-      dy = (cv.y - uP[13])/uP[5];
+    quit(){
+      this.value = 0.0;
     }
-
-    // translate the camera.
-    cam.setPosition(
-      cam.eyeX + dx * local.x[0] + dy * local.y[0],
-      cam.eyeY + dx * local.x[1] + dy * local.y[1],
-      cam.eyeZ + dx * local.x[2] + dy * local.y[2]
-    );
-    // damping
-    this._renderer.moveVelocity.mult(damping);
-  } else {
-    this._renderer.moveVelocity.set(0, 0);
   }
 
-  return this;
-};
+  // ScalarDampedAction
+  // VectorDampedAction
+  // 2つ用意するといいと思う
+
+  fox.Interaction = Interaction;
+  fox.PointerPrototype = PointerPrototype;
+  fox.ScalarDampedAction = ScalarDampedAction;
+
+  return fox;
+})();
 
 // p5wgex.
 // glからRenderNodeを生成します。glです。(2022/10/02)
