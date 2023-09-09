@@ -625,6 +625,22 @@ const p5wgex = (function(){
     noLoop();
   }
 
+  // 簡単なclamp関数
+  // 数と配列が対象
+  function clamp(x, _min = 0, _max = 1){
+  if (typeof x === "number") {
+    return Math.max(_min, Math.min(_max, x));
+  }
+  if (Array.isArray(x)) {
+    const result = [];
+    for(let value of x) {
+      result.push(clamp(value, _min, _max));
+    }
+    return result;
+  }
+  return x;
+}
+
   // ---------------------------------------------------------------------------------------------- //
   // Timer.
 
@@ -6234,6 +6250,8 @@ const p5wgex = (function(){
   ex.getTranspose3x3 = getTranspose3x3; // これ必要ですね...
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
+  ex.myAlert = myAlert; // 警告メッセージの後でnoLoop()を実行する
+  ex.clamp = clamp; // clamp関数
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
 
   // geometry.
