@@ -5430,11 +5430,11 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
-  // TransformEx.
+  // Transform.
   // 単位行列。初期化。要するにモデル行列。
   // rotとかいろいろこっちに移すかな...あっちに持たせても仕方ないわな。
 
-  class TransformEx{
+  class Transform{
     constructor(data){
       this.mat = new Mat4(data);
     }
@@ -5503,16 +5503,6 @@ const p5wgex = (function(){
     return getInverseTranspose3x3(result);
   }
   */
-
-  // 順番としては
-  // TransformExとCameraExを用意 → モデルとビューでモデルビュー作って法線も作って
-  // プロジェも作ってモデルビューとプロジェと法線を送り込んで計算。
-  // 現時点でTransformExの便利な書き方がないので困ったね～...（後回し）
-
-  // ゆくゆくはVec4とかQuarternionやりたいけど必要が生じて明確な利用方法の目途が立ってからでないと駄目ね。
-  // 別に派手なことをしたいとかね、そういう話ではないので。基礎固め。地味な話です。
-  // てか、ああそうか、Vec4作ってVec3から(x,y,z,1)作るメソッドを...そうすれば自由に...
-  // となるとゆくゆくはside,up,frontはVec4というかQuarternionとして扱うことになる？それでもいいけどね。
 
   // ---------------------------------------------------------------------------------------------- //
   // Snipet.
@@ -6451,7 +6441,7 @@ const p5wgex = (function(){
   ex.TextureEx = TextureEx;
   ex.Mat4 = Mat4;
   ex.CameraEx = CameraEx;
-  ex.TransformEx = TransformEx;
+  ex.Transform = Transform;
   ex.Vec3 = Vec3;
 
   // defaultShader.
