@@ -767,6 +767,8 @@ const p5wgex = (function(){
   // Easing.
   // 各種イージング
   // 複数のイージングを組み合わせて新しいの作ったりできる優れもの
+  // 関数の登録をfuncの代わりにオブジェクトを使うことでcompositeMultiが適用されるようにしました
+  // さらに関数が必要ない場合に登録された関数でapplyで呼び出せるようにしました
 
   class Easing{
     constructor(){
@@ -821,10 +823,21 @@ const p5wgex = (function(){
       this.regist("one", (x => 1));
     }
     regist(name, func){
-      this.funcs[name] = func;
+      if (typeof func === "function") {
+        // 関数の場合は直接。
+        this.funcs[name] = func;
+        return;
+      }
+      // パラメータ指定
+      this.funcs[name] = this.compositeMulti(func);
     }
     get(name){
+      // 関数が欲しい場合
       return this.funcs[name];
+    }
+    apply(name, value){
+      // 直接値が欲しい場合
+      return this.funcs[name](value);
     }
     parseFunc(f){
       if (typeof f === "string") {
