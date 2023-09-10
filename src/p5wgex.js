@@ -764,6 +764,163 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
+  // Easing.
+  // 各種イージング
+  // 複数のイージングを組み合わせて新しいの作ったりできる優れもの
+
+  class Easing{
+    constructor(){
+      this.funcs = {};
+      this.initialize();
+    }
+    initialize(){
+      this.regist("linear", x => x); // これは特別。
+
+      // まずSineとかQuadのInバージョンを作り...
+      // funcs.easeIn~~~はそのまま
+      // funcs.easeOut~~~はそれを加工
+      // funcs.easeInOut~~~も別の手法で加工
+      // 一通りできたらそれをさらに加工してRevを作る流れ。
+      const baseFuncs = {};
+      baseFuncs.Sine = x => 1-Math.cos(0.5*Math.PI*x);
+      baseFuncs.Quad = x => x*x;
+      baseFuncs.Cubic = x => x*x*x;
+      baseFuncs.Quart = x => x*x*x*x;
+      baseFuncs.Quint = x => x*x*x*x*x;
+      baseFuncs.Expo = x => (x > 0 ? Math.pow(2, 10*(x-1)) : 0);
+      baseFuncs.Circ = x => 1-Math.sqrt(1-x*x);
+      baseFuncs.Back = x => 2.7*x*x*x - 1.7*x*x;
+      baseFuncs.Elastic = x => {
+        if(x>0 && x<1){
+          const c4 = (2 * Math.PI) / 3;
+          return -Math.pow(2, 10 * x - 10) * Math.sin((x * 10 - 10.75) * c4);
+        }
+        if(x>0){ return 1; }
+        return 0;
+      }
+      const easeOutBounce = x => {
+        const n1 = 7.5625;
+        const d1 = 2.75;
+        if(x < 1 / d1){
+          return n1 * x * x;
+        }else if (x < 2 / d1){
+          return n1 * (x -= 1.5 / d1) * x + 0.75;
+        }else if (x < 2.5 / d1){
+          return n1 * (x -= 2.25 / d1) * x + 0.9375;
+        }
+        return n1 * (x -= 2.625 / d1) * x + 0.984375;
+      }
+      baseFuncs.Bounce = x => 1-easeOutBounce(1-x);
+      for(let funcName of Object.keys(baseFuncs)){
+        const f = baseFuncs[funcName];
+        this.regist("easeIn"+funcName, f);
+        this.regist("easeOut"+funcName, (x => 1-f(1-x)));
+        this.regist("easeInOut"+funcName, (x => (x < 0.5 ? 0.5*f(2*x) : 1-0.5*f(2*(1-x)))));
+      }
+      this.regist("zero", (x => 0));
+      this.regist("one", (x => 1));
+    }
+    regist(name, func){
+      this.funcs[name] = func;
+    }
+    get(name){
+      return this.funcs[name];
+    }
+    parseFunc(f){
+      if (typeof f === "string") {
+        if (typeof this.funcs[f] === "function") {
+          return this.funcs[f];
+        }
+      }
+      if (typeof f === "function") return f;
+      // 未定義の場合はlinearが返る
+      return x => x;
+    }
+    toClamp(f){
+      return Easing.toClamp(this.parseFunc(f));
+    }
+    toLoop(f){
+      return Easing.toLoop(this.parseFunc(f));
+    }
+    toReverseLoop(f){
+      return Easing.toReverseLoop(this.parseFunc(f));
+    }
+    toInverse(f){
+      return Easing.toInverse(this.parseFunc(f));
+    }
+    compositeMulti(params = {}){
+      const {f = [x=>x]} = params;
+      for(let k=0; k<f.length; k++){
+        f[k] = this.parseFunc(f[k]);
+      }
+      return Easing.compositeMulti(params);
+    }
+    static toClamp(f){
+      // 0～1でclampする
+      return (x) => f(clamp(x, 0, 1));
+    }
+    static toLoop(f){
+      // 元の0～1の関数を延々と
+      return (x) => f(((x % 1) + 1) % 1);
+    }
+    static toReverseLoop(f){
+      // 元の0～1から0～1～0～1～...
+      // 元の関数をForwardBackしたものをLoopしたもの
+      return (x) => {
+        const t = (((x/2) % 1) + 1) % 1;
+        if (t < 0.5) return f(2*t);
+        return f(2-2*t);
+      }
+    }
+    static toInverse(f){
+      // 1～0にするだけ
+      return (x) => f(1-x);
+    }
+    static composite(f, g, t, v){
+      // 0～tでf, t～1でgという関数を作る。
+      // 取る値はf,gともに0～1を想定しており
+      // 途中でvになって最後が1ですね
+      return (x) => {
+        if (x < t) return f(x/t) * v;
+        return v + (1-v)*g((x-t)/(1-t));
+      }
+    }
+    static compositeMulti(params = {}){
+      // 関数列fの長さをNとすると
+      // 時間間隔列tは長さN+1で値の列vも長さN+1を想定
+      // tは0から1までの間を単調増加で指定
+      // vはそれに対応するように値を用意する
+      // f,t,vから0～1に対し値を返す関数を作る
+      // 各々のfは0～1ベースの関数であることが想定されている
+      // 取る値の範囲も0～1になっているかどうかは問わない（ずっと0とかでもいい）
+      // 整合性が取れるかどうかはvの指定次第
+      const {f = [x=>x], t = [0,1], v = [0,1]} = params;
+      const {loopType = "clamp"} = params;
+      const resultFunction = (x) => {
+        //x = clamp(x, 0, 1); // optionで選べるようにするかも？
+        for(let k=1; k<t.length; k++){
+          if (x < t[k]){
+            const factor = f[k-1]((x - t[k-1]) / (t[k] - t[k-1]));
+            return v[k-1] + (v[k] - v[k-1]) * factor;
+          }
+        }
+        return v[v.length - 1]; // xが1の場合
+      }
+      switch(loopType){
+        case "clamp":
+          return Easing.toClamp(resultFunction);
+        case "loop":
+          return Easing.toLoop(resultFunction);
+        case "reverseLoop":
+          return Easing.toReverseLoop(resultFunction);
+        case "inverse":
+          return Easing.toInverse(resultFunction);
+      }
+      return resultFunction;
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
   // dictionary.
   // gl定数を外部から文字列でアクセスできるようにするための辞書
 
@@ -3430,9 +3587,9 @@ const p5wgex = (function(){
       indexMap[v0i] = 3*i;
       indexMap[v1i] = 3*i+1;
       indexMap[v2i] = 3*i+2;
-      const v0 = new ex.Vec3(_v[3*v0i], _v[3*v0i+1], _v[3*v0i+2]).normalize().mult(r);
-      const v1 = new ex.Vec3(_v[3*v1i], _v[3*v1i+1], _v[3*v1i+2]).normalize().mult(r);
-      const v2 = new ex.Vec3(_v[3*v2i], _v[3*v2i+1], _v[3*v2i+2]).normalize().mult(r);
+      const v0 = new Vec3(_v[3*v0i], _v[3*v0i+1], _v[3*v0i+2]).normalize().mult(r);
+      const v1 = new Vec3(_v[3*v1i], _v[3*v1i+1], _v[3*v1i+2]).normalize().mult(r);
+      const v2 = new Vec3(_v[3*v2i], _v[3*v2i+1], _v[3*v2i+2]).normalize().mult(r);
       mesh.v.push(...v0.toArray());
       mesh.v.push(...v1.toArray());
       mesh.v.push(...v2.toArray());
@@ -3713,14 +3870,14 @@ const p5wgex = (function(){
       // step1: Nの受け皿を用意
       const vn = this.v.length/3;
       const normals = [];
-      for(let i=0; i<vn; i++) normals.push(new ex.Vec3(0,0,0));
-      const v0 = new ex.Vec3();
-      const v1 = new ex.Vec3();
-      const v2 = new ex.Vec3();
-      const v01 = new ex.Vec3();
-      const v02 = new ex.Vec3();
-      const v12 = new ex.Vec3();
-      const v012 = new ex.Vec3();
+      for(let i=0; i<vn; i++) normals.push(new Vec3(0,0,0));
+      const v0 = new Vec3();
+      const v1 = new Vec3();
+      const v2 = new Vec3();
+      const v01 = new Vec3();
+      const v02 = new Vec3();
+      const v12 = new Vec3();
+      const v012 = new Vec3();
       // step2: fの走査
       const fn = this.f.length/3;
       for(let i=0; i<fn; i++){
@@ -6274,6 +6431,7 @@ const p5wgex = (function(){
 
   // class.
   ex.Timer = Timer;
+  ex.Easing = Easing;
   ex.Painter = Painter;
   ex.Figure = Figure;
   ex.RenderNode = RenderNode;
