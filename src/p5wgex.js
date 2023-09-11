@@ -1800,7 +1800,7 @@ const p5wgex = (function(){
   // targetが"cube_map"の場合、{src:~~~}ではなく、{src:{xp:~~, xn:~~, yp:~~, yn:~~, zp:~~, zn:~~}}
   // ってやればいいと思う。それぞれにグラフィックを入れる。
   // getTextureSourceについても{xp:~~,yp:~~}の形でそのまま返すようにしよう
-  class TextureEx{
+  class Texture{
     constructor(gl, info, dict){
       this.gl = gl;
       this.dict = dict;
@@ -4263,7 +4263,7 @@ const p5wgex = (function(){
     registTexture(name, info = {}){
       // お待たせしました！！
       info.name = name;
-      const newTexture = new TextureEx(this.gl, info, this.dict);
+      const newTexture = new Texture(this.gl, info, this.dict);
       this.textures[name] = newTexture;
       return this;
     }
@@ -5437,6 +5437,8 @@ const p5wgex = (function(){
   class Transform{
     constructor(data){
       this.mat = new Mat4(data);
+      this.states = {};
+      this.stateStuck = [];
     }
     initialize(){
       this.mat.initialize();
@@ -5445,6 +5447,32 @@ const p5wgex = (function(){
     getModelMat(){
       // モデル行列を取り出す。これを...渡す。
       return this.mat;
+    }
+    setState(name){
+      // 行列の形でステートを保持
+      this.states[name] = this.mat.copy();
+      return this;
+    }
+    loadState(name){
+      // 行列を呼び出してセットする
+      if (this.states[name] === undefined) return this;
+      this.mat.set(this.states[name].m);
+      return this;
+    }
+    lerpState(fromState, toState, amt){
+      // under construction.
+      return this;
+    }
+    push(){
+      // 行列をstuckにpushする
+      this.stateStuck.push(this.mat.copy());
+    }
+    pop(){
+      // 直前にpushした内容を出す
+      const previousState = this.stateStuck.pop();
+      if (previousState === undefined) return this;
+      this.mat.set(previousState.m);
+      return this;
     }
     rotateX(t){
       // x軸の周りにtラジアン回転の行列を掛ける
@@ -5486,6 +5514,54 @@ const p5wgex = (function(){
       this.mat.scale(sx, sy, sz);
       //const data = getScale(sx, sy, sz);
       //this.mat.mult(data);
+      return this;
+    }
+    create(process = []){
+      // processはこういうの
+      // [{t:[10,20,40]}, {rx:PI/3}, {ry:PI/4}, {rz:-PI/2}, {r:[PI/5, 1, 1, 1]}]
+      // 順繰りに適用していく
+      // たとえば右に動かしてその位置で回転させたい場合はまずtで次にrxやryを実行する
+      // t,r,sは配列指定、rx,ry,rzはスカラー指定、rは角度が先。ssは。。。要らないんだよね...
+      // s:2でs:[2,2,2]と同じになればいいんよね。そうしよ。ssは廃止！
+      // transformをベクトル指定できるようにしよ。
+      for(let i = 0; i < process.length; i++){
+        const tfElement = process[i];
+        const tfKind = Object.keys(tfElement)[0];
+        const tfData = tfElement[tfKind];
+        switch(tfKind){
+          case "t", "translate":
+            if (Array.isArray(tfData)){
+              this.translate(...tfData);
+            } else if (typeof tfData === 'object'){
+              // ベクトルなどの場合
+              const {x:tx = 0, y:ty = 0, z:tz = 0} = tfData;
+              this.translate(tx, ty, tz);
+            }
+            break;
+          case "rx", "rotateX": this.rotateX(tfData); break;
+          case "ry", "rotateY": this.rotateY(tfData); break;
+          case "rz", "rotateZ": this.rotateZ(tfData); break;
+          case "r", "rotate":
+            if (Array.isArray(tfData)) {
+              if (typeof tfData[1] === 'number') {
+                this.rotate(...tfData);
+              } else if (typeof tfData[1] === 'object') {
+                // 第二引数がベクトルの場合
+                const {x:vx = 0, y:vy = 0, z:vz = 1} = tfData;
+                this.rotate(tfData[0], vx, vy, vz);
+              }
+            }
+            break;
+          case "s", "scale":
+            if (Array.isArray(tfData)){
+              this.scale(...tfData);
+            } else if (typeof tfData === 'number') {
+              // スカラーを指定すると全部同じになる感じ
+              this.scale(tfData, tfData, tfData);
+            }
+            break;
+        }
+      }
       return this;
     }
   }
@@ -6277,6 +6353,8 @@ const p5wgex = (function(){
       // デフォルトではtfをレンダーのたびに初期化します
       if (initializeTransform) tf.initialize();
       // トランスフォームの実行
+      tf.create(process);
+      /*
       for(let i=0; i<process.length; i++){
         const tfElement = process[i];
         const tfKind = Object.keys(tfElement)[0];
@@ -6291,6 +6369,7 @@ const p5wgex = (function(){
           case "ss": tf.scale(tfData, tfData, tfData); break;
         }
       }
+      */
       this.setMatrixUniforms(tf, cam);
       // いろんなケースに対応するのがしんどいので（重複部分が多いので）
       // ここは外から命令しましょう
@@ -6438,7 +6517,7 @@ const p5wgex = (function(){
   ex.Painter = Painter;
   ex.Figure = Figure;
   ex.RenderNode = RenderNode;
-  ex.TextureEx = TextureEx;
+  ex.Texture = Texture;
   ex.Mat4 = Mat4;
   ex.CameraEx = CameraEx;
   ex.Transform = Transform;
