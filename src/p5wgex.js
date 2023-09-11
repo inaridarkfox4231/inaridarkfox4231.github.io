@@ -56,6 +56,9 @@
 // foxIA移植
 // OrbitControlのパッチを削除（もう要らない）
 
+// 20230911
+// foxIAの移植、カメラの改造/差し替え、Transformなどの改名、改変、CCとCMの導入、などなど。
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
