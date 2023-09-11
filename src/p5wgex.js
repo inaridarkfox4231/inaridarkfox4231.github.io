@@ -5524,12 +5524,14 @@ const p5wgex = (function(){
       // t,r,sは配列指定、rx,ry,rzはスカラー指定、rは角度が先。ssは。。。要らないんだよね...
       // s:2でs:[2,2,2]と同じになればいいんよね。そうしよ。ssは廃止！
       // transformをベクトル指定できるようにしよ。
+      // 複数ラベルで書き方の柔軟性（列挙は駄目らしい）
       for(let i = 0; i < process.length; i++){
         const tfElement = process[i];
         const tfKind = Object.keys(tfElement)[0];
         const tfData = tfElement[tfKind];
         switch(tfKind){
-          case "t", "translate":
+          case "t":
+          case "translate":
             if (Array.isArray(tfData)){
               this.translate(...tfData);
             } else if (typeof tfData === 'object'){
@@ -5538,10 +5540,17 @@ const p5wgex = (function(){
               this.translate(tx, ty, tz);
             }
             break;
-          case "rx", "rotateX": this.rotateX(tfData); break;
-          case "ry", "rotateY": this.rotateY(tfData); break;
-          case "rz", "rotateZ": this.rotateZ(tfData); break;
-          case "r", "rotate":
+          case "rx":
+          case "rotateX":
+            this.rotateX(tfData); break;
+          case "ry":
+          case "rotateY":
+            this.rotateY(tfData); break;
+          case "rz":
+          case "rotateZ":
+            this.rotateZ(tfData); break;
+          case "r":
+          case "rotate":
             if (Array.isArray(tfData)) {
               if (typeof tfData[1] === 'number') {
                 this.rotate(...tfData);
@@ -5552,7 +5561,8 @@ const p5wgex = (function(){
               }
             }
             break;
-          case "s", "scale":
+          case "s":
+          case "scale":
             if (Array.isArray(tfData)){
               this.scale(...tfData);
             } else if (typeof tfData === 'number') {
