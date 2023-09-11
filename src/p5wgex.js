@@ -6918,26 +6918,8 @@ const p5wgex = (function(){
       if (initializeTransform) tf.initialize();
       // トランスフォームの実行
       tf.create(process);
-      /*
-      for(let i=0; i<process.length; i++){
-        const tfElement = process[i];
-        const tfKind = Object.keys(tfElement)[0];
-        const tfData = tfElement[tfKind];
-        switch(tfKind){
-          case "t": tf.translate(...tfData); break;
-          case "rx": tf.rotateX(tfData); break;
-          case "ry": tf.rotateY(tfData); break;
-          case "rz": tf.rotateZ(tfData); break;
-          case "r": tf.rotate(...tfData); break;
-          case "s": tf.scale(...tfData); break;
-          case "ss": tf.scale(tfData, tfData, tfData); break;
-        }
-      }
-      */
       this.setMatrixUniforms(tf, cam);
-      // いろんなケースに対応するのがしんどいので（重複部分が多いので）
-      // ここは外から命令しましょう
-      //node.drawElements("triangles");
+      // ドローコールはしない
       return this;
     }
     output(){
@@ -7085,6 +7067,8 @@ const p5wgex = (function(){
   ex.Mat4 = Mat4;
   ex.PerspectiveCamera = PerspectiveCamera;
   ex.OrthographicCamera = OrthographicCamera;
+  ex.CameraController = CameraController;
+  ex.CameraManager = CameraManager;
   ex.Transform = Transform;
   ex.Vec3 = Vec3;
 
