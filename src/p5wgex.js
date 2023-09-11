@@ -4983,449 +4983,1003 @@ const p5wgex = (function(){
   // webglと違って点の位置を動かすとかそういう考え方じゃないからたとえば線の太さが変わったりするんだよなぁ。）
 
   // ---------------------------------------------------------------------------------------------- //
-  // CameraEx.
+  // For Camera.
   // ビューとプロジェクションを担うパート。
-  // 完全に切り離したかったんだけど射影行列が距離依存になってしまった...距離はビューの概念...
-  // でもこの方がnearとfarを視点との距離に対して定義出来て便利なのでOKです。メソッド分離でいいのです。
+  // まずPrototypeがあり、ビュー関連は共通なのでここに主にビューの処理を書く
+  // 次いで射影の種類ごとに2種類のカメラを用意する。PerspectiveとOrthographic.
+  // メソッド、使い方
+  // まず雑に作りたいなら同じアスペクト比で{w:4,h:4}とか{w:640,h:480}ってやればいい
+  // nearとかfarをいじりたい場合はお好みで
+  // eye,center,topは配列で指定する
+  // メソッド一覧...
 
-  // 動かすのはテストが終わってからにしましょう。
-  // 実装予定：zoom（倍率を指定して矩形を拡縮）,spin（視点を中心の周りに横に回転）,arise（同、縦回転。ただしtopは越えない。）,
-  // pan（視点を中心の横にずらす、これも回転）,tilt（同、縦方向。ただしtopは越えない）,move（一緒にローカル軸で平行移動）
-  // moveはローカル軸ベースの移動。たとえばzを増やす場合は中心とともに逆方向に遠ざかる感じ...ローカル軸は固定。
-  // とはいえ中心が動くので行列は再計算されるわね。dolly:視点を中心に近づけたり離したりする。
-  // parallel:グローバル軸に対して視点と中心のセットを平行移動させる。需要があるかどうかは不明。
-  // lookAt: 中心だけ強制的に動かす。
-  // moveはあれなんですよね。一人称で、動きを同期させたりするのに...まあ、使うんかな...
-  // って思ったけど同期させるなら直接eyeとcenterいじった方が早い気がする((
-
-  // 新カメラ。
-  // infoの指定の仕方、topは常に正規化、Vec3で統一、ローカル軸の名称変更、動かすメソッド追加, etc...
-
-  // バリデーション忘れてた。ごめん。
-  function _validateForPersProj(w, h, info = {}){
-    // 基本pers. nearとfarはdistanceに対する比率
-    if(info.fov === undefined){ info.fov = Math.PI/3; }
-    if(info.aspect === undefined){ info.aspect = w/h; }
-    if(info.near === undefined){ info.near = 0.1; }
-    if(info.far === undefined){ info.far = 10; }
-  }
-
-  function _validateForOrthoProj(w, h, info = {}){
-    // farは一応distanceの4倍くらいで。
-    if(info.left === undefined){ info.left = -w/2; }
-    if(info.right === undefined){ info.right = w/2; }
-    if(info.bottom === undefined){ info.bottom = -h/2; }
-    if(info.top === undefined){ info.top = h/2; }
-    if(info.near === undefined){ info.near = 0.01; }
-    if(info.far === undefined){ info.far = 4; }
-  }
-
-  function _validateForFrustumProj(w, h, info = {}){
-    const h0 = Math.tan(Math.PI/6) * 0.1; // distanceの値に対する比率
-    const w0 = h0 * w/h; // そこにaspect比を掛ける
-    if(info.left === undefined){ info.left = -w0; }
-    if(info.right === undefined){ info.right = w0; }
-    if(info.bottom === undefined){ info.bottom = -h0; }
-    if(info.top === undefined){ info.top = h0; }
-    if(info.near === undefined){ info.near = 0.1; }
-    if(info.far === undefined){ info.far = 10; }
-  }
-
-  // ユーティリティを追加します
-  // まずgetViewPosition(p): これは設定されたカメラの情報を元にglobalのpからview座標を出す
-  // getNDC(p): これはglobalのpから正規化デバイスの座標を出す（ついでに-1～1の深度も出す）
-  // getViewFromNDC(x, y): これはNDCのx,yからz座標が1であるようなビュー座標を出す
-  // getParallelPosition(p, x, y): これはglobalのpに対してそれと同じビュー座標におけるzを持ち
-  // さらにNDCがx,yであるようなグローバルポジションを返す。以上。
-  class CameraEx{
-    constructor(info = {}){
-      this.eye = new Vec3();
-      this.center = new Vec3();
-      this.top = new Vec3();
-      this.ciel = new Vec3(); // デフォルトのtopベクトルの方向。リセットで戻す。
-      this.side = new Vec3();
-      this.up = new Vec3();
-      this.front = new Vec3();
+  class CameraPrototype{
+    constructor(data){
+      this.cameraType = "";
+      this.view = {};
+      this.proj = {};
+      this.view.eye = new Vec3();
+      this.view.center = new Vec3();
+      this.view.top = new Vec3();
+      this.view.side = new Vec3();
+      this.view.up = new Vec3();
+      this.view.front = new Vec3();
       this.viewMat = new Mat4();
-      this.projMat = {pers:new Mat4(), ortho: new Mat4(), frustum: new Mat4()};
-      this.distance = 0; // 視点と中心との距離
-      // matはそれぞれのモードに持たせて変更する場合だけ再計算されるように
-      // 切り替えで計算する必要ないので
-      this.projData = {mode:"pers", pers:{}, ortho:{}, frustum:{}};
-      this.initialize(info);
+      this.projMat = new Mat4();
+      this.setView(data);
+      this.setProj(data);
+      // stateを記録して、自由にロードしたり、補間したり、
+      // 取り出して他のカメラにコピーしたり、自由自在。
+      this.states = {};
+      this.setState("default"); // 一番最初の状態をデフォルトで記録
     }
-    initialize(info = {}){
-      // デフォルト設定用のwとhを用意。
-      let w, h;
-      if(info.w === undefined){ w = window.innerWidth; }else{ w = info.w; }
-      if(info.h === undefined){ h = window.innerHeight; }else{ h = info.h; }
-      // ------ view part ------ //
-      // まあ指定が無ければデフォルトで
-      // まずeyeはz軸正方向で。（見下ろしではなくレイマのイメージで横から）
-      if(info.eye === undefined){ this.eye.set(0, 0, Math.sqrt(3)*h*0.5); }else{ this.eye.set(info.eye); }
-      // centerは原点で
-      if(info.center === undefined){ this.center.set(0, 0, 0); }else{ this.center.set(info.center); }
-      // distanceの計算
-      this.calcDistance();
-      // topは基本y軸正の方向。
-      if(info.top === undefined){
-        this.top.set(0, 1, 0);
-      }else{
-        this.top.set(info.top).normalize(); /* topは正規化しておく */
-      }
-      this.ciel.set(this.top);  // cielにtopを記録
-      // ここでviewMatを構成すると同時にside,up,frontを決定する。これらはカメラのローカル軸x,y,zを与えるもの。
-      // topとは概念が異なる。これらはtopに常に制約を受ける。具体的にはtopを越えることが許されない（ゆえに「top」）.
+    setView(data){
+      // eyeのデフォルトは画面のサイズの縦半分のsqrt(3)倍でいいと思う
+      // centerは(0,0,0)でtopは(0,1,0)でいいと思う。配列で定義する。
+      // そこからメソッドでfront,side,upを計算して...OK.
+      const {w = window.innerWidth, h = window.innerHeight} = data;
+      const {eye = [0, 0, h * 0.5 * Math.sqrt(3)]} = data;
+      const {center = [0, 0, 0]} = data;
+      const {top = [0, 1, 0]} = data;
+      this.view.eye.set(eye);
+      this.view.center.set(center);
+      this.view.top.set(top);
       this.calcViewMat();
-      // ------ projection part ------ //
-      if(info.pers === undefined){ info.pers = {}; }
-      _validateForPersProj(w, h, info.pers);
-      this.projData.pers = info.pers;
-
-      if(info.ortho === undefined){ info.ortho = {}; }
-      _validateForOrthoProj(w, h, info.ortho);
-      this.projData.ortho = info.ortho;
-
-      if(info.frustum === undefined){ info.frustum = {}; }
-      _validateForFrustumProj(w, h, info.frustum);
-      this.projData.frustum = info.frustum;
-
-      this.calcPersMat();
-      this.calcOrthoMat();
-      this.calcFrustumMat();
     }
-    calcDistance(){
-      // メソッドに落とし込む。eyeとcenterの距離取るだけ。
-      this.distance = this.eye.dist(this.center);
-      // 射影行列が距離依存なので更新
-      this.calcProjMat();
+    updateView(data){
+      // eye,center,topのうち部分的に書き換えたい場合の処理
+      // setViewだと全部必要になる。この辺整備されてなかったので。
+      const {
+        eye:newEye = this.view.eye,
+        center:newCenter = this.view.center,
+        top:newTop = this.view.top
+      } = data;
+      this.view.eye.set(newEye);
+      this.view.center.set(newCenter);
+      this.view.top.set(newTop);
+      this.calcViewMat();
+    }
+    setProj(data){
+      // 継承により異なる。最終的に行列を計算する。
+    }
+    updateProj(data){
+      // projのうち部分的に書き換える場合の処理。
+    }
+    getView(){
+      return this.view;
+    }
+    getProj(){
+      return this.proj;
     }
     calcViewMat(){
-      // eye,center,topが変更された場合に行列の再計算を行なうパート
-      // まずfrontを作る。center → eye, の単位ベクトル
-      this.front.set(this.eye).sub(this.center).normalize();
-      // sideはtopとfrontの外積で作る。ゆえに常にtopに直交するのでtopが動かない限りたとえば画面の揺れなどは起こらない
-      this.side.set(this.top).cross(this.front).normalize();
-      // upはfrontとsideの外積で作る。画面の上方向を向くベクトルとなる。
-      this.up.set(this.front).cross(this.side).normalize();
+      // eye, center, topからside, up, frontを計算するパート
+      const {eye, center, top, side, up, front} = this.view;
+      // front(z axis). center -> eye, のunit vector.
+      front.set(eye).sub(center).normalize();
+      // side(x axis). topに直交する。横方向。
+      side.set(top).cross(front).normalize();
+      // up(y axis). frontとsideの外積。
+      up.set(front).cross(side).normalize();
       // side,up,frontからなる右手系がカメラ座標系となる
-      const data = [this.side.x, this.up.x, this.front.x, 0,
-                    this.side.y, this.up.y, this.front.y, 0,
-                    this.side.z, this.up.z, this.front.z, 0,
+      const data = [side.x, up.x, front.x, 0,
+                    side.y, up.y, front.y, 0,
+                    side.z, up.z, front.z, 0,
                     0, 0, 0, 1];
       this.viewMat.set(data);
-      // そしてeyeの分だけ平行移動しないといけないんですね...なるほど。eyeの位置が原点に来るように。
-      this.viewMat.translate(-this.eye.x, -this.eye.y, -this.eye.z);
-      // おつかれさま！
+      // eyeの分だけ平行移動したら完成。
+      this.viewMat.translate(-eye.x, -eye.y, -eye.z);
     }
     calcProjMat(){
-      // そのときのモードの射影行列を更新する
-      switch(this.projData.mode){
-        case "pers": this.calcPersMat(); break;
-        case "ortho": this.calcOrthoMat(); break;
-        case "frustum": this.calcFrustumMat(); break;
+      // 継承でいろいろ. 内容はモードにより異なります。
+    }
+    copy(){
+      // 必須。viewについては共通の処理です。projは場合分けが必要です。
+      // dataの内容は参考資料でしかないのでこれでいけるんですよ～～
+      // statesについてはコピーしない方が自然だと思うのでコピーしません。
+      // 今気づいたけどああそうか
+      // これだとthis.viewにnearやfarが定義されてしまうわね
+      // やばいね
+      // 直します
+      const data = {
+        eye:this.view.eye,
+        center:this.view.center,
+        top:this.view.top
+      };
+      data.near = this.proj.near;
+      data.far = this.proj.far;
+      switch(this.cameraType){
+        case "perspective":
+          data.fov = this.proj.fov;
+          data.aspect = this.proj.aspect;
+          return new PerspectiveCamera(data);
+        case "orthographic":
+          data.cw = this.proj.cw;
+          data.ch = this.proj.ch;
+          return new OrthographicCamera(data);
       }
+      return this;
     }
-    calcPersMat(){
-      // persデータを元に行列を構築する。
-      // fov, aspect, near, farから行列を計算してセットする。
-      // fovは視野角、aspectは横/縦の比。オーソドックスな指定方法。
-      const {fov, aspect, near, far} = this.projData.pers;
-      const factor = 1 / Math.tan(fov/2);
-      const c0 = factor / aspect;
-      const c5 = factor; // 符号反転！
-      const c10 = (near + far) / (near - far); // ここは次元0なので比率そのままでOK
-      const c11 = -1;
-      const c14 = 2 * this.distance * near * far / (near - far); // 次元1なのでdistanceの1乗を掛ける
-      const data = [c0, 0, 0, 0, 0, c5, 0, 0, 0, 0, c10, c11, 0, 0, c14, 0];
-      this.projMat.pers.set(data);
+    setState(name){
+      const state = {};
+      state.view = this.createViewState();
+      state.proj = this.createProjState();
+      this.states[name] = state;
     }
-    calcOrthoMat(){
-      // orthoデータを元に行列を構築する。
-      // left,right,bottom,top,near,farを取得して...
-      // xをleft~right,yをbottom~top,zを-near~-farにおいて-1～1に落とすだけなのでラクチンです。
-      const {left, right, bottom, top, near, far} = this.projData.ortho;
-      const c0 = 2 / (right - left);
-      const c5 = 2 / (top - bottom); // 符号反転！
-      const c10 = -2 / (this.distance * (far - near)); // ここは掛け算して合わせないといけない。
-      const c12 = -(right + left) / (right - left);
-      const c13 = -(top + bottom) / (top - bottom);
-      const c14 = -(far + near) / (far - near); // ここは次元0なので無修正
-      const c15 = 1;
-      const data = [c0, 0, 0, 0, 0, c5, 0, 0, 0, 0, c10, 0, c12, c13, c14, c15];
-      this.projMat.ortho.set(data);
+    createViewState(){
+      const viewState = {};
+      const {eye, center, top, side, up, front} = this.view;
+      viewState.eye = eye.copy();
+      viewState.center = center.copy();
+      viewState.top = top.copy();
+      viewState.side = side.copy();
+      viewState.up = up.copy();
+      viewState.front = front.copy();
+      viewState.mat = this.viewMat.copy();
+      return viewState;
     }
-    calcFrustumMat(){
-      // frustumデータの読み方。nearのところに無限平面を用意して、sideベクトルとupベクトルで張られるとし、
-      // そこにおけるleft~right,bottom~topの領域を切り取る。その4隅にeyeから稜線を伸ばすことでfrustumを形成し
-      // そこに落とす。persと違って矩形の重心がeyeからcenterへ向かう半直線と交わるとは限らないところと、
-      // 通常のカメラのように切り取る範囲を設定できるところが特徴です。
-      // 2022/10/11: near, far, left, right, bottom, topすべてdistanceとの比になったのでそこら辺仕様変更。
-      const {left, right, bottom, top, near, far} = this.projData.frustum;
-      const c0 = 2 * near / (right - left);
-      const c5 = 2 * near / (top - bottom);
-      const c8 = (right + left) / (right - left);
-      const c9 = (top + bottom) / (top - bottom);
-      const c10 = -(far + near) / (far - near);
-      const c11 = -1;
-      const c14 = -2 * this.distance * far * near / (far - near);
-      const data = [c0, 0, 0, 0, 0, c5, 0, 0, c8, c9, c10, c11, 0, 0, c14, 0];
-      this.projMat.frustum.set(data);
-      // ふぅ...（理屈はちゃんと確かめてますがテストするまでわかんねぇなこれ...）GUIで試したいね。ぐりぐりして。
-      // その際プリミティブがたくさん必要になるのでそういう関数も作らないと
+    createProjState(){
+      // 内容はそれぞれ
+      return {};
     }
-    setView(info = {}){
-      // eye,center,topの指定。配列で[0,1,0]のように書けるようになりました。
-      if(info.eye !== undefined){ this.eye.set(info.eye); }
-      if(info.center !== undefined){ this.center.set(info.center); }
-      if(info.top !== undefined){ this.top.set(info.top).normalize(); /* topは正規化しておく */ }
-      this.calcDistance();
+    loadState(name){
+      // 記録したstateに移す。その瞬間に移す。
+      this.loadViewState(name);
+      this.loadProjState(name);
+    }
+    loadViewState(name){
+      const {eye, center, top} = this.view;
+      const v = this.states[name].view;
+      eye.set(v.eye);
+      center.set(v.center);
+      top.set(v.top);
       this.calcViewMat();
     }
-    setPers(info = {}){
-      // fov, aspect, near, farの指定。nearとfarはview関係ないので切り離すべきなのです。
-      const projData = this.projData.pers;
-      if(info.fov !== undefined){ projData.fov = info.fov; }
-      if(info.aspect !== undefined){ projData.aspect = info.aspect; }
-      if(info.near !== undefined){ projData.near = info.near; }
-      if(info.far !== undefined){ projData.far = info.far; }
-      this.calcPersMat();
-      this.projData.mode = "pers"; // 自動的にpersになる
+    loadProjState(name){
+      this.calcProjMat();
     }
-    setOrtho(info = {}){
-      const projData = this.projData.ortho;
-      if(info.left !== undefined){ projData.left = info.left; }
-      if(info.right !== undefined){ projData.right = info.right; }
-      if(info.bottom !== undefined){ projData.bottom = info.bottom; }
-      if(info.top !== undefined){ projData.top = info.top; }
-      if(info.near !== undefined){ projData.near = info.near; }
-      if(info.far !== undefined){ projData.far = info.far; }
-      this.calcOrthoMat();
-      this.projData.mode = "ortho"; // 自動的にorthoになる
-    }
-    setFrustum(info = {}){
-      const projData = this.projData.frustum;
-      const prevNear = projData.near; // 変更前のnearの値を記憶しておく
-      if(info.left !== undefined){ projData.left = info.left; }
-      if(info.right !== undefined){ projData.right = info.right; }
-      if(info.bottom !== undefined){ projData.bottom = info.bottom; }
-      if(info.top !== undefined){ projData.top = info.top; }
-      if(info.near !== undefined){ projData.near = info.near; }
-      // もしnearが変更され、かつleft,right,bottom,topの変更が無い場合、
-      // これらをnearの値に応じて見た目が変わらないように変化させる（具体的にはnear/prevNearを掛ける）
-      if(info.near !== undefined && info.left === undefined && info.right === undefined && info.bottom === undefined && info.top === undefined){
-        const ratio = info.near / prevNear;
-        projData.left *= ratio;
-        projData.right *= ratio;
-        projData.bottom *= ratio;
-        projData.top *= ratio;
+    lerpState(fromStateName, toStateName, amt){
+      // fromとtoをamtでlerpする形。事前の射影をいじる処理を個別に用意する。
+      // そこから先は共通の処理とする。
+      // 射影ですが、線形補間でいいと思う。ただfovはtanの線形補間の方がいい？
+      // 本家で成分の対数補間してるのでそれで。
+      if (amt === 0){
+        this.loadState(fromStateName);
+        return;
+      } else if (amt === 1){
+        this.loadState(toStateName);
+        return;
       }
-      // farは関係ない。
-      if(info.far !== undefined){ projData.far = info.far; }
-      this.calcFrustumMat();
-      this.projData.mode = "frustum"; // 自動的にfrustumになる
+      const from = this.states[fromStateName];
+      const to = this.states[toStateName];
+      this.lerpProjState(from.proj, to.proj, amt);
+      this.lerpViewState(from.view, to.view, amt);
+    }
+    lerpProjState(fromProjState, toProjState, amt){
+      // 個別の処理
+    }
+    lerpViewState(fromViewState, toViewState, amt){
+      // 共通の処理
+      const {eye:fromEye, center:fromCenter, mat:fromMat, front:fromFront, up:fromUp} = fromViewState;
+      const {eye:toEye, center:toCenter, mat:toMat, front:toFront, up:toUp} = toViewState;
+      const fromDist = fromEye.dist(fromCenter);
+      const toDist = toEye.dist(toCenter);
+      // distは常に正であることが求められているのよね
+      const lerpedDist = fromDist * Math.pow(toDist / fromDist, amt);
+      // この後の処理は視点と中心をどう補間したらいいかっていう話ですね
+      // 最初はcenterを補間してfrontでeyeを決めてたんですけどなんか綺麗じゃないなと
+      // eyeが動かない場合eyeの方がいいだろう
+      // 色々考えた結果fromの線分上の点とtoの線分上の点で同じ割合の点の間の距離をざーっと見て行って
+      // 最小になるところを見てそこで補間して途中の点を決めてそれとfrontベクトルからcenterとeyeを決めるといいだろう
+      // ということになりました。以下はその計算になります。
+      const eyeDiff = fromEye.copy().sub(toEye);
+      const diffDiff = fromEye.copy().sub(toEye).sub(fromCenter).add(toCenter);
+      const divider = diffDiff.x * diffDiff.x + diffDiff.y * diffDiff.y + diffDiff.z * diffDiff.z;
+      let ratio = 1; // default.
+      // dividerはfromのベクトルとtoのベクトルの差を表すものですから、これが大きさ小さい場合は
+      // どこを中心にとっても大差ないわけ。
+      if (divider > 0.000001){
+          ratio = eyeDiff.dot(diffDiff) / divider;
+          ratio = Math.max(0, Math.min(ratio, 1));
+      }
+      // これが補間された重心で、このあとでこれとratioと補間されたfrontを使ってeyeとcenterの位置を決める。
+      const lerpedMedium = fromEye.copy().lerp(fromCenter, ratio).lerp(toEye.copy().lerp(toCenter, ratio), amt);
+      // 3x3部分を取り出す処理
+      const fromRotMat = fromMat.getMat3();
+      const toRotMat = toMat.getMat3();
+      // 新しいあれ。必要なのはfrontだけ。p5と違ってeyeやcenterをベクトルで保持しているので新しく作る必要がありません。
+      const newFront = new Vec3();
+      // deltaRotの計算ですが、問題ないです。そのまま実行できます。
+      // 直交行列は転置が逆行列なのです。要するに、差を取っています。
+      const deltaRot = getMult3x3(toRotMat, getTranspose3x3(fromRotMat));
+      const diag = [deltaRot[0], deltaRot[4], deltaRot[8]];
+      // 直交行列のトレースは直交行列の「角度」のcos値なのでそれを使ってcosを出してる
+      // 具体的には1+2cos(theta)になるので1を引いて2で割ればよい
+      let cosTheta = 0.5 * (diag[0] + diag[1] + diag[2] - 1.0);
+      // そして直交行列ってトレースが1に近いと単位行列にガチで近くなるっていうすげぇ性質があってですね。
+      // なのでこの場合ベクトルの距離も近くなるんですよ（というかほぼ同値）
+      // ゆえに線形補間で間に合っちゃったりします。以下はその計算...
+      if (1 - cosTheta < 0.0000001) {
+        newFront.set(fromFront).lerp(toFront, amt).normalize();
+        this.view.eye.set(newFront).mult(ratio * lerpedDist).add(lerpedMedium);
+        this.view.center.set(newFront).mult((ratio-1) * lerpedDist).add(lerpedMedium);
+
+        // upをtopとしてセットします。途中経過においてはこれで問題ありません。
+        this.view.top.set(fromUp).lerp(toUp, amt).normalize();
+        this.calcViewMat();
+        return;
+      }
+      // 以下は一般の場合です。deltaRotは配列なのでmat3とか変な操作は必要ないです。
+      let a, b, c, sinTheta;
+      let invOneMinusCosTheta = 1 / (1 - cosTheta);
+      const maxDiag = Math.max(diag[0], diag[1], diag[2]);
+      const offDiagSum13 = deltaRot[1] + deltaRot[3];
+      const offDiagSum26 = deltaRot[2] + deltaRot[6];
+      const offDiagSum57 = deltaRot[5] + deltaRot[7];
+      // 何をしているのかというと回転行列でdeltaRotを表したいんですよね。その成分を求めてる。
+      // 補間するには「角度」を引きずり出す必要がある。それをamtで補間し、最終的に補間された回転行列とする。
+      if (maxDiag === diag[0]) {
+        a = Math.sqrt((diag[0] - cosTheta) * invOneMinusCosTheta); // not zero.
+        invOneMinusCosTheta /= a;
+        b = 0.5 * offDiagSum13 * invOneMinusCosTheta;
+        c = 0.5 * offDiagSum26 * invOneMinusCosTheta;
+        sinTheta = 0.5 * (deltaRot[7] - deltaRot[5]) / a;
+
+      } else if (maxDiag === diag[1]) {
+        b = Math.sqrt((diag[1] - cosTheta) * invOneMinusCosTheta); // not zero.
+        invOneMinusCosTheta /= b;
+        c = 0.5 * offDiagSum57 * invOneMinusCosTheta;
+        a = 0.5 * offDiagSum13 * invOneMinusCosTheta;
+        sinTheta = 0.5 * (deltaRot[2] - deltaRot[6]) / b;
+
+      } else {
+        c = Math.sqrt((diag[2] - cosTheta) * invOneMinusCosTheta); // not zero.
+        invOneMinusCosTheta /= c;
+        a = 0.5 * offDiagSum26 * invOneMinusCosTheta;
+        b = 0.5 * offDiagSum57 * invOneMinusCosTheta;
+        sinTheta = 0.5 * (deltaRot[3] - deltaRot[1]) / c;
+      }
+      // これでできあがり。
+      const angle = amt * Math.atan2(sinTheta, cosTheta);
+      const cosAngle = Math.cos(angle);
+      const sinAngle = Math.sin(angle);
+      const oneMinusCosAngle = 1 - cosAngle;
+      const ab = a * b;
+      const bc = b * c;
+      const ca = c * a;
+      const lerpedRotMat = [
+        cosAngle + oneMinusCosAngle * a * a,
+        oneMinusCosAngle * ab - sinAngle * c,
+        oneMinusCosAngle * ca + sinAngle * b,
+        oneMinusCosAngle * ab + sinAngle * c,
+        cosAngle + oneMinusCosAngle * b * b,
+        oneMinusCosAngle * bc - sinAngle * a,
+        oneMinusCosAngle * ca - sinAngle * b,
+        oneMinusCosAngle * bc + sinAngle * a,
+        cosAngle + oneMinusCosAngle * c * c
+      ];
+      // Vec3のmultMatがどうも列ベクトルベースで並べているようですね困ったね...
+      // そもそもp5から直接移植することは可能なのか？可能なんだろうけど...
+      const multiplier = getTranspose3x3(lerpedRotMat);
+      newFront.set(fromFront).multMat(multiplier);
+      this.view.eye.set(newFront).mult(ratio * lerpedDist).add(lerpedMedium);
+      this.view.center.set(newFront).mult((ratio-1) * lerpedDist).add(lerpedMedium);
+      this.view.top.set(fromUp).multMat(multiplier);
+      this.calcViewMat();
+      return;
     }
     getViewMat(){
-      // ビュー行列の取得
+      // これがないとLSに組み込めないので
       return this.viewMat;
     }
     getProjMat(){
-      // 射影行列の取得
-      return this.projMat[this.projData.mode]; // モードごと、違う物を返す。
+      // 継承を使うのでこれでいいですね
+      return this.projMat;
     }
-    getViewData(){
-      // viewのdataであるVec3の取得
-      return {eye:this.eye, center:this.center, top:this.top};
-    }
-    getLocalAxes(){
-      // いわゆるカメラ座標系の3軸を取得(Axesが複数形だそうです)
-      return {side:this.side, up:this.up, front:this.front};
-    }
-    getProjData(mode){
-      // modeごとの射影変換に使うdataの取得。あんま使いそうにないな。fovとaspectをレイマ用に...とかで使いそう。
-      // レイマでもorthoとかpointLight普通に使えるから色々試してみたいわね
-      return this.projData[this.projData.mode];
-    }
-    zoom(delta, sensitivity = 1){
-      // すべての場合に矩形のサイズを(1+delta)倍する。だからdeltaが正なら大きくなるし逆なら小さくなる。
-      if(delta < -1){ return; }
-      // ここでマイナスにしないと...あの、視界を大きくするにはfovを小さく絞る、ので、逆なんですね。
-      const ratio = (1 - delta) * sensitivity;
-      switch(this.projData.mode){
-        case "pers":
-          // fovから1の距離のところの矩形の縦の長さの半分を出して倍率を掛けてから引き戻す。
-          const {fov} = this.projData.pers;
-          const _scale = Math.tan(fov/2) * ratio;
-          this.setPers({fov:Math.atan(_scale) * 2.0});
-          break;
-        case "ortho":
-          const {left:l0, right:r0, bottom:b0, top:t0} = this.projData.ortho;
-          this.setOrtho({left:l0*ratio, right:r0*ratio, bottom:b0*ratio, top:t0*ratio});
-          break;
-        case "frustum":
-          const {left:l1, right:r1, bottom:b1, top:t1} = this.projData.frustum;
-          this.setFrustum({left:l1*ratio, right:r1*ratio, bottom:b1*ratio, top:t1*ratio});
-          break;
-      }
-    }
-    spin(delta, sensitivity = 1){
-      // 視点を中心の周りに反時計回りに回転させる。角度。
-      // 計算がめんどくさいね...で、camの方は間違ってた、か...centerからeyeに向かうベクトルをtopの周りに回転させるのだ。
-      // あれ使うか。
-      // あ！！中心...まずいじゃん。
-      const t = delta * sensitivity;
-      // 中心を引いて、回転して、また中心を足す。今中心が(0,0,0)で固定なので...なんとかしたいね。デバッグするうえで不利。
-      this.eye.sub(this.center).rotate(this.top, t).add(this.center);
-      this.calcDistance();
+    dolly(value){
+      // valueが正の時遠ざかる感じで
+      const {eye, center, front} = this.view;
+      let distance = eye.dist(center);
+      distance *= Math.pow(10, value);
+      eye.set(center).addScalar(front, distance);
       this.calcViewMat();
     }
-    arise(delta, sensitivity = 1){
-      // 視点を中心の周りに上昇させる。ただしtopベクトルを超えないようにする。角度。frontとupでeyeを再計算。
-      // centerは変化しないのでそれを無視して計算し最後にcenterを足す。
-      const d = this.distance;
-      const t = delta * sensitivity;
-      // 答えを作る
-      this.eye.set(this.front).mult(d * Math.cos(t)).addScalar(this.up, d * Math.sin(t));
-      // このベクトル三重積でなす角thetaに対するd*sin(theta)が出るのでそれとd*0.001を比べて...
-      // sin(0.001)～0.001.
-      // あ、そうか、sinだけだとどっちだかわからん。内積で符号取らないと。
-      // つまり上でBANするならこれでいいけど下でBANする場合は-topでないと失敗するんだわ。
-      // ここは答えのeyeで。
-      const tm = _tripleMultiple(this.top, this.eye, this.side);
-      if(tm < d * 0.001){
-        this.side.cross(this.top); // あとで再計算するのでとりあえずsideを使わせてもらう。
-        // topに直交するeye方向の単位ベクトルsideを使ってちょっとずらす感じ
-        // dotSignでどっち側か調べないと駄目。
-        const dotSign = (this.top.dot(this.eye) > 0 ? 1 : -1);
-        this.eye.set(this.top).mult(dotSign).addScalar(this.side, 0.001).normalize().mult(d);
-      }
-      this.eye.add(this.center); // centerを足す。
-      this.calcDistance();
+    angle(theta, upperLimit = 1.56, lowerLimit = -1.56){
+      // topを変えずにeyeのcenterに向かうベクトルを上下に回す
+      // topを追い越さないよう制限を掛ける
+      // sideとtopで外積を作って角度と足して制限かけて計算しなおし
+      const {eye, center, top, side, up, front} = this.view;
+      const distance = eye.dist(center);
+      // topに直交するベクトルでtop基準の0°をあらわすもの
+      const vertical = side.copy().cross(top);
+      // これとfrontの外積はfrontが下側のときsideと逆、上側のときsideと同じ方向
+      const horizontal = vertical.copy().cross(front);
+      // ゆえに-を付ける。大きさは角度のsin.
+      const directionSign = -Math.sign(horizontal.dot(side));
+      // 角度のcosは内積で出せる。両者からatan2で角度を出す。符号をつける。
+      const curAngle = Math.atan2(horizontal.mag(), vertical.dot(front))*directionSign;
+      // 符号付きの値はtopと真逆で-PI/2付近、順でPI/2付近。ここに加えて制限を付ける。
+      const finalAngle = Math.max(Math.min(curAngle + theta, upperLimit), lowerLimit);
+      // 角度が決まったので、verticalとtopと角度から新しいeyeの位置を計算する。
+      eye.set(center).addScalar(vertical, distance * Math.cos(finalAngle)).addScalar(top, distance * Math.sin(finalAngle));
+      this.calcViewMat();
+      // なおtiltの場合は、似たような計算をcenterに対して実行する。
+    }
+    spin(phi){
+      // topの周りにcenterからeyeに向かうベクトルを回す
+      const {eye, center, top} = this.view;
+      eye.sub(center).rotate(top, phi).add(center);
       this.calcViewMat();
     }
-    dolly(delta, sensitivity = 1){
-      // 視点を対象物に近づける処理。zoomと違ってfov等は変化しない。正の時近づけたいのでマイナスで。
-      const d = this.distance;
-      const t = delta * sensitivity;
-      if(d + t < 0.001){ return; }
-      this.eye.addScalar(this.front, -t);
-      this.calcDistance();
-      this.calcViewMat(); // これでよいはず。
-    }
-    pan(delta, sensitivity = 1){
-      // eyeからcenterに向かうベクトルを右に振る。t<0の場合は左に振る。なおcenterが動くので注意。
-      // center-eyeでeyeからcenterに向かうベクトルになるがこれの正の向きの変化は時計回りなのでマイナスを付ける。
-      // centerを動かす処理なので早速問題が発生している...
-      const t = delta * sensitivity;
-      this.center.sub(this.eye).rotate(this.top, -t).add(this.eye);
-      this.calcDistance();
+    rotate(phi, axis){
+      // eyeからcenterに向かうベクトルとtopの双方をaxisの周りにphiだけ回転
+      const {eye, center, top} = this.view;
+      eye.sub(center).rotate(axis, phi).add(center);
+      top.rotate(axis, phi);
       this.calcViewMat();
     }
-    tilt(delta, sensitivity = 1){
-      // eyeからcenterに向かうベクトルを上に振る。t<0の場合は下に振る。これもtopベクトルに制限を受ける。
-      // centerを答えにして色々計算して最後にeyeを足して答えとする。
-      const d = this.distance;
-      const t = delta * sensitivity;
-      // 答えを作る. -frontとupでtに対して計算する。
-      this.center.set(this.front).mult(-1 * d * Math.cos(t)).addScalar(this.up, d * Math.sin(t));
-      const tm = -_tripleMultiple(this.top, this.center, this.side); // ここも逆だ...
-      if(tm < d * 0.001){
-        this.side.cross(this.top); // これは逆を向いてるのであとでマイナスをつける。
-        const dotSign = (this.top.dot(this.center) > 0 ? 1 : -1); // ここはcenterで。
-        this.center.set(this.top).mult(dotSign).addScalar(this.side, -0.001).normalize().mult(d);
-      }
-      this.center.add(this.eye);
-      this.calcDistance();
+    move(v){
+      // eyeとcenterをvだけ移動する。
+      const {eye, center} = this.view;
+      eye.add(v);
+      center.add(v);
       this.calcViewMat();
     }
-    roll(delta, sensitivity = 1){
-      // topベクトルをfrontの周りに回転させる。画面の横揺れ。
-      // 結果だけ述べると、tが正解です。-tではない。まずfrontの周りに反時計回りに回転させるともともとのtopに対して
-      // 左に傾く。これが新しいtopだとするならば、それを上として座標系を作る場合、それがてっぺんに来ることを想像すれば、
-      // 全体は右に傾くと分かる。だからそのまんまでいい。
-      const t = delta * sensitivity;
-      this.top.rotate(this.front, t);
+    moveNDC(dx, dy){
+      // centerをNDCに変換し、それにdx,dyを足す。正規化デバイス上で足す。
+      // 足した結果を引き戻し、同じ深さの点にcenterを移し、viewを再計算。
+      const {eye, center} = this.view;
+      const centerNDC = this.getNDC(center);
+      centerNDC.add(dx, dy, 0);
+      const newCenter = this.getParallelPosition(center, centerNDC.x, centerNDC.y);
+      const moveVector = newCenter.sub(center);
+      center.add(moveVector);
+      eye.add(moveVector);
       this.calcViewMat();
     }
-    topReset(){
-      // topを初期状態に戻す
-      this.top.set(this.ciel);
+    lookAt(v){
+      // centerをベクトルvにするだけ
+      this.view.center.set(v);
       this.calcViewMat();
     }
-    move(a, b, c){
-      const v = _getValidation(a, b, c);
-      // で、この分だけ全体を移動する。eyeとcenterをそれぞれ...side, up, front方向に。
-      // sideは要するに画面右方向へ平行移動、upは要するに画面上、傾いてる場合、斜めの移動になる。
-      // frontはこれdollyではないよ。centerも動いてるからね。
-      // ...たとえば地形がある場合、frontではなく前方向になるように補正がかかる...？
-      // zだけマイナスを掛けてるのは正の時に奥に行く方が自然だから。
-      this.eye.addScalar(this.side, v.x).addScalar(this.up, v.y).addScalar(this.front, -v.z);
-      this.center.addScalar(this.side, v.x).addScalar(this.up, v.y).addScalar(this.front, -v.z);
-      this.calcDistance();
+    pan(phi){
+      // topの周りに視点から中心に向かうベクトルを回転させる。
+      // phiが正なら対象物は右に動くように見える仕様。(p5と同じ仕様)
+      // phiの符号を回転の向き（軸を矢印から見た場合の向き）と考えれば妥当です
+      const {center, eye, top} = this.view;
+      center.sub(eye).rotate(top, phi).add(eye);
       this.calcViewMat();
     }
-    lookAt(a, b, c){
-      const v = _getValidation(a, b, c);
-      // (a,b,c)にcenterを強制移動。topは動かさない。以上。デバッグ...？
-      // centerのtop方向にeyeがきちゃうのまずいよねって話。ただ、まあ、いいか...
-      this.center.set(v);
-      this.calcDistance();
+    tilt(theta, upperLimit = 1.56, lowerLimit = -1.56){
+      // 視点を中心方向から上下に動かす。topを超えて動かすことは想定していない。
+      // thetaが正なら対象物は下に動くように見える仕様
+      // p5と逆だがp5はy軸が下方向なので結局同じ仕様になっています（ややこしい！）
+      const {eye, center, top, side, up, front} = this.view;
+      const distance = eye.dist(center);
+      // topに直交するベクトルでtop基準の0°をあらわすもの
+      const vertical = side.copy().cross(top);
+      // これとfrontの外積はfrontが下側のときsideと逆、上側のときsideと同じ方向
+      const horizontal = vertical.copy().cross(front);
+      // ゆえに-を付ける。大きさは角度のsin.
+      const directionSign = -Math.sign(horizontal.dot(side));
+      // 角度のcosは内積で出せる。両者からatan2で角度を出す。符号をつける。
+      // eyeからcenterに向かうベクトルの振れ具合はこれのマイナスですから、
+      // そういう意味でマイナスの符号をつける
+      const curAngle = -Math.atan2(horizontal.mag(), vertical.dot(front))*directionSign;
+      // 符号付きの値はtopと真逆で-PI/2付近、順でPI/2付近。ここに加えて制限を付ける。
+      const finalAngle = Math.max(Math.min(curAngle + theta, upperLimit), lowerLimit);
+      // 角度が決まったので、verticalとtopと角度から新しいcenterの位置を計算する。
+      // eye側が始点なのでverticalを逆にする
+      center.set(eye).addScalar(vertical, -distance*Math.cos(finalAngle)).addScalar(top, distance*Math.sin(finalAngle));
+      this.calcViewMat();
+    }
+    roll(theta){
+      // 単純に視点から中心に向かうベクトルの周りにtopを回転させる仕様
+      // 横揺れを表現するのに使う
+      // 正の時frontから見て正方向の回転をtopに施すので右側が下に傾く
+      const {top, front} = this.view;
+      top.rotate(front, theta);
       this.calcViewMat();
     }
     getViewPosition(p){
-      // pはVec3です。View座標を出します。eyeを引いてviewMatをapplyするだけ！
-      p.sub(this.eye);
-      return this.viewMat.apply(p);
+      // pはVec3です。View座標を出します。eyeを引いてviewMatをapply.
+      // これapplyProjが正解ですね...
+      const q = p.copy().sub(this.eye);
+      this.viewMat.applyProj(q);
+      return q;
     }
     getNDC(p){
-      // pはVec3です。NDC出します。
+      // グローバルのpに対してNDCを出す
       const q = this.getViewPosition(p);
-      return this.getProjMat().applyProj(q);
+      this.projMat.applyProj(q);
+      return q;
     }
-    getViewPositionFromNDC(x, y, z = 1, centerBased = false){
-      // NDCからView座標を算出する。z値はこっちで決める。デフォの場合、結果はz値が1の時のものとなる。
-      // って思ったけどよく考えたらOrthoの場合は錐体じゃないからこの方法だと簡単に外に出てしまうね
-      // OrthoってViewにおける座標、x,yだけなんよ。zによらないのです。だからzを掛けちゃいけないのよ。
-      // centerBasedはこれがtrueの場合zの代わりにz*this.distanceを使う、という意味。
-      // つまりcenterのところの平面におけるViewの位置が出るということ。3Dお絵描きに応用できそう。
-      const m = this.getProjMat().m;
-      // projのモードで場合分け。疎行列なので計算はとても簡単なのです。
-      let u, v;
-      switch(this.projData.mode){
-        case "pers":
-          u = -x/m[0]; v = -y/m[5]; break;
-        case "ortho":
-          u = (x-m[12])/m[0]; v = (y-m[13])/m[5]; break;
-        case "frustum":
-          u = (-m[8]-x)/m[0]; v = (-m[9]-y)/m[5]; break;
-      }
-      const result = new Vec3(u, v, 1);
-      if(centerBased){ z *= this.distance; } // centerBasedならzの代わりにz*this.distanceを使う。
-      if(this.projData.mode === "ortho"){
-        result.z = z;   // orthoの場合はz成分をzにするだけ
-      }else{
-        result.mult(z); // pers, frustumの場合はzが比例定数になる
-      }
-      return result;
-    }
-    getGlobalPositionFromNDC(x, y, z = 1, cenetrBased = false){
-      // NDCが(x,y)でViewにおける深さがzであるようなGlobalの点の位置を取得する。3Dお絵描きに応用できそう。
-      const p = this.getViewPositionFromNDC(x, y, z, centerBased);
-      // viewの3x3部分の逆行列（＝転置）を掛けてeyeを足すだけ。ラクチン。
-      this.viewMat.apply(p, false);
-      p.add(this.eye);
-      return p;
+    getViewPositionFromNDC(x, y, z){
+      // NDCのx,yに対してview座標がzであるようなview座標のベクトルを返す
     }
     getParallelPosition(p, x, y){
-      // グローバルのpに対し正規化デバイス座標が(x,y)であるようなグローバルの点qを返す。これは一意のはずである。
-      // はじめにpのviewを出して。
+      // グローバルのpに対してNDCがx,yでpと同じview座標のz成分を持つ
+      // グローバルの点を返す関数
       const pView = this.getViewPosition(p);
-      // それのzを持つView空間の点を求めて
       const q = this.getViewPositionFromNDC(x, y, pView.z);
-      // 引き戻す。それにはviewMatをtransposeを適用せずに掛けてeyeを足せばいい...はず。
+      // viewMatをtransposeしないで掛けてeyeを足す
       this.viewMat.apply(q, false);
-      q.add(this.eye);
+      q.add(this.view.eye);
       return q;
+    }
+  }
+
+  class PerspectiveCamera extends CameraPrototype{
+    constructor(data = {}){
+      super(data);
+      this.cameraType = "perspective";
+    }
+    setProj(data){
+      // デフォルトのaspectはw/hでfovはPI/3ですね
+      // nearとfarについてはeyeとcenterから計算されるので
+      // そういうのがあることを前提とします
+      const {w = window.innerWidth, h = window.innerHeight} = data;
+      const {fov = Math.PI / 3} = data;
+      const {aspect = w/h} = data;
+      const {eye, center} = this.view;
+      const distance = eye.dist(center);
+      const {near = distance * 0.1} = data;
+      const {far = distance * 10} = data;
+      this.proj.fov = fov;
+      this.proj.aspect = aspect;
+      this.proj.near = near;
+      this.proj.far = far;
+      this.calcProjMat();
+    }
+    updateProj(data){
+      const {
+        fov:newFov = this.proj.fov,
+        aspect:newAspect = this.proj.aspect,
+        near:newNear = this.proj.near,
+        far:newFar = this.proj.far
+      } = data;
+      this.proj.fov = newFov;
+      this.proj.aspect = newAspect;
+      this.proj.near = newNear;
+      this.proj.far = newFar;
+      this.calcProjMat();
+    }
+    calcProjMat(){
+      // nearとfarとfovとaspectで定義する
+      // fovはPI/3がデフォルト、aspectは未定義の場合全体に対してw/hでOK
+      const {fov, aspect, near, far} = this.proj;
+      const factor = 1 / Math.tan(fov/2);
+      const c0 = factor / aspect;
+      const c5 = factor; // 符号反転！
+      const c10 = (near + far) / (near - far);
+      const c11 = -1;
+      const c14 = 2 * near * far / (near - far);
+      const data = [c0, 0, 0, 0, 0, c5, 0, 0, 0, 0, c10, c11, 0, 0, c14, 0];
+      this.projMat.set(data);
+    }
+    createProjState(){
+      const projState = {};
+      projState.fov = this.proj.fov;
+      projState.aspect = this.proj.aspect;
+      projState.mat = this.projMat.copy();
+      return projState;
+    }
+    loadProjState(name){
+      const p = this.states[name].proj;
+      this.proj.fov = p.fov;
+      this.proj.aspect = p.aspect;
+      this.calcProjMat();
+    }
+    lerpProjState(fromProjState, toProjState, amt){
+      // tan(fov/2)とaspectを対数補間します
+      // あとはfovを引き戻しで求めるだけ
+      const {fov:fromFov, aspect:fromAspect} = fromProjState;
+      const {fov:toFov, aspect:toAspect} = toProjState;
+      const tanFromFov = Math.tan(fromFov/2);
+      const tanToFov = Math.tan(toFov/2);
+      this.proj.fov = 2*Math.atan(tanFromFov * Math.pow(tanToFov/tanFromFov, amt));
+      this.proj.aspect = fromAspect * Math.pow(toAspect/fromAspect, amt);
+      this.calcProjMat();
+    }
+    getViewPositionFromNDC(x, y, z){
+      const m = this.projMat.m;
+      const u = -x/m[0];
+      const v = -y/m[5];
+      return new Vec3(u*z, v*z, z);
+    }
+    zoom(value){
+      // fovをいじる操作。カメラと中心の距離は変化させない。
+      // tan(fov/2)に乗算したうえでatanで引き戻して2を掛ける。
+      this.proj.fov = 2 * Math.atan(Math.tan(this.proj.fov/2) * Math.pow(10, value));
+      this.calcProjMat();
+    }
+  }
+
+  class OrthographicCamera extends CameraPrototype{
+    constructor(data = {}){
+      super(data);
+      this.cameraType = "orthographic";
+    }
+    setProj(data){
+      // 横cwで縦chの枠を使って中心ベースでorthoをやる。
+      // 上下反転とかそういうのはやらない。
+      // wとhがある場合はそれを使う。ただしcwとchが未定義の場合。
+      const {w = window.innerWidth, h = window.innerHeight} = data;
+      const {cw = w, ch = h} = data;
+      const {eye, center} = this.view;
+      const distance = eye.dist(center);
+      const {near = distance * (-10)} = data;
+      const {far = distance * 10} = data;
+      this.proj.cw = cw;
+      this.proj.ch = ch;
+      this.proj.near = near;
+      this.proj.far = far;
+      this.calcProjMat();
+    }
+    updateProj(data){
+      const {
+        cw:newCw = this.proj.cw,
+        ch:newCh = this.proj.ch,
+        near:newNear = this.proj.near,
+        far:newFar = this.proj.far
+      } = data;
+      this.proj.cw = newCw;
+      this.proj.ch = newCh;
+      this.proj.near = newNear;
+      this.proj.far = newFar;
+      this.calcProjMat();
+    }
+    calcProjMat(){
+      // nearとfarとwidthとheightで定義する（leftとかそういうことはしないです）
+      // persと違ってnearとfarは負の数が取れる（らしい）（距離の概念が無いので）
+      // たとえば例のアニメ作る際に近づけても全体が入るように
+      // nearを大きい負の数に取るとかするといい
+      const {cw, ch, near, far} = this.proj;
+      const c0 = 2 / cw;
+      const c5 = 2 / ch;
+      const c10 = -2 / (far - near);
+      const c14 = -(far + near) / (far - near);
+      const c15 = 1;
+      const data = [c0, 0, 0, 0, 0, c5, 0, 0, 0, 0, c10, 0, 0, 0, c14, c15];
+      this.projMat.set(data);
+    }
+    createProjState(){
+      const projState = {};
+      projState.cw = this.proj.cw;
+      projState.ch = this.proj.ch;
+      projState.mat = this.projMat.copy();
+      return projState;
+    }
+    loadProjState(name){
+      const p = this.states[name].proj;
+      this.proj.cw = p.cw;
+      this.proj.ch = p.ch;
+      this.calcProjMat();
+    }
+    lerpProjState(fromProjState, toProjState, amt){
+    // cwとchをそれぞれ対数補間するだけ
+    const {cw:fromCw, ch:fromCh} = fromProjState;
+    const {cw:toCw, ch:toCh} = toProjState;
+    this.proj.cw = fromCw * Math.pow(toCw / fromCw, amt);
+    this.proj.ch = fromCh * Math.pow(toCh / fromCh, amt);
+    this.calcProjMat();
+    }
+    dolly(value){
+      // valueが正の時遠ざかる感じで
+      // orthoの場合は射影もいじる
+      super.dolly(value);
+      this.zoom(value);
+    }
+    getViewPositionFromNDC(x, y, z){
+      const m = this.projMat.m;
+      const u = x/m[0];
+      const v = y/m[5];
+      return new Vec3(u, v, z);
+    }
+    zoom(value){
+      // 距離を変えないで射影だけいじる。
+      const multiplier = Math.pow(10, value);
+      this.proj.cw *= multiplier;
+      this.proj.ch *= multiplier;
+      this.calcProjMat();
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
+  // CameraController & CameraManager.
+  // Cameraを動かすための各種Interactionを用意する
+  // これによりインタラクションで登録されているカメラが動くようになる
+
+  // 名前でカメラを管理する
+  // 持たせるプロパティは
+  // 各種速度と
+  // 回転のモードと
+  // 制御変数（sensitivity系）と
+  // あと同じ名前でタイマーを初期化する
+  class CameraController extends foxIA.Interaction{
+    constructor(){
+      super();
+      this.cams = {};
+      this.curCam = undefined;
+      this.constants = {};
+      this.initializeConstants();
+      this.manager = undefined;
+      this.registCamera("default", new PerspectiveCamera({})); // ダミーを用意しとこ
+    }
+    linkWithCameraManager(target){
+      // CM連携
+      // CMと連携すると...
+      // registCameraの際にCMにも登録される
+      // updateの際にCMもupdateされる
+      // CMがactiveの場合にこっちのupdateはキャンセルされる
+      // こっちのdblclickなどで速度とか全部ゼロになり自動的にCMがactivate.
+      // 加えてcがactiveでもそれも消える
+      // CMがactiveな間はこっちはactivateされない
+      this.manager = target;
+      target.controller = this;
+    }
+    getManager(){
+      // CameraManagerの取得関数
+      return this.manager;
+    }
+    initializeConstants(){
+      this.constants.velocityThreshold = 0.000001;
+      this.constants.mouseScaleFactor = 0.0001;
+      this.constants.mouseRotateFactor = 0.001;
+      this.constants.mouseMoveFactor = 0.0006;
+      this.constants.touchScaleFactor = 0.00028;
+      this.constants.touchRotateFactor = 0.0015;
+      this.constants.touchMoveFactor = 0.00045;
+      this.constants.upperAngleLimit = 1.56;
+      this.constants.lowerAngleLimit = -1.56;
+    }
+    showConstantsInfo(){
+      console.log(`
+  velocityThreshold: 速度が0とみなされる閾値(0.000001)
+  mouseScaleFactor: マウス操作時の拡大縮小ファクター(0.0001)
+  mouseRotateFactor: マウス操作時の回転ファクター(0.001)
+  mouseMoveFactor: マウス操作時の移動ファクター(0.0006)
+  touchScaleFactor: タッチ操作時の拡大縮小ファクター(0.00028)
+  touchRotateFactor: タッチ操作時の回転ファクター(0.0015)
+  touchMoveFactor: タッチ操作時の移動ファクター(0.00045)
+  upperAngleLimit: カメラの回転がangleの場合の上方の角度限界(1.56)
+  lowerAngleLimit: カメラの回転がangleの場合の下方の角度限界(-1.56)
+      `);
+    }
+    configConstant(name, value){
+      this.constants[name] = value;
+    }
+    prepareCameraData(name, cam){
+      const data = {};
+      data.name = name;
+      data.cam = cam;
+      data.scaleVelocity = 0;
+      data.moveVelocity = new ex.Vec3(0,0,0);
+      data.rotationVelocity = new ex.Vec3(0,0,0);
+      data.rotationType = "angle"; // またはfree.
+      data.scaleType = "dolly"; // perspectiveの場合にdollyとzoomを切り替えることができる
+      data.targetResetState = "default"; // リセットの際に戻るstateの種類
+      data.active = false; // マウスダウンなどの以下略
+      data.button = 0; // マウスボタン用
+      this.cams[name] = data;
+    }
+    registCamera(name, cam){
+      this.prepareCameraData(name, cam);
+      this.curCam = this.cams[name];
+
+      // managerが存在する場合にそっちもregistされる
+      if (this.manager !== undefined) {
+        // this.managerのregist処理
+        this.manager.cams[name] = {name:name, cam:cam};
+        this.manager.curCam = this.manager.cams[name];
+      }
+    }
+    setCamera(name){
+      this.curCam = this.cams[name];
+
+      // managerが存在する場合にそっちもsetされる
+      if (this.manager !== undefined) {
+        this.manager.curCam = this.manager.cams[name];
+      }
+    }
+    setRotationType(typeName = "default"){
+      if (typeof typeName !== "string") return;
+      if (typeName !== "angle" && typeName !== "free") return;
+      this.curCam.rotationType = typeName;
+    }
+    setScaleType(typeName = "dolly"){
+      if (typeof typeName !== "string") return;
+      if (typeName !== "dolly" && typeName !== "zoom") return;
+      this.curCam.scaleType = typeName;
+    }
+    setTargetResetState(stateName = "default"){
+      if (typeof stateName !== "string") return;
+      this.curCam.targetResetState = stateName;
+    }
+    initializeCamera(){
+      // そのときのカメラの状態をリセットする感じですね
+      const c = this.curCam;
+      c.active = false;
+      c.scaleVelocity = 0;
+      c.moveVelocity.set(0,0,0);
+      c.rotationVelocity.set(0,0,0);
+    }
+    update(){
+      const c = this.curCam;
+      const cam = c.cam;
+
+      if (this.manager !== undefined && this.manager.isActive()) {
+        this.manager.update();
+        return;
+      }
+
+      c.scaleVelocity *= 0.85;
+      if (Math.abs(c.scaleVelocity) < this.constants.velocityThreshold){
+        c.scaleVelocity = 0;
+      } else {
+        switch(c.scaleType){
+          case "dolly":
+            cam.dolly(c.scaleVelocity); break;
+          case "zoom":
+            cam.zoom(c.scaleVelocity); break;
+        }
+      }
+      c.moveVelocity.mult(0.85);
+      if (c.moveVelocity.mag() < this.constants.velocityThreshold){
+        c.moveVelocity.set(0,0,0);
+      } else {
+        cam.moveNDC(-c.moveVelocity.x, c.moveVelocity.y);
+      }
+      c.rotationVelocity.mult(0.85);
+      if (c.rotationVelocity.mag() < this.constants.velocityThreshold){
+        c.rotationVelocity.set(0,0,0);
+      } else {
+        switch(c.rotationType){
+          case "angle":
+            cam.spin(-c.rotationVelocity.x);
+            const upperLimit =
+                  Math.max(-1.56, Math.min(1.56, this.constants.upperAngleLimit));
+            const lowerLimit =
+                  Math.max(-1.56, Math.min(1.56, this.constants.lowerAngleLimit));
+            cam.angle(c.rotationVelocity.y, upperLimit, lowerLimit);
+            break;
+          case "free":
+            const q = cam.getParallelPosition(
+              cam.view.center, c.rotationVelocity.x, -c.rotationVelocity.y
+            );
+            q.sub(cam.view.center).normalize();
+            const axis = q.cross(cam.view.front);
+            const phi = c.rotationVelocity.mag();
+            cam.rotate(phi, axis);
+            break;
+        }
+      }
+    }
+    activate(){
+      if (this.manager !== undefined && this.manager.isActive()) {
+        return;
+      }
+      const c = this.curCam;
+      c.active = true;
+    }
+    inActivate(){
+      const c = this.curCam;
+      c.active = false;
+    }
+    wheelAction(e){
+      if (this.manager !== undefined && this.manager.isActive()) {
+        return;
+      }
+      const c = this.curCam;
+      c.scaleVelocity += e.deltaY * this.constants.mouseScaleFactor;
+    }
+    mouseDownDefaultAction(e){
+      this.activate();
+      this.curCam.button = e.button;
+    }
+    mouseUpDefaultAction(e){
+      this.inActivate();
+    }
+    mouseMoveDefaultAction(dx, dy, x, y){
+      const c = this.curCam;
+      if (!c.active) return;
+      if (c.button === 0) {
+        c.rotationVelocity.add(
+          dx*this.constants.mouseRotateFactor,
+          dy*this.constants.mouseRotateFactor,
+          0
+        );
+      }
+      if (c.button === 2) {
+        c.moveVelocity.add(
+          dx*this.constants.mouseMoveFactor,
+          dy*this.constants.mouseMoveFactor,
+          0
+        );
+      }
+    }
+    touchStartDefaultAction(e){
+      this.activate();
+    }
+    touchSwipeAction(dx, dy, x, y, px, py){
+      const c = this.curCam;
+      c.rotationVelocity.add(
+        dx*this.constants.touchRotateFactor,
+        dy*this.constants.touchRotateFactor,
+        0
+      );
+    }
+    touchEndDefaultAction(e){
+      this.inActivate();
+    }
+    touchPinchInOutAction(diff, ratio, x, y, px, py){
+      if (this.manager !== undefined && this.manager.isActive()) {
+        return;
+      }
+      // Interactionサイドの実行内容を書く。
+      // diffは距離の変化。正の場合大きくなる。ratioは距離の比。
+      const c = this.curCam;
+      c.scaleVelocity -= diff * this.constants.touchScaleFactor;
+    }
+    touchMultiSwipeAction(dx, dy, x, y, px, py){
+      if (this.manager !== undefined && this.manager.isActive()) {
+        return;
+      }
+      // Interactionサイドの実行内容を書く。
+      // dx,dyは重心の変位。
+      const c = this.curCam;
+      c.moveVelocity.add(
+        dx*this.constants.touchMoveFactor,
+        dy*this.constants.touchMoveFactor
+      );
+    }
+    doubleClickAction(){
+      if (this.manager !== undefined){
+        this.managerActivate();
+        return;
+      }
+      // Interactionサイドの実行内容を書く。ダブルクリック時。
+      this.initializeCamera();
+      this.curCam.cam.loadState(this.curCam.targetResetState);
+    }
+    doubleTapAction(){
+      if (this.manager !== undefined){
+        this.managerActivate();
+        return;
+      }
+      // Interactionサイドの実行内容を書く。ダブルタップ時。
+      this.initializeCamera();
+      this.curCam.cam.loadState(this.curCam.targetResetState);
+    }
+    managerActivate(){
+      // 常にその瞬間からリセットされる仕様。だからfromは""で。toはカメラごとに
+      // いじることができる。
+      // managerがこっちのinitializeCamera()を呼び出す仕様になっている。
+      // 相互連携でそうなるようにする。
+      // 二重呼び出し回避。
+      this.manager.activate({from:"", to:this.curCam.targetResetState});
+    }
+  }
+
+  // activate()で勝手にlerpStateが始まる
+  // inactivate()が時間経過で実行される
+  // 毎フレームupdateを呼ぶだけで勝手にカメラをいじってくれる
+  // activeかどうか取得できるのでその間カメラをいじれないようにできる
+  // こんなもんかな。あとは連携ですが、まあ先にテストしましょ。
+  class CameraManager{
+    constructor(){
+      this.cams = {};
+      this.timer = new ex.Timer();
+      this.active = false;
+      this.fromStateName = "";
+      this.toStateName = "default";
+      this.fromStateIsFree = false;
+      this.duration = 500; // ミリ秒指定なのでこれで
+      this.easingFunction = (x) => x*x*(3-2*x); // defaultはsmoothstep
+      this.factor = 1; // 1を超えて回したい場合に使う
+      this.easings = new Easing();
+      this.controller = undefined;
+      // ダミーを用意しとこ。
+      // インタラクションのたびにエラー出されるのがめんどうなので。
+      // Controllerと同じ名前なのは共有した後も機能するようにするためです
+      this.registCamera("default", new PerspectiveCamera({}));
+    }
+    linkWithCameraController(target){
+      // CM側もCCと連携できるようにしておこうね
+      // ただ循環参照になるのを防ぐためregistなどの操作はCC側からしか行えないものとする
+      // つまりこっちで自由にregistなどを実行する分にはあっちには登録などがされない
+      // のだ
+      // 逆にactivateの場合こっちに主導権がありあっちの操作を破棄させることができる
+      // 要するに領分の管理をしている
+      this.controller = target;
+      target.manager = this;
+    }
+    registCamera(name, cam){
+      this.cams[name] = {name:name, cam:cam};
+      // registの際に自動的にセットされる仕組み
+      // 柔軟性と利便性のバランスを取るのは難しい
+      this.curCam = this.cams[name];
+
+      if (this.controller !== undefined) {
+        // this.controllerのregist処理
+        this.controller.prepareCameraData(name, cam);
+        this.controller.curCam = this.controller.cams[name];
+      }
+    }
+    setCamera(name){
+      this.curCam = this.cams[name];
+
+      if (this.controller !== undefined) {
+        this.controller.curCam = this.controller.cams[name];
+      }
+    }
+    setEasingFunction(func){
+      // 文字列指定
+      if (typeof func === "string") {
+        this.easingFunction = this.easings.get(func);
+        return;
+      }
+      // 通常指定
+      this.easingFunction = func;
+    }
+    setParam(params = {}){
+      // パラメータ増やそう
+      const {
+        from:fn = this.fromStateName,
+        to:tn = this.toStateName,
+        duration:d = this.duration,
+        easingFunction:ef = this.easingFunction,
+        factor:f = this.factor
+      } = params;
+      this.fromStateName = fn;
+      this.toStateName = tn;
+      this.duration = d;
+      this.setEasingFunction(ef);
+      this.factor = f;
+    }
+    activate(params = {}){
+      // controllerと連携してる場合はcontrollerサイドでinitializeCamera()を実行する
+      // これによりこっちで自由にactivateした場合にあっちの処理を無効化できる
+      if (this.controller !== undefined) {
+        this.controller.initializeCamera();
+      }
+      // activate時にstateNameを指定できるようにすると柔軟性が増す
+      this.setParam(params);
+      // fromStateNameが""の場合はその場でstateをセットする
+      // この名前の場合、inActivateの際にfromStateNameが""に戻される
+      if (this.fromStateName === "") {
+        this.fromStateName = "_temporaryPreviousState_";
+        this.fromStateIsFree = true;
+        this.curCam.cam.setState(this.fromStateName);
+      }
+      // タイマーを発火させてdurationをターゲットに据える
+      this.timer.initialize(this.curCam.name, {duration:this.duration});
+      this.active = true;
+    }
+    inActivate(){
+      if (this.fromStateIsFree) {
+        this.fromStateName = "";
+        this.fromStateIsFree = false;
+      }
+      this.active = false;
+    }
+    isActive(){
+      return this.active;
+    }
+    update(){
+      // activeでなければ何もしない
+      // 経過時間からプログレスを取得しイージングを掛けて0～1の値を取得し
+      // 2つのstateの名前とそれ(amt)からcamにlerpStateを実行させるだけ
+      // タイマーを監視してdurationに達したようであればinActivateする
+      const {name, cam} = this.curCam;
+      if (!this.active) return;
+      if (this.timer.check(name)) {
+        this.inActivate();
+        return;
+      }
+      const prg = this.timer.getProgress(name);
+      cam.lerpState(
+        this.fromStateName, this.toStateName, this.factor * this.easingFunction(prg)
+      );
     }
   }
 
@@ -5556,7 +6110,7 @@ const p5wgex = (function(){
                 this.rotate(...tfData);
               } else if (typeof tfData[1] === 'object') {
                 // 第二引数がベクトルの場合
-                const {x:vx = 0, y:vy = 0, z:vz = 1} = tfData;
+                const {x:vx = 0, y:vy = 0, z:vz = 1} = tfData[1];
                 this.rotate(tfData[0], vx, vy, vz);
               }
             }
@@ -6529,7 +7083,8 @@ const p5wgex = (function(){
   ex.RenderNode = RenderNode;
   ex.Texture = Texture;
   ex.Mat4 = Mat4;
-  ex.CameraEx = CameraEx;
+  ex.PerspectiveCamera = PerspectiveCamera;
+  ex.OrthographicCamera = OrthographicCamera;
   ex.Transform = Transform;
   ex.Vec3 = Vec3;
 
