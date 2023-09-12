@@ -9,4 +9,11 @@ export class MyClass{
   getA(){
     return a*a;
   }
+  setA(b){
+    this.a = b;
+  }
+}
+
+export const createMyClass = function(a){
+  return new MyClass(a);
 }
