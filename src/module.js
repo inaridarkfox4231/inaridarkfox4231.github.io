@@ -1,9 +1,12 @@
 // module.js
-import {testFunction} from "./testModule.js";
+import {testFunction as myTestFunction} from "./testModule.js";
 
 export const foxTestFunction = function(x, y, z){
-  return testFunction(x, y, z);
+  return myTestFunction(x, y, z);
 }
+
+// 同じ名前での引継ぎは可能なのか
+export const testFunction = myTestFunction;
 
 // p5の関数使ってる場合とかそういう
 // やっぱインスタンス渡さないと無理よね
