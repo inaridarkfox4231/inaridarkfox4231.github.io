@@ -1928,10 +1928,11 @@ const p5wgex = (function(){
       this.z *= r.z;
       return this;
     }
-    divide(a, b, c){
+    div(a, b, c){
+      // divideをdivに改名。subやmultが略なのにdivがdivideだと整合性が悪い。VectorもVecだし。
       const r = _getValidation(a, b, c, 1); // 割り算のデフォも1でしょう
       if(r.x === 0.0 || r.y === 0.0 || r.z === 0.0){
-        myAlert("Vec3 divide: zero division error!");
+        myAlert("Vec3 div: zero division error!");
         return null;
       }
       this.x /= r.x;
@@ -1946,6 +1947,10 @@ const p5wgex = (function(){
     mag(v){
       // いわゆる大きさ。自分の二乗のルート。
       return Math.sqrt(this.dot(this));
+    }
+    magSq(v){
+      // sqrtだと重い場合に大きさの0判定だけしたい場合などに使う。
+      return this.dot(this);
     }
     dist(v){
       // vとの距離。
@@ -1985,10 +1990,10 @@ const p5wgex = (function(){
     normalize(){
       const L = this.mag();
       if(L == 0.0){
-        myAlert("Vec3 normalize: zero division error!");
-        return null;
+        // 0は0にしましょ。エラー出すよりその方がいいと思う。
+        return this;
       }
-      this.divide(L);
+      this.div(L);
       return this;
     }
     multMat(m){
@@ -3924,7 +3929,7 @@ const p5wgex = (function(){
         if (m < 0.000001) {
           v.set(0,0,0);
         } else {
-          v.divide(m);
+          v.div(m);
         }
         this.n[3*i] = v.x;
         this.n[3*i+1] = v.y;
@@ -4772,7 +4777,7 @@ const p5wgex = (function(){
         w.set(m[0]*x + m[1]*y + m[2]*z + m[3],   m[4]*x + m[5]*y + m[6]*z + m[7], m[8]*x + m[9]*y + m[10]*z + m[11]);
         divider = m[12]*x + m[13]*y + m[14]*z + m[15];
       }
-      w.divide(divider); // dividerで割る
+      w.div(divider); // dividerで割る
       return w;
     }
     rotateX(t){
@@ -5176,7 +5181,7 @@ const p5wgex = (function(){
       // ということになりました。以下はその計算になります。
       const eyeDiff = fromEye.copy().sub(toEye);
       const diffDiff = fromEye.copy().sub(toEye).sub(fromCenter).add(toCenter);
-      const divider = diffDiff.x * diffDiff.x + diffDiff.y * diffDiff.y + diffDiff.z * diffDiff.z;
+      const divider = diffDiff.magSq(); // magSqで書き直し
       let ratio = 1; // default.
       // dividerはfromのベクトルとtoのベクトルの差を表すものですから、これが大きさ小さい場合は
       // どこを中心にとっても大差ないわけ。
@@ -5879,12 +5884,17 @@ const p5wgex = (function(){
       this.duration = 500; // ミリ秒指定なのでこれで
       this.easingFunction = (x) => x*x*(3-2*x); // defaultはsmoothstep
       this.factor = 1; // 1を超えて回したい場合に使う
-      this.easings = new Easing();
+      this.easing = new Easing();
       this.controller = undefined;
       // ダミーを用意しとこ。
       // インタラクションのたびにエラー出されるのがめんどうなので。
       // Controllerと同じ名前なのは共有した後も機能するようにするためです
       this.registCamera("default", new PerspectiveCamera({}));
+    }
+    getEasing(){
+      // Easingを取得する関数。名前で定義する際にこのインスタンスに登録されている関数を使うんですが、
+      // 独自定義された関数を使いたい場合に名前で指定できるようにしたいのですよね。
+      return this.easing;
     }
     linkWithCameraController(target){
       // CM側もCCと連携できるようにしておこうね
@@ -5918,7 +5928,7 @@ const p5wgex = (function(){
     setEasingFunction(func){
       // 文字列指定
       if (typeof func === "string") {
-        this.easingFunction = this.easings.get(func);
+        this.easingFunction = this.easing.get(func);
         return;
       }
       // 通常指定

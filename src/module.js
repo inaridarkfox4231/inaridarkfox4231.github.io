@@ -1,5 +1,5 @@
 // module.js
-import {testFunction as myTestFunction, createMyClass} from "./testModule.js";
+import {testFunction as myTestFunction, createMyClass as _createMyClass} from "./testModule.js";
 
 // 全く同じ内容で違う名前にするなどの方法で引き継げば問題ないっぽいね
 export const foxTestFunction = function(x, y, z){
@@ -10,7 +10,7 @@ export const foxTestFunction = function(x, y, z){
 // 可能です。もしかすると名前を変えなくても問題ない可能性もあるけどまあいいか。変えて戻せば同じことができる。
 export const testFunction = myTestFunction;
 
-export const createMyClass = createMyClass; // 完全に同名で引継ぎ
+export const createMyClass = _createMyClass; // 完全に同名で引継ぎするのは不可能です。違う名前ならOKです。宣言済みエラーが出ます。
 
 // p5の関数使ってる場合とかそういう
 // やっぱインスタンス渡さないと無理よね
