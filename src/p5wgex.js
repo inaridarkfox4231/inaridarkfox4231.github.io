@@ -750,15 +750,6 @@ const p5wgex = (function(){
       }
       return false;
     }
-    setDelta(name){
-      // deltaStumpをその時点に設定する。
-      if (!this.validateName(name, "setDelta")) return;
-      const target = this.timers[name];
-      // pause中にdeltaStumpを変更することはできない。
-      if (target.pause) return;
-      // durationは無関係です。deltaStumpを変えるだけ。
-      target.deltaStump = window.performance.now();
-    }
     getDeltaMillis(name){
       // 経過時間のミリ秒を返す。差分はdeltaStumpと取るが、setDelta()できちんと定めないと計算できないので注意。
       if (!this.validateName(name, "getDeltaMillis")) return null;
@@ -767,7 +758,11 @@ const p5wgex = (function(){
         // deltaの場合、差分は0であることが適当なので、0を返す。
         return 0;
       }
-      return window.performance.now() - target.deltaStump; // 普通に現在までの時間
+      // 最後にスタンプした瞬間との差分を記録
+      const delta = window.performance.now() - target.deltaStump;
+      // 直後にスタンプを押す（差分用の）
+      target.deltaStump = window.performance.now();
+      return delta;
     }
     getDelta(name){
       // 前のフレームとの差分をscaleで割った値を返す感じ。
