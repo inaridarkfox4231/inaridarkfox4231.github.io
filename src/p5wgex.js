@@ -647,121 +647,162 @@ const p5wgex = (function(){
   // ---------------------------------------------------------------------------------------------- //
   // Timer.
 
-  // stumpの概念を有するタイマー。デフォルトスタンプを持って初期化出来る。常に最後に発火したタイミングを保持
-  // しておりそこに到達するたびにそのタイミングを更新しつつtrueを返す。
-  // 上位互換になるな...Timerは廃止かもしれない（え？）
-  // たとえばscaleに1000/60を指定すれば...っていう感じなので。
-  // 関数を設定してもいいんだけどtargetとかfuncNameとか引数とかややこしいので勝手にやってくれって感じ...
-  // 従来通り使うなら普通にinitialize(name)でいいしsetで現在時刻登録されるしgetDeltaで秒数、
-  // fps欲しいなら1000/60をスケールに設定、そんなところ。
-
-  // なんとポーズ機能が無いことに気付いたので実装します。内容的にはpauseしたタイミングを記録しておいて
-  // 終わったら停止していた時間の分をstumpに加えます。なお停止中に問い合わせがあった場合その時間から
-  // pauseTimeを引いた分をstumpに加算して計算する...と思う。つまりどんなに時間が経過してもその分引く数も
-  // 大きくなることで停止中であることを表現する...というわけ。getDeltaMillisだけ書き換えればいい(pauseで分岐処理)
-  // getDeltaMillisの結果を、pauseの場合にlastPause-stumpにすれば良さそう。
+  // というわけでTimer改良しました
+  // 差分を取得する処理は完全に累計を取得する処理と分離しているので、同じスロットで両方扱えます。
+  // elapsedとdeltaは別の概念。毎フレーム、getDeltaをした後でsetDeltaすることで毎フレームの経過時間を扱えます。
+  // pause時には0が返り、reStartした際にdeltaStumpがリセットされるのでジャンプは生じない。
+  // 初期化時のstumpによる指定ではelapsedStumpが設定されます。
+  // stumpのスタック欲しい？欲しい...ですか？まあ、必要になったら、用意しましょ。
   class Timer{
     constructor(){
       this.timers = {};
     }
-    initialize(keyName, info = {}){
-      if(info.stump === undefined){ info.stump = window.performance.now(); } // 未定義の場合は現在の時刻
-      if(info.duration === undefined){ info.duration = Infinity; } // 未定義の場合は無限
-      if(info.scale === undefined){ info.scale = 1000; } // 返すときに何かで割りたいときにどうぞ。未定義の場合は1000.
-      // なぜならほとんどの場合秒数として使用するので（メトロノームなどの場合は具体的に指定するだろう）
-      // 最後に発火したタイミングと、次の発火までの時間間隔(duration)を設定（Infinityの場合は間隔を用意しない感じで）
-      this.timers[keyName] = {stump:info.stump, duration:info.duration, scale:info.scale, pause:false, lastPause:info.stump};
+    initialize(name, params = {}){
+      const {stump = window.performance.now(), duration = Infinity, scale = 1000} = params;
+      const newTimer = {};
+      newTimer.elapsedStump = stump; // 経過時間の計算に使うstump. 従来のstumpはこれになります。
+      newTimer.deltaStump = window.performance.now(); // 前のフレームとの差分の計算をするのに使うstump.
+      newTimer.duration = duration; // 時間間隔を使ってなんかする場合に設定する。ミリ秒指定。
+      newTimer.scale = scale;
+      newTimer.pause = false;
+      newTimer.pauseStump = 0; // ポーズ時にその瞬間を記録するために使用されるstump. pause中の正確なelapsedTimeを計算するのに使う。
+      this.timers[name] = newTimer;
     }
-    validateKeyName(keyName, methodName){
-      if(this.timers[keyName] === undefined){
+    validateName(name, methodName){
+      if (this.timers[name] === undefined) {
         myAlert(methodName + " failure: invalid name.");
         return null;
       }
       return true;
     }
-    set(keyName, duration){
-      // 意図的にstumpの値を現在の時刻にすることで、こちらで何かあってからの経過時間を計測する、
-      // 従来の使い方もできるようにしよう。また、initializeされてない場合はエラーを返すようにする。
-      if(!this.validateKeyName(keyName, "set")){ return; }
-      this.timers[keyName].stump = window.performance.now();
+    setElapsed(name, duration){
+      // elapsedStumpをその時点に設定し、必要ならdurationも変更する。pause中は使えない。
+      if (!this.validateName(name, "setElapsed")) return;
+      const target = this.timers[name];
+      // pause中にelapsedStumpを変更することはできない。
+      if (target.pause) return;
+      target.elapsedStump = window.performance.now();
       // durationを決めることでcheckで一定時間ごとの処理ができるようになるね。
-      if(duration !== undefined){ this.timers[keyName].duration = duration; }
-    }
-    getDelta(keyName){
-      // 最後に発火してからの経過時間をscaleで割った値を返す感じ。
-      // こっちの方が基本的に使用されるのでこれをgetDeltaとした。
-      if(!this.validateKeyName(keyName, "getDelta")){ return null; }
-      const _timer = this.timers[keyName];
-      return this.getDeltaMillis(keyName) / _timer.scale;
-    }
-    getProgress(keyName){
-      // stumpからの経過時間をdurationで割ることで進捗を調べるのに使う感じ
-      if(!this.validateKeyName(keyName, "getProgress")){ return null; }
-      const _timer = this.timers[keyName];
-      if(_timer.duration > 0){
-        return Math.min(1, this.getDeltaMillis(keyName) / _timer.duration);
+      if (duration !== undefined) {
+        target.duration = duration;
       }
-      return 1; // durationが0の場合...つまり無限大ということ。
     }
-    getDeltaMillis(keyName){
-      // 最後に発火してからの経過時間を生のミリ秒表示で取得する。使い道は検討中。
-      if(!this.validateKeyName(keyName, "getDeltaMillis")){ return null; }
-      const _timer = this.timers[keyName];
-      if(_timer.pause){
-        return _timer.lastPause - _timer.stump; // 最後に停止するまでの時間
+    getElapsedMillis(name){
+      // 最後に発火してからの経過時間を生のミリ秒表示で取得する。
+      if (!this.validateName(name, "getElapsedMillis")) return null;
+      const target = this.timers[name];
+      if (target.pause) {
+        // elapsedの場合、ポーズ時に記録したstumpとelapsedStumpの差分が返る。つまり定数が返る。
+        return target.pauseStump - target.elapsedStump;
       }
-      return window.performance.now() - _timer.stump; // 普通に現在までの時間
+      return window.performance.now() - target.elapsedStump; // 普通に現在までの時間
     }
-    getDeltaDiscrete(keyName, interval = 1000, modulo = 1){
-      // deltaをintervalで割ってfloorした結果を返す。
+    getElapsed(name){
+      // 最後に発火してからの経過時間をscaleで割った値を返す感じ。経過時間なのでelapsedです。
+      if (!this.validateName(name, "getElapsed")) return null;
+      const target = this.timers[name];
+      return this.getElapsedMillis(name) / target.scale;
+    }
+    getElapsedDiscrete(name, interval = 1000, modulo = 1){
+      // deltaをintervalで割ってfloorした結果を返す。これが利用される場合、durationはInfinityを想定している。そうでなくても使えるけど。
       // moduloが1より大きい場合はそれで%を取る。1の場合はそのまま整数を返す。
       // たとえば250であれば0,1,2,3,...と1秒に4増えるし、moduloを4にすれば0,1,2,3,0,1,2,3,...となるわけ。
-      if(!this.validateKeyName(keyName, "getDeltaDiscrete")){ return null; }
-      const _delta = this.getDeltaMillis(keyName);
-      const n = Math.floor(_delta / interval);
-      if(modulo > 1){
+      if (!this.validateName(name, "getElapsedDiscrete")) return null;
+      const elapsed = this.getElapsedMillis(name);
+      const n = Math.floor(elapsed / interval);
+      if (modulo > 1) {
         return n % modulo;
       }
       return n;
     }
-    check(keyName, nextDuration){
-      // durationを経過時間が越えたらstumpを更新する
+    getProgress(name){
+      // stumpからの経過時間(elapsed)をdurationで割ることで進捗を調べるのに使う感じ
+      if (!this.validateName(name, "getProgress")) return null;
+      const target = this.timers[name];
+      if (target.duration > 0) {
+        return Math.min(1, this.getElapsedMillis(name) / target.duration);
+      }
+      return 1; // durationが0の場合...つまり無限大ということ。
+    }
+    check(name, nextDuration){
+      // durationを経過時間が越えたらelapsedStumpを更新する
       // nextDurationは未定義なら同じ値を継続
-      // 毎回違うでもいい、自由に決められるようにする。
-      if(!this.validateKeyName(keyName, "check")){ return false; }
-      const _timer = this.timers[keyName];
-      const elapsedTime = this.getDeltaMillis(keyName);
-      if(elapsedTime > _timer.duration){
-        _timer.stump += _timer.duration;
-        if(nextDuration !== undefined){
-          _timer.duration = nextDuration;
+      // 毎回違うでもいい、自由に決められるようにする。いわゆるメトロノーム。
+      // 実はFALさんのメトロノームのcheckと大体同じことをしてるんですが、あっちではあのですね...
+      if (!this.validateName(name, "check")) return false;
+      const target = this.timers[name];
+      const elapsedTime = this.getElapsedMillis(name);
+      if (elapsedTime > target.duration) {
+        target.elapsedStump += target.duration;
+        // 足しますよね。その時に計算されるelapsedStumpに基づいて計算されるelapsedTimeはduration未満であることが想定されていますが、
+        // そうとは限らない。ぶっちゃけていうとelapsedTimeがduration2個分以上の場合困るねって話。その場合についてはFALさんはどうしてるかというと
+        // elapsedStumpをperformance.now()にしていますね。要はタイマーリセットですね。おそらくいくつも足すよりかは合理的だと思います。
+        // でないとどんどん遅れて狂っていってしまう。リセットした方が合理的。やっと理解できた。
+        if (elapsedTime > 2*target.duration) {
+          // 2個分以上離れてる場合、1個足すだけでは足りないので、必要なだけ足すのではなく、もういっそelapsedTimeを0にリセットしてしまう。
+          // もっともよほどのことが無い限りは実行されない。FALさんのメトロノームの場合、これは異常なほどBPMが速いケースなので、まず実行されない。
+          target.elapsedStump = window.performance.now();
+        }
+        if (nextDuration !== undefined) {
+          target.duration = nextDuration;
         }
         return true;
       }
       return false;
     }
-    pause(keyName){
-      if(!this.validateKeyName(keyName, "pause")){ return; }
-      const _timer = this.timers[keyName];
-      if(_timer.pause){ return; } // 重ね掛け回避
-      _timer.pause = true;
-      _timer.lastPause = window.performance.now();
+    setDelta(name){
+      // deltaStumpをその時点に設定する。
+      if (!this.validateName(name, "setDelta")) return;
+      const target = this.timers[name];
+      // pause中にdeltaStumpを変更することはできない。
+      if (target.pause) return;
+      // durationは無関係です。deltaStumpを変えるだけ。
+      target.deltaStump = window.performance.now();
     }
-    reStart(keyName){
-      if(!this.validateKeyName(keyName, "reStart")){ return; }
-      const _timer = this.timers[keyName];
-      if(!_timer.pause){ return; } // 重ね掛け回避
-      _timer.pause = false;
-      _timer.stump += window.performance.now() - _timer.lastPause;
+    getDeltaMillis(name){
+      // 経過時間のミリ秒を返す。差分はdeltaStumpと取るが、setDelta()できちんと定めないと計算できないので注意。
+      if (!this.validateName(name, "getDeltaMillis")) return null;
+      const target = this.timers[name];
+      if(target.pause){
+        // deltaの場合、差分は0であることが適当なので、0を返す。
+        return 0;
+      }
+      return window.performance.now() - target.deltaStump; // 普通に現在までの時間
+    }
+    getDelta(name){
+      // 前のフレームとの差分をscaleで割った値を返す感じ。
+      // 前のフレームと言っても手動でsetDelta()を使って設定する必要がある。もちろんその分の恩恵もある。トレードオフ。
+      if (!this.validateName(name, "getDelta")) return null;
+      const target = this.timers[name];
+      return this.getDeltaMillis(name) / target.scale;
+    }
+    pause(name){
+      // ポーズの際にpauseStumpを設定し、elapsedはこれと差分を取ることで定数が返るようにする。
+      if (!this.validateName(name, "pause")) return;
+      const target = this.timers[name];
+      if (target.pause) return; // 重ね掛け回避
+      target.pause = true;
+      target.pauseStump = window.performance.now();
+    }
+    reStart(name){
+      // pause解除。elapsedStumpをその時点とpauseStumpの差分を加えて更新する。
+      // 加えることで経過時間などを正確に計算できるようにする。空白部分をノーカンにするための処理である。
+      // 差分についてはこのタイミングでdeltaStumpをその時点にします。これにより、ポーズ前と差分を取ることにより発生してしまうジャンプを防ぐことができます。
+      if (!this.validateName(name, "reStart")) return;
+      const target = this.timers[name];
+      if (!target.pause) return; // 重ね掛け回避
+      target.pause = false;
+      target.elapsedStump += window.performance.now() - target.pauseStump;
+      target.deltaStump = window.performance.now();
     }
     pauseAll(){
-      for(let keyName of Object.keys(this.timers)){
-        this.pause(keyName);
+      for (const name of Object.keys(this.timers)) {
+        this.pause(name);
       }
     }
     reStartAll(){
-      for(let keyName of Object.keys(this.timers)){
-        this.reStart(keyName);
+      for (const name of Object.keys(this.timers)) {
+        this.reStart(name);
       }
     }
   }

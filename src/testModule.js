@@ -7,7 +7,7 @@ export class MyClass{
     this.a = a;
   }
   getA(){
-    return a*a;
+    return this.a*this.a;
   }
   setA(b){
     this.a = b;
