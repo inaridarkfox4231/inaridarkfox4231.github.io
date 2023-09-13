@@ -539,51 +539,67 @@ const foxIA = (function(){
   // clear
   // addとclearでよいです
   // addでイベントを追加しclearですべて破棄します
-  class Inspector extends Interaction{
-  	constructor(){
-  		super();
-  		this.functions = {
-  			mouseDown:[],
-  			mouseMove:[],
-  			mouseUp:[],
-  			wheel:[],
-  			click:[],
-  			keyDown:[],
-  			keyUp:[]
-  		};
-  	}
-  	execute(name, args){
-  		for (const func of this.functions[name]){
-  			func(...args);
-  		}
-  	}
-  	add(name, func){
-  		this.functions[name].push(func);
-  	}
-  	clear(name){
-  		this.functions[name] = [];
-  	}
-  	mouseDownDefaultAction(e){
-  		this.execute("mouseDown", arguments);
-  	}
-  	mouseMoveDefaultAction(dx, dy, x, y){
-  		this.execute("mouseMove", arguments);
-  	}
-  	mouseUpDefaultAction(){
-  		this.execute("mouseUp", arguments);
-  	}
-  	wheelAction(e){
-  		this.execute("wheel", arguments);
-  	}
-  	clickAction(){
-  		this.execute("click", arguments);
-  	}
-  	keyDownAction(e){
-  		this.execute("keyDown", arguments);
-  	}
-  	keyUpAction(e){
-  		this.execute("keyUp", arguments);
-  	}
+  class Inspector extends foxIA.Interaction{
+    constructor(){
+      super();
+      this.functions = {
+        mouseDown:[],
+        mouseMove:[],
+        mouseUp:[],
+        wheel:[],
+        click:[],
+        mouseEnter:[],
+        mouseLeave:[],
+        dblClick:[],
+        dblTap:[],
+        keyDown:[],
+        keyUp:[]
+      };
+    }
+    execute(name, args){
+      for (const func of this.functions[name]){
+        func(...args);
+      }
+    }
+    add(name, func){
+      this.functions[name].push(func);
+    }
+    clear(name){
+      this.functions[name] = [];
+    }
+    mouseDownDefaultAction(e){
+      this.execute("mouseDown", arguments);
+    }
+    mouseMoveDefaultAction(dx, dy, x, y){
+      this.execute("mouseMove", arguments);
+    }
+    mouseUpDefaultAction(){
+      this.execute("mouseUp", arguments);
+    }
+    wheelAction(e){
+      this.execute("wheel", arguments);
+    }
+    clickAction(){
+      this.execute("click", arguments);
+    }
+    mouseEnterAction(){
+      this.execute("mouseEnter", arguments);
+    }
+    mouseLeaveAction(){
+      this.execute("mouseLeave", arguments);
+    }
+    doubleClickAction(){
+      this.execute("dblClick", arguments);
+    }
+    doubleTapAction(){
+      this.execute("dblTap", arguments);
+    }
+    keyDownAction(e){
+      this.execute("keyDown", arguments);
+    }
+    keyUpAction(e){
+      this.execute("keyUp", arguments);
+    }
   }
 
   fox.Interaction = Interaction;
