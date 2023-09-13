@@ -5733,7 +5733,7 @@ const p5wgex = (function(){
       // managerが存在する場合にそっちもregistされる
       if (this.manager !== undefined) {
         // this.managerのregist処理
-        this.manager.cams[name] = {name:name, cam:cam};
+        this.manager.prepareCameraData(name, cam);
         this.manager.curCam = this.manager.cams[name];
       }
     }
@@ -6003,8 +6003,15 @@ const p5wgex = (function(){
       this.controller = target;
       target.manager = this;
     }
+    prepareCameraData(name, cam){
+      const data = {};
+      data.name = name;
+      data.cam = cam;
+      this.timer.initialize(name);
+      this.cams[name] = data;
+    }
     registCamera(name, cam){
-      this.cams[name] = {name:name, cam:cam};
+      this.prepareCameraData(name, cam);
       // registの際に自動的にセットされる仕組み
       // 柔軟性と利便性のバランスを取るのは難しい
       this.curCam = this.cams[name];
@@ -6062,7 +6069,7 @@ const p5wgex = (function(){
         this.curCam.cam.setState(this.fromStateName);
       }
       // タイマーを発火させてdurationをターゲットに据える
-      this.timer.initialize(this.curCam.name, {duration:this.duration});
+      this.timer.setElapsed(this.curCam.name, this.duration);
       this.active = true;
     }
     inActivate(){
