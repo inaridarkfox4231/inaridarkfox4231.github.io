@@ -765,8 +765,7 @@ const p5wgex = (function(){
       return delta;
     }
     getDelta(name){
-      // 前のフレームとの差分をscaleで割った値を返す感じ。
-      // 前のフレームと言っても手動でsetDelta()を使って設定する必要がある。もちろんその分の恩恵もある。トレードオフ。
+      // 最後にスタンプした瞬間との差分をscaleで割った値を返す感じ。
       if (!this.validateName(name, "getDelta")) return null;
       const target = this.timers[name];
       return this.getDeltaMillis(name) / target.scale;
@@ -5647,6 +5646,8 @@ const p5wgex = (function(){
       this.constants = {};
       this.initializeConstants();
       this.manager = undefined;
+      this.timer = new Timer(); // 時間ベース
+      this.pause = false;
       this.registCamera("default", new PerspectiveCamera({})); // ダミーを用意しとこ
     }
     linkWithCameraManager(target){
@@ -5697,13 +5698,15 @@ const p5wgex = (function(){
       data.name = name;
       data.cam = cam;
       data.scaleVelocity = 0;
-      data.moveVelocity = new ex.Vec3(0,0,0);
-      data.rotationVelocity = new ex.Vec3(0,0,0);
+      data.moveVelocity = new Vec3(0,0,0);
+      data.rotationVelocity = new Vec3(0,0,0);
       data.rotationType = "angle"; // またはfree.
-      data.scaleType = "dolly"; // perspectiveの場合にdollyとzoomを切り替えることができる
+      data.scaleType = "dolly"; // dollyとzoomを切り替えることができる
       data.targetResetState = "default"; // リセットの際に戻るstateの種類
       data.active = false; // マウスダウンなどの以下略
       data.button = 0; // マウスボタン用
+      data.controlType = "frame"; // frame/timeが選択できる。timeにすると時間ベース。
+      this.timer.initialize(name); // タイマーの初期化
       this.cams[name] = data;
     }
     registCamera(name, cam){
@@ -5735,6 +5738,16 @@ const p5wgex = (function(){
       if (typeName !== "dolly" && typeName !== "zoom") return;
       this.curCam.scaleType = typeName;
     }
+    setControlType(typeName = "frame"){
+      // フレームカウントベースで動かすのか、時間ベースで動かすのか。
+      if (typeof typeName !== "string") return;
+      if (typeName !== "frame" && typeName !== "time") return;
+      this.curCam.controlType = typeName;
+      if (typeName === "time") {
+        // timeに切り替える際のジャンプを防ぐ。
+        const t = this.timer.getDelta(this.curCam.name);
+      }
+    }
     setTargetResetState(stateName = "default"){
       if (typeof stateName !== "string") return;
       this.curCam.targetResetState = stateName;
@@ -5750,41 +5763,47 @@ const p5wgex = (function(){
     update(){
       const c = this.curCam;
       const cam = c.cam;
+      const factor = (c.controlType === "frame" ? 1 : 60 * this.timer.getDelta(c.name));
 
       if (this.manager !== undefined && this.manager.isActive()) {
         this.manager.update();
         return;
       }
 
+      // scale.
       c.scaleVelocity *= 0.85;
       if (Math.abs(c.scaleVelocity) < this.constants.velocityThreshold){
         c.scaleVelocity = 0;
       } else {
         switch(c.scaleType){
           case "dolly":
-            cam.dolly(c.scaleVelocity); break;
+            cam.dolly(c.scaleVelocity * factor); break;
           case "zoom":
-            cam.zoom(c.scaleVelocity); break;
+            cam.zoom(c.scaleVelocity * factor); break;
         }
       }
+
+      // move.
       c.moveVelocity.mult(0.85);
       if (c.moveVelocity.mag() < this.constants.velocityThreshold){
         c.moveVelocity.set(0,0,0);
       } else {
-        cam.moveNDC(-c.moveVelocity.x, c.moveVelocity.y);
+        cam.moveNDC(-c.moveVelocity.x * factor, c.moveVelocity.y * factor);
       }
+
+      // rotation.
       c.rotationVelocity.mult(0.85);
       if (c.rotationVelocity.mag() < this.constants.velocityThreshold){
         c.rotationVelocity.set(0,0,0);
       } else {
         switch(c.rotationType){
           case "angle":
-            cam.spin(-c.rotationVelocity.x);
+            cam.spin(-c.rotationVelocity.x * factor);
             const upperLimit =
                   Math.max(-1.56, Math.min(1.56, this.constants.upperAngleLimit));
             const lowerLimit =
                   Math.max(-1.56, Math.min(1.56, this.constants.lowerAngleLimit));
-            cam.angle(c.rotationVelocity.y, upperLimit, lowerLimit);
+            cam.angle(c.rotationVelocity.y * factor, upperLimit, lowerLimit);
             break;
           case "free":
             const q = cam.getParallelPosition(
@@ -5793,7 +5812,7 @@ const p5wgex = (function(){
             q.sub(cam.view.center).normalize();
             const axis = q.cross(cam.view.front);
             const phi = c.rotationVelocity.mag();
-            cam.rotate(phi, axis);
+            cam.rotate(phi * factor, axis);
             break;
         }
       }
@@ -5808,6 +5827,12 @@ const p5wgex = (function(){
     inActivate(){
       const c = this.curCam;
       c.active = false;
+    }
+    isActive(){
+      return this.active;
+    }
+    isPause(){
+      return this.pause;
     }
     wheelAction(e){
       if (this.manager !== undefined && this.manager.isActive()) {
@@ -5902,6 +5927,24 @@ const p5wgex = (function(){
       // 二重呼び出し回避。
       this.manager.activate({from:"", to:this.curCam.targetResetState});
     }
+    stop(){
+      // 連携してる場合はどっちも止める
+      if (this.pause) return;
+      this.timer.pauseAll();
+      if (this.manager !== undefined) {
+        this.manager.timer.pauseAll();
+      }
+      this.pause = true;
+    }
+    start(){
+      // 連携してる場合はどっちも止める
+      if (!this.pause) return;
+      this.timer.reStartAll();
+      if (this.manager !== undefined) {
+        this.manager.timer.reStartAll();
+      }
+      this.pause = false;
+    }
   }
 
   // activate()で勝手にlerpStateが始まる
@@ -5912,8 +5955,9 @@ const p5wgex = (function(){
   class CameraManager{
     constructor(){
       this.cams = {};
-      this.timer = new ex.Timer();
+      this.timer = new Timer();
       this.active = false;
+      this.pause = false;
       this.fromStateName = "";
       this.toStateName = "default";
       this.fromStateIsFree = false;
@@ -6014,6 +6058,9 @@ const p5wgex = (function(){
     isActive(){
       return this.active;
     }
+    isPause(){
+      return this.pause;
+    }
     update(){
       // activeでなければ何もしない
       // 経過時間からプログレスを取得しイージングを掛けて0～1の値を取得し
@@ -6029,6 +6076,24 @@ const p5wgex = (function(){
       cam.lerpState(
         this.fromStateName, this.toStateName, this.factor * this.easingFunction(prg)
       );
+    }
+    stop(){
+      // タイマーを止める
+      if (this.pause) return; // 重ね掛け回避
+      this.timer.pauseAll();
+      if (this.controller !== undefined) {
+        this.controller.timer.pauseAll();
+      }
+      this.pause = true;
+    }
+    start(){
+      // タイマーを動かす
+      if (!this.pause) return; // 重ね掛け回避
+      this.timer.reStartAll();
+      if (this.controller !== undefined) {
+        this.controller.timer.reStartAll();
+      }
+      this.pause = false;
     }
   }
 
