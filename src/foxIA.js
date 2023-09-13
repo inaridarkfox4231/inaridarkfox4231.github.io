@@ -534,60 +534,8 @@ const foxIA = (function(){
     }
   }
 
-  // dampedAction.
-  // 汎用的なモーション作成ツール
-  // 要するに力を加えた時に速度が発生してそれによりなんか動かすのに
-  // 使えるわけです
-  // ベクトル版作ったら面白い？一次元なので。
-  // 0.85は摩擦部分でここを大きくするといわゆる「滑り」が大きくなるのね
-  // option = {friction:0.15} みたいにして指定できる。よ。
-  // とはいえ実際にはvalueが正や負の値を取りつつ減衰するだけなので
-  // これを単位ベクトルに掛ければ2次元でも使えなくはないと思う...よ。
-
-  // 使い方...難しいと思うんだけどね。
-  // ScalarDampedActionに改名しました
-  // actionCallBackはそのまま関数です。どんな関数でもいいわけではなくて、基本的に1変数です。
-  // そこに放り込まれる値というのが、このScalarDampedActionを実行するたびに減衰していって0になる。
-  // まあそういうこと。
-  // quitで0.0になることからわかるようにactionには0が入った場合は何もしないことが想定されていますね。
-  // たとえばですけどxを与えられた場合にあるものをxだけ動かす、そういった挙動が想定されているのでしょうね。
-  // だからベクトルだったら特定の方向に入力だけ動かす、そういった感じかと。思います。
-  // 適用事例：https://openprocessing.org/sketch/1923156
-  // 長方形をvalueだけ動かしていますね。制限を設けていますが。こういう使い方...
-  // ではあるんだけどね。関数を即席で作ってなおかつbindしてるのがあんま綺麗じゃないのよね。まあ柔軟性...
-  // あー、たとえば？関数の処理の一部、何かを動かす部分に、その、部分的に当てはめる使い方が想定されていますね。
-  class ScalarDampedAction{
-    constructor(actionCallBack, option = {}){
-      const {friction = 0.15} = option;
-      this.value = 0.0;
-      this.damping = 1.0 - friction; // デフォルトは0.85になります
-      this.action = actionCallBack;
-    }
-    addForce(force){
-      this.value += force;
-    }
-    step(){
-      const active = (this.value * this.value > 1e-6);
-      if(active){
-        this.action(this.value);
-        this.value *= this.damping;
-      }else{
-        this.quit();
-      }
-      return active;
-    }
-    quit(){
-      this.value = 0.0;
-    }
-  }
-
-  // ScalarDampedAction
-  // VectorDampedAction
-  // 2つ用意するといいと思う
-
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
-  fox.ScalarDampedAction = ScalarDampedAction;
 
   return fox;
 })();
