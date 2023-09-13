@@ -129,7 +129,7 @@ Interaction:
 e.codeを用いる場合のキー内容一覧（https://developer.mozilla.org/ja/docs/Web/API/KeyboardEvent/code を参照）
 アルファベット：keyA,keyB,...,keyZ.
 ShiftRight, ShiftLeft.
-Enter, CapsLock,Space,ControlLeft,ControlRight,ArrowUp,ArrowDown,ArrowLeft,ArrowRight.
+Enter, CapsLock, Space, ControlLeft, ControlRight, ArrowUp, ArrowDown, ArrowLeft, ArrowRight.
 Numpad0,Numpad1,Numpad2,...,Numpad9.
 NumpadDecimal,NumpadEnter,NumpadAdd.
 上の方の数字キー：Digit0,Digit1,Digit2,...,Digit9.
@@ -518,8 +518,61 @@ const foxIA = (function(){
     }
   }
 
+  // addEventの方がよさそう
+  // add
+  // clear
+  // addとclearでよいです
+  // addでイベントを追加しclearですべて破棄します
+  class Inspector extends Interaction{
+  	constructor(){
+  		super();
+  		this.functions = {
+  			mouseDown:[],
+  			mouseMove:[],
+  			mouseUp:[],
+  			wheel:[],
+  			click:[],
+  			keyDown:[],
+  			keyUp:[]
+  		};
+  	}
+  	execute(name, args){
+  		for (const func of this.functions[name]){
+  			func(...args);
+  		}
+  	}
+  	add(name, func){
+  		this.functions[name].push(func);
+  	}
+  	clear(name){
+  		this.functions[name] = [];
+  	}
+  	mouseDownDefaultAction(e){
+  		this.execute("mouseDown", arguments);
+  	}
+  	mouseMoveDefaultAction(dx, dy, x, y){
+  		this.execute("mouseMove", arguments);
+  	}
+  	mouseUpDefaultAction(){
+  		this.execute("mouseUp", arguments);
+  	}
+  	wheelAction(e){
+  		this.execute("wheel", arguments);
+  	}
+  	clickAction(){
+  		this.execute("click", arguments);
+  	}
+  	keyDownAction(e){
+  		this.execute("keyDown", arguments);
+  	}
+  	keyUpAction(e){
+  		this.execute("keyUp", arguments);
+  	}
+  }
+
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
+  fox.Inspector = Inspector;
 
   return fox;
 })();
