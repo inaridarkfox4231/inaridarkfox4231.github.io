@@ -539,7 +539,7 @@ const foxIA = (function(){
   // clear
   // addとclearでよいです
   // addでイベントを追加しclearですべて破棄します
-  class Inspector extends foxIA.Interaction{
+  class Inspector extends Interaction{
     constructor(){
       super();
       this.functions = {
