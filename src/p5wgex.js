@@ -5702,7 +5702,8 @@ const p5wgex = (function(){
       this.curCam = undefined;
       this.constants = {};
       this.initializeConstants();
-      this.manager = undefined;
+      this.manager = undefined; // 連携用
+      this.system = undefined; // 連携用
       this.timer = new Timer(); // 時間ベース
       this.pause = false;
       this.registCamera("default", new PerspectiveCamera({})); // ダミーを用意しとこ
@@ -5784,6 +5785,10 @@ const p5wgex = (function(){
       if (this.manager !== undefined) {
         this.manager.curCam = this.manager.cams[name];
       }
+    }
+    getCamera(name){
+      // カメラを取得できるようにする。デフォルトカメラの取得はこれでないとできない。
+      return this.cams[name].cam;
     }
     setRotationType(typeName = "default"){
       if (typeof typeName !== "string") return;
@@ -6012,6 +6017,7 @@ const p5wgex = (function(){
   class CameraManager{
     constructor(){
       this.cams = {};
+      this.curCam = undefined;
       this.timer = new Timer();
       this.active = false;
       this.pause = false;
@@ -6022,7 +6028,8 @@ const p5wgex = (function(){
       this.easingFunction = (x) => x*x*(3-2*x); // defaultはsmoothstep
       this.factor = 1; // 1を超えて回したい場合に使う
       this.easing = new Easing();
-      this.controller = undefined;
+      this.controller = undefined; // 連携用
+      this.system = undefined; // 連携用
       // ダミーを用意しとこ。
       // インタラクションのたびにエラー出されるのがめんどうなので。
       // Controllerと同じ名前なのは共有した後も機能するようにするためです
@@ -6032,6 +6039,10 @@ const p5wgex = (function(){
       // Easingを取得する関数。名前で定義する際にこのインスタンスに登録されている関数を使うんですが、
       // 独自定義された関数を使いたい場合に名前で指定できるようにしたいのですよね。
       return this.easing;
+    }
+    getController(){
+      // CameraControllerの取得関数。整合性のために一応。
+      return this.controller;
     }
     linkWithCameraController(target){
       // CM側もCCと連携できるようにしておこうね
@@ -6068,6 +6079,10 @@ const p5wgex = (function(){
       if (this.controller !== undefined) {
         this.controller.curCam = this.controller.cams[name];
       }
+    }
+    getCamera(name){
+      // カメラを取得できるようにする。デフォルトカメラの取得はこれでないとできない。
+      return this.cams[name].cam;
     }
     setEasingFunction(func){
       // 文字列指定
@@ -6874,11 +6889,63 @@ const p5wgex = (function(){
 
   // nodeをこっちにも渡す
   // 同じnodeである必要が...あるはず。
+
+  // tfとCamを備え付けにしましょ。使わない場合もあるけどいちいち定義するのめんどくさいので。
   class RenderingSystem{
     constructor(node){
       this.node = node;
       this.shaders = {};
       this.currentShader = undefined;
+      this.tf = new Transform();
+      this.cams = {};
+      this.curCam = undefined;
+      this.controller = undefined; // 連携用
+      this.manager = undefined; // 連携用
+      // ダミーカメラ（名前は共通でdefault）
+      this.registCamera("default", new PerspectiveCamera({}));
+    }
+    linkWithCameraController(target){
+      // CCとの連携
+      this.controller = target;
+      target.system = this;
+    }
+    linkWithCameraManager(target){
+      // CMとの連携
+      this.manager = target;
+      target.system = this;
+    }
+    prepareCameraData(name, cam){
+      const data = {};
+      data.name = name;
+      data.cam = cam;
+      this.cams[name] = data;
+    }
+    registCamera(name, cam){
+      this.prepareCameraData(name, cam);
+      // registの際に自動的にセットされる仕組み
+      this.curCam = this.cams[name];
+
+      if (this.controller !== undefined) {
+        // this.controllerのregist処理
+        this.controller.prepareCameraData(name, cam);
+        this.controller.curCam = this.controller.cams[name];
+      }
+      if (this.manager !== undefined) {
+        // this.managerのregist処理
+        this.manager.prepareCameraData(name, cam);
+        this.manager.curCam = this.manager.cams[name];
+      }
+    }
+    setCamera(name){
+      // 連携してると全部にsetされる
+      this.curCam = this.cams[name];
+
+      if (this.controller !== undefined) {
+        this.controller.curCam = this.controller.cams[name];
+      }
+      if (this.manager !== undefined) {
+        this.manager.curCam = this.manager.cams[name];
+      }
     }
     registShader(name, _shaderPrototype){
       // 渡す前に作っておく
@@ -6886,6 +6953,19 @@ const p5wgex = (function(){
       this.shaders[name] = _shaderPrototype;
       this.bindShader(name);
       return this;
+    }
+    getTransform(){
+      // transformの取得
+      return this.tf;
+    }
+    setTransform(process = [], _initializeTransform = true){
+      // transformの設定
+      if (_initializeTransform) this.initializeTransform();
+      this.transform.create(process);
+    }
+    initializeTransform(){
+      // transformの初期化
+      this.tf.initialize();
     }
     bindShader(name){
       this.currentShader = this.shaders[name];
@@ -6963,6 +7043,7 @@ const p5wgex = (function(){
           this.bindShader("deferredPrepare");
           break;
       }
+      this.initializeTransform();
       return this;
     }
     prepareLightingParameters(){
@@ -7067,7 +7148,13 @@ const p5wgex = (function(){
         this.node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
       }
     }
-    setMatrixUniforms(tf, cam){
+    setMatrixUniforms(){
+      // transformの操作はsetTransformで実行する。
+      // それとは別にMatrixUniformsを設定する。
+      // そのうちドローコールもメソッドで出来るようにしてその中でこれを実行する形になるかも？
+      const tf = this.tf;
+      const cam = this.curCam.cam;
+
       // deferredの場合はuViewMatrixを使わないので送らない
       // もちろん用意することは可能でその場合はカスタマイズで何とかする
       const modelMat = tf.getModelMat();
@@ -7089,6 +7176,8 @@ const p5wgex = (function(){
                .setUniform("uModelNormalMatrix", modelNormalMat);
     }
     renderPrepare(tf, cam, process = [], initializeTransform = true){
+      // 廃止予定
+
       // render改めrenderPrepare.
       // ここでは準備するだけにしよう。
       // forwardは個別のレンダリング用。
