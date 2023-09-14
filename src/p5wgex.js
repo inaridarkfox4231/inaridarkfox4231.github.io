@@ -61,6 +61,7 @@
 
 // 20230914
 // 問題発生
+// 問題解消しました
 
 /*
 外部から上書きするメソッドの一覧
@@ -2032,12 +2033,12 @@ const p5wgex = (function(){
       const s = 1 - Math.cos(theta);
       const t = Math.cos(theta);
       const u = Math.sin(theta);
-      // GLSL内部の計算に準拠して0,1,2で左、3,4,5で中央、6,7,8で右の列。それを自身を列ベクトルとみなして
-      // それに掛けているイメージですね。迷ったらvを(0,0,1)にしましょう。理屈はちゃんとあります（クォータニオン）
+      // GLSL内部の計算に準拠しているつもり。multMat修正しました。
+      // 0,1,2で1行目、3,4,5で2行目、6,7,8で3行目。合ってるはず。0,1,2で列ベクトルを指定するのはやはり不自然なので。
       this.multMat([
-        s*a*a + t,   s*a*b + u*c, s*a*c - u*b,
-        s*a*b - u*c, s*b*b + t,   s*b*c + u*a,
-        s*a*c + u*b, s*b*c - u*a, s*c*c + t
+        s*a*a + t,   s*a*b - u*c, s*a*c + u*b,
+        s*a*b + u*c, s*b*b + t,   s*b*c - u*a,
+        s*a*c - u*b, s*b*c + u*a, s*c*c + t
       ]);
       return this;
       // OK??
@@ -2051,20 +2052,27 @@ const p5wgex = (function(){
       this.div(L);
       return this;
     }
-    multMat(m){
-      // mは3x3行列を模した長さ9の配列、成分の並びは縦。つまり0,1,2で列ベクトル1で、3,4,5で列ベクトル2で、
-      // 6,7,8で列ベクトル3という、これを縦に並んだthis.x,this.y,this.zに掛け算するイメージ。です。
-      if(m === undefined){
-        // 一応未定義の時のために単位行列おいとくか
-        m = new Array(9);
+    multMat(v1, v2, v3){
+      // mは3x3行列を模した長さ9の配列、横並びで決める。つまり0,1,2が1行目、3,4,5が2行目、6,7,8が3行目。
+      // ただしベクトル3つで定義できるようにもする。この方が自然だと思うので。
+      const m = new Array(9);
+      if(v1 === undefined){
+        // 一応未定義の時のために単位行列おいとく
         m[0] = 1; m[1] = 0; m[2] = 0;
         m[3] = 0; m[4] = 1; m[5] = 0;
         m[6] = 0; m[7] = 0; m[8] = 1;
+      } else if (Array.isArray(v1)) {
+        for (let i=0; i<9; i++) m[i] = v1[i];
+      } else {
+        // v1,v2,v3がベクトルの場合。列ベクトル。
+        m[0] = v1.x; m[1] = v2.x; m[2] = v3.x;
+        m[3] = v1.y; m[4] = v2.y; m[5] = v3.y;
+        m[6] = v1.z; m[7] = v2.z; m[8] = v3.z;
       }
       const {x:a, y:b, z:c} = this;
-      this.x = m[0] * a + m[3] * b + m[6] * c;
-      this.y = m[1] * a + m[4] * b + m[7] * c;
-      this.z = m[2] * a + m[5] * b + m[8] * c;
+      this.x = m[0] * a + m[1] * b + m[2] * c;
+      this.y = m[3] * a + m[4] * b + m[5] * c;
+      this.z = m[6] * a + m[7] * b + m[8] * c;
       return this;
     }
     copy(){
@@ -2142,6 +2150,36 @@ const p5wgex = (function(){
       this.z = this.z * cosMultiplier + ey.z * sinMultiplier;
 
       return this;
+    }
+    static add(v1, v2){
+      return v1.copy().add(v2);
+    }
+    static addScalar(v1, v2, s = 1){
+      return v1.copy().addScalar(v2, s);
+    }
+    static sub(v1, v2){
+      return v1.copy().sub(v2);
+    }
+    static mult(v1, a, b, c){
+      return v1.copy().mult(a, b, c);
+    }
+    static div(v1, a, b, c){
+      return v1.copy().div(a, b, c);
+    }
+    static cross(v1, v2){
+      return v1.copy().cross(v2);
+    }
+    static lerp(v1, v2, amt){
+      return v1.copy().lerp(v2, amt);
+    }
+    static slerp(v1, v2, amt){
+      return v1.copy().slerp(v2, amt);
+    }
+    static rotate(v, axis, theta){
+      return v.copy().rotate(axis, theta);
+    }
+    static multMat(v, v1, v2, v3){
+      return v.copy().multMat(v1, v2, v3);
     }
   }
 
@@ -5309,6 +5347,7 @@ const p5wgex = (function(){
       const ab = a * b;
       const bc = b * c;
       const ca = c * a;
+      // 0,1,2で1行目、3,4,5で2行目、6,7,8で3行目
       const lerpedRotMat = [
         cosAngle + oneMinusCosAngle * a * a,
         oneMinusCosAngle * ab - sinAngle * c,
@@ -5320,13 +5359,12 @@ const p5wgex = (function(){
         oneMinusCosAngle * bc + sinAngle * a,
         cosAngle + oneMinusCosAngle * c * c
       ];
-      // Vec3のmultMatがどうも列ベクトルベースで並べているようですね困ったね...
-      // そもそもp5から直接移植することは可能なのか？可能なんだろうけど...
-      const multiplier = getTranspose3x3(lerpedRotMat);
-      newFront.set(fromFront).multMat(multiplier);
+      // Vec3のmultMatを修正したので転置はもう不要です。
+      //const multiplier = getTranspose3x3(lerpedRotMat);
+      newFront.set(fromFront).multMat(lerpedRotMat);
       this.view.eye.set(newFront).mult(ratio * lerpedDist).add(lerpedMedium);
       this.view.center.set(newFront).mult((ratio-1) * lerpedDist).add(lerpedMedium);
-      this.view.top.set(fromUp).multMat(multiplier);
+      this.view.top.set(fromUp).multMat(lerpedRotMat);
       this.calcViewMat();
       return;
     }
