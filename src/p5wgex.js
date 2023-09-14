@@ -5360,7 +5360,6 @@ const p5wgex = (function(){
         cosAngle + oneMinusCosAngle * c * c
       ];
       // Vec3のmultMatを修正したので転置はもう不要です。
-      //const multiplier = getTranspose3x3(lerpedRotMat);
       newFront.set(fromFront).multMat(lerpedRotMat);
       this.view.eye.set(newFront).mult(ratio * lerpedDist).add(lerpedMedium);
       this.view.center.set(newFront).mult((ratio-1) * lerpedDist).add(lerpedMedium);
@@ -6131,16 +6130,17 @@ const p5wgex = (function(){
       // 経過時間からプログレスを取得しイージングを掛けて0～1の値を取得し
       // 2つのstateの名前とそれ(amt)からcamにlerpStateを実行させるだけ
       // タイマーを監視してdurationに達したようであればinActivateする
+      // 更新してからcheckしないと駄目ですねこれ
+      // でないとprgが1のフェイズが無視されてしまうのでだめですね
       const {name, cam} = this.curCam;
       if (!this.active) return;
-      if (this.timer.check(name)) {
-        this.inActivate();
-        return;
-      }
       const prg = this.timer.getProgress(name);
       cam.lerpState(
         this.fromStateName, this.toStateName, this.factor * this.easingFunction(prg)
       );
+      if (this.timer.check(name)) {
+        this.inActivate();
+      }
     }
     stop(){
       // タイマーを止める
