@@ -5695,61 +5695,83 @@ const p5wgex = (function(){
   // 回転のモードと
   // 制御変数（sensitivity系）と
   // あと同じ名前でタイマーを初期化する
+
+  // CMとの連携をやめる
+  // モードをカメラごとでなく共通にする
+  // 定数の調整を実値ではなく係数で設定できるようにする
   class CameraController extends foxIA.Interaction{
     constructor(){
       super();
       this.cams = {};
       this.curCam = undefined;
-      this.constants = {};
-      this.initializeConstants();
-      this.manager = undefined; // 連携用
-      this.system = undefined; // 連携用
+      this.initializeDefaultConstants(); // 定数と係数の初期化
+      this.manager = new CameraManager(); // スムースリセット用
+      this.manager.setParam({from:"", to:"default"}); // 備え付け
+      this.smoothReset = true; // スムースリセットするかどうか
+      this.rotationMode = "angle";  // angle/free. 回転モード
+      this.scaleMode = "dolly";  // dolly/zoom. 拡大縮小を接近で行なうかfovをいじるか
+      this.controlMode = "frame";  // frame/time. フレームベースかタイムベースか
       this.timer = new Timer(); // 時間ベース
       this.pause = false;
       this.registCamera("default", new PerspectiveCamera({})); // ダミーを用意しとこ
-    }
-    linkWithCameraManager(target){
-      // CM連携
-      // CMと連携すると...
-      // registCameraの際にCMにも登録される
-      // updateの際にCMもupdateされる
-      // CMがactiveの場合にこっちのupdateはキャンセルされる
-      // こっちのdblclickなどで速度とか全部ゼロになり自動的にCMがactivate.
-      // 加えてcがactiveでもそれも消える
-      // CMがactiveな間はこっちはactivateされない
-      this.manager = target;
-      target.controller = this;
     }
     getManager(){
       // CameraManagerの取得関数
       return this.manager;
     }
-    initializeConstants(){
-      this.constants.velocityThreshold = 0.000001;
-      this.constants.mouseScaleFactor = 0.0001;
-      this.constants.mouseRotateFactor = 0.001;
-      this.constants.mouseMoveFactor = 0.0006;
-      this.constants.touchScaleFactor = 0.00028;
-      this.constants.touchRotateFactor = 0.0015;
-      this.constants.touchMoveFactor = 0.00045;
-      this.constants.upperAngleLimit = 1.56;
-      this.constants.lowerAngleLimit = -1.56;
+    initializeDefaultConstants(){
+      this.defaultConstants.velocityThreshold = 0.000001;
+      this.defaultConstants.mouseScale = 0.0001;
+      this.defaultConstants.mouseRotate = 0.001;
+      this.defaultConstants.mouseMove = 0.0006;
+      this.defaultConstants.touchScale = 0.00028;
+      this.defaultConstants.touchRotate = 0.0015;
+      this.defaultConstants.touchMove = 0.00045;
+      this.defaultConstants.upperAngleLimit = 1.56;
+      this.defaultConstants.lowerAngleLimit = -1.56;
+      this.constantFactor = {};
+      for(const name of Object.keys(this.defaultConstants)){
+        this.constantFactor[name] = 1;
+      }
     }
-    showConstantsInfo(){
-      console.log(`
-  velocityThreshold: 速度が0とみなされる閾値(0.000001)
-  mouseScaleFactor: マウス操作時の拡大縮小ファクター(0.0001)
-  mouseRotateFactor: マウス操作時の回転ファクター(0.001)
-  mouseMoveFactor: マウス操作時の移動ファクター(0.0006)
-  touchScaleFactor: タッチ操作時の拡大縮小ファクター(0.00028)
-  touchRotateFactor: タッチ操作時の回転ファクター(0.0015)
-  touchMoveFactor: タッチ操作時の移動ファクター(0.00045)
-  upperAngleLimit: カメラの回転がangleの場合の上方の角度限界(1.56)
-  lowerAngleLimit: カメラの回転がangleの場合の下方の角度限界(-1.56)
-      `);
+    setFactor(params = {}){
+      // constantsのうちparamsで指定されたものだけを変更する
+      // velocityThreshold, mouseScale, mouseRotate, mouseMove, touchScale, touchRotate, touchMove, upperAngleLimit, lowerAngleLimit
+      // に掛ける係数を指定できる。（2倍とか0.5倍など）
+      // mouseScaleとtouchScaleを0.5倍したい場合
+      // setFactor({mouseScale:0.5, touchScale:0.5});
+      // これでOK
+      for(const name of Object.keys(params)){
+        if (typeof params[name] !== 'number') continue;
+        if (this.constantFactor[name] === undefined) continue;
+        this.constantFactor[name] = params[name];
+      }
     }
-    configConstant(name, value){
-      this.constants[name] = value;
+    getConstant(name){
+      return this.defaultConstants[name] * this.constantFactor[name];
+    }
+    setParam(params = {}){
+      // 各種モード設定
+      // たとえばrotationModeをfreeにしたければsetMode({rotationMode:"free"})とすれば充分
+      // managerの設定もいじれるようにする
+      // たとえばデフォルトでのカメラのリセット先を"state1"にするにはsetParam({to:"state1"});と書くだけ
+      const {
+        smoothReset:sr = this.smoothReset, // managerを使ってリセットするか否か
+        rotationMode:rm = this.rotationMode,
+        scaleMode:sm = this.scaleMode,
+        controlMode:cm = this.controlMode,
+        from:f = this.manager.from,
+        to:t = this.manager.to, // reset時のto.
+        duration:d = this.manager.duration,
+        easing:e = this.manager.easing,
+        factor:fr = this.manager.factor
+      } = params;
+      this.smoothReset = sr; // bool値
+      if (rm === "angle" || rm === "free") this.rotationMode = rm;
+      if (sm === "dolly" || sm === "zoom") this.scaleMode = sm;
+      if (cm === "frame" || cm === "time") this.controlMode = cm;
+      // manager関連はまとめてsetParamで指定する
+      this.manager.setParam({from:f, to:t, duration:d, easing:e, factor:f})
     }
     prepareCameraData(name, cam){
       const data = {};
@@ -5758,43 +5780,39 @@ const p5wgex = (function(){
       data.scaleVelocity = 0;
       data.moveVelocity = new Vec3(0,0,0);
       data.rotationVelocity = new Vec3(0,0,0);
-      data.rotationType = "angle"; // またはfree.
-      data.scaleType = "dolly"; // dollyとzoomを切り替えることができる
-      data.targetResetState = "default"; // リセットの際に戻るstateの種類
+      //data.rotationType = "angle"; // またはfree.
+      //data.scaleType = "dolly"; // dollyとzoomを切り替えることができる
+      //data.targetResetState = "default"; // リセットの際に戻るstateの種類
       data.active = false; // マウスダウンなどの以下略
       data.button = 0; // マウスボタン用
-      data.controlType = "frame"; // frame/timeが選択できる。timeにすると時間ベース。
+      //data.controlType = "frame"; // frame/timeが選択できる。timeにすると時間ベース。
       this.timer.initialize(name); // タイマーの初期化
       this.cams[name] = data;
     }
     registCamera(name, cam){
       this.prepareCameraData(name, cam);
       this.curCam = this.cams[name];
-
-      // managerが存在する場合にそっちもregistされる
-      if (this.manager !== undefined) {
-        // this.managerのregist処理
-        this.manager.prepareCameraData(name, cam);
-        this.manager.curCam = this.manager.cams[name];
-      }
+      // this.managerのregist処理
+      this.manager.registCamera(name, cam);
     }
     setCamera(name){
       this.curCam = this.cams[name];
 
-      // managerが存在する場合にそっちもsetされる
-      if (this.manager !== undefined) {
-        this.manager.curCam = this.manager.cams[name];
-      }
+      // this.managerのset処理
+      this.manager.setCamera(name);
     }
     getCamera(name){
       // カメラを取得できるようにする。デフォルトカメラの取得はこれでないとできない。
       return this.cams[name].cam;
     }
+    /*
     setRotationType(typeName = "default"){
       if (typeof typeName !== "string") return;
       if (typeName !== "angle" && typeName !== "free") return;
       this.curCam.rotationType = typeName;
     }
+    */
+    /*
     setScaleType(typeName = "dolly"){
       if (typeof typeName !== "string") return;
       if (typeName !== "dolly" && typeName !== "zoom") return;
@@ -5814,6 +5832,7 @@ const p5wgex = (function(){
       if (typeof stateName !== "string") return;
       this.curCam.targetResetState = stateName;
     }
+    */
     initializeCamera(){
       // そのときのカメラの状態をリセットする感じですね
       const c = this.curCam;
@@ -5825,19 +5844,23 @@ const p5wgex = (function(){
     update(){
       const c = this.curCam;
       const cam = c.cam;
-      const factor = (c.controlType === "frame" ? 1 : 60 * this.timer.getDelta(c.name));
+      const factor = (this.controlMode === "frame" ? 1 : 60 * this.timer.getDelta(c.name));
+      //const vt = this.defaultConstants.velocityThreshold * this.constantFactor.velocityThresholdFactor;
+      //const ual = this.defaultConstants.upperAngleLimit * this.constantFactor.upperAngleLimitFactor
+      //const lal = this.defaultConstants.lowerAngleLimit * this.constantFactor.lowerAngleLimitFactor
 
-      if (this.manager !== undefined && this.manager.isActive()) {
+      // managerがactiveな場合はmanagerをupdateするだけ
+      if (this.manager.isActive()) {
         this.manager.update();
         return;
       }
 
       // scale.
       c.scaleVelocity *= 0.85;
-      if (Math.abs(c.scaleVelocity) < this.constants.velocityThreshold){
+      if (c.scaleVelocity * c.scaleVelocity < this.getConstant("velocityThreshold")){
         c.scaleVelocity = 0;
       } else {
-        switch(c.scaleType){
+        switch(this.scaleMode){
           case "dolly":
             cam.dolly(c.scaleVelocity * factor); break;
           case "zoom":
@@ -5847,7 +5870,7 @@ const p5wgex = (function(){
 
       // move.
       c.moveVelocity.mult(0.85);
-      if (c.moveVelocity.mag() < this.constants.velocityThreshold){
+      if (c.moveVelocity.magSq() < this.getConstant("velocityThreshold")){
         c.moveVelocity.set(0,0,0);
       } else {
         cam.moveNDC(-c.moveVelocity.x * factor, c.moveVelocity.y * factor);
@@ -5855,16 +5878,16 @@ const p5wgex = (function(){
 
       // rotation.
       c.rotationVelocity.mult(0.85);
-      if (c.rotationVelocity.mag() < this.constants.velocityThreshold){
+      if (c.rotationVelocity.magSq() < this.getConstant("velocityThreshold")){
         c.rotationVelocity.set(0,0,0);
       } else {
-        switch(c.rotationType){
+        switch(this.rotationMode){
           case "angle":
             cam.spin(-c.rotationVelocity.x * factor);
             const upperLimit =
-                  Math.max(-1.56, Math.min(1.56, this.constants.upperAngleLimit));
+                  Math.max(-1.56, Math.min(1.56, this.getConstant("upperAngleLimit")));
             const lowerLimit =
-                  Math.max(-1.56, Math.min(1.56, this.constants.lowerAngleLimit));
+                  Math.max(-1.56, Math.min(1.56, this.getConstant("lowerAngleLimit"));
             cam.angle(c.rotationVelocity.y * factor, upperLimit, lowerLimit);
             break;
           case "free":
@@ -5880,7 +5903,7 @@ const p5wgex = (function(){
       }
     }
     activate(){
-      if (this.manager !== undefined && this.manager.isActive()) {
+      if (this.manager.isActive()) {
         return;
       }
       const c = this.curCam;
@@ -5901,7 +5924,7 @@ const p5wgex = (function(){
         return;
       }
       const c = this.curCam;
-      c.scaleVelocity += e.deltaY * this.constants.mouseScaleFactor;
+      c.scaleVelocity += e.deltaY * this.getConstant("mouseScale");
     }
     mouseDownDefaultAction(e){
       this.activate();
@@ -5915,15 +5938,15 @@ const p5wgex = (function(){
       if (!c.active) return;
       if (c.button === 0) {
         c.rotationVelocity.add(
-          dx*this.constants.mouseRotateFactor,
-          dy*this.constants.mouseRotateFactor,
+          dx*this.getConstant("mouseRotate"),
+          dy*this.getConstant("mouseRotate"),
           0
         );
       }
       if (c.button === 2) {
         c.moveVelocity.add(
-          dx*this.constants.mouseMoveFactor,
-          dy*this.constants.mouseMoveFactor,
+          dx*this.getConstant("mouseMove"),
+          dy*this.getConstant("mouseMove"),
           0
         );
       }
@@ -5934,8 +5957,8 @@ const p5wgex = (function(){
     touchSwipeAction(dx, dy, x, y, px, py){
       const c = this.curCam;
       c.rotationVelocity.add(
-        dx*this.constants.touchRotateFactor,
-        dy*this.constants.touchRotateFactor,
+        dx*this.getConstant("touchRotate"),
+        dy*this.getConstant("touchRotate"),
         0
       );
     }
@@ -5949,7 +5972,7 @@ const p5wgex = (function(){
       // Interactionサイドの実行内容を書く。
       // diffは距離の変化。正の場合大きくなる。ratioは距離の比。
       const c = this.curCam;
-      c.scaleVelocity -= diff * this.constants.touchScaleFactor;
+      c.scaleVelocity -= diff * this.getConstant("touchScale");
     }
     touchMultiSwipeAction(dx, dy, x, y, px, py){
       if (this.manager !== undefined && this.manager.isActive()) {
@@ -5959,52 +5982,44 @@ const p5wgex = (function(){
       // dx,dyは重心の変位。
       const c = this.curCam;
       c.moveVelocity.add(
-        dx*this.constants.touchMoveFactor,
-        dy*this.constants.touchMoveFactor
+        dx*this.getConstant("touchMove"),
+        dy*this.getConstant("touchMove"),
+        0
       );
     }
     doubleClickAction(){
-      if (this.manager !== undefined){
-        this.managerActivate();
-        return;
-      }
-      // Interactionサイドの実行内容を書く。ダブルクリック時。
-      this.initializeCamera();
-      this.curCam.cam.loadState(this.curCam.targetResetState);
+      this.reset();
     }
     doubleTapAction(){
-      if (this.manager !== undefined){
-        this.managerActivate();
-        return;
-      }
-      // Interactionサイドの実行内容を書く。ダブルタップ時。
-      this.initializeCamera();
-      this.curCam.cam.loadState(this.curCam.targetResetState);
+      this.reset();
     }
-    managerActivate(){
-      // 常にその瞬間からリセットされる仕様。だからfromは""で。toはカメラごとに
-      // いじることができる。
-      // managerがこっちのinitializeCamera()を呼び出す仕様になっている。
-      // 相互連携でそうなるようにする。
-      // 二重呼び出し回避。
-      this.manager.activate({from:"", to:this.curCam.targetResetState});
+    reset(params = {}){
+      // 常にその瞬間からリセットされる仕様。だからfromは""で。
+      // 個別にこれを呼び出すこともできる。別のトリガーで。そういうこともできる。
+      this.initializeCamera();
+      if (this.smoothReset){
+        // paramsで一時的にmanagerの挙動を変えることができる
+        // ここで指定する場合はたとえ変更があってもそれ以降は指定が無ければデフォルトが使われる
+        // ダブルクリックやダブルタップで発動させる場合がそう
+        // 任意にそれ以外のタイミングで発動させることもできるわけ
+        this.manager.activate(params);
+      } else {
+        // smoothResetでない場合。この場合、managerに登録されたtoのstateに直接ワープする。補間は無し。
+        this.curCam.cam.loadState(this.manager.to);
+      }
     }
     stop(){
-      // 連携してる場合はどっちも止める
+      // managerも止める
       if (this.pause) return;
       this.timer.pauseAll();
-      if (this.manager !== undefined) {
-        this.manager.timer.pauseAll();
-      }
+      this.manager.stop();
       this.pause = true;
     }
     start(){
-      // 連携してる場合はどっちも止める
+      // managerも止める
       if (!this.pause) return;
       this.timer.reStartAll();
-      if (this.manager !== undefined) {
-        this.manager.timer.reStartAll();
-      }
+      this.manager.start();
       this.pause = false;
     }
   }
@@ -6014,6 +6029,8 @@ const p5wgex = (function(){
   // 毎フレームupdateを呼ぶだけで勝手にカメラをいじってくれる
   // activeかどうか取得できるのでその間カメラをいじれないようにできる
   // こんなもんかな。あとは連携ですが、まあ先にテストしましょ。
+
+  // CCとの相互連携は廃止。ばかげてるので。
   class CameraManager{
     constructor(){
       this.cams = {};
@@ -6021,38 +6038,17 @@ const p5wgex = (function(){
       this.timer = new Timer();
       this.active = false;
       this.pause = false;
-      this.fromStateName = "";
-      this.toStateName = "default";
-      this.fromStateIsFree = false;
+      this.from = "";
+      this.to = "default";
       this.duration = 500; // ミリ秒指定なのでこれで
-      this.easingFunction = (x) => x*x*(3-2*x); // defaultはsmoothstep
       this.factor = 1; // 1を超えて回したい場合に使う
-      this.easing = new Easing();
-      this.controller = undefined; // 連携用
-      this.system = undefined; // 連携用
+      this.easingInstance = new Easing();
+      this.easing = "easeInOutQuad"; // イージングは名前で保持する。独自のものを使いたい場合は登録する必要がある
+      this.temporaryParams = {}; // activateでparamsを指定した場合に機能する
       // ダミーを用意しとこ。
       // インタラクションのたびにエラー出されるのがめんどうなので。
       // Controllerと同じ名前なのは共有した後も機能するようにするためです
       this.registCamera("default", new PerspectiveCamera({}));
-    }
-    getEasing(){
-      // Easingを取得する関数。名前で定義する際にこのインスタンスに登録されている関数を使うんですが、
-      // 独自定義された関数を使いたい場合に名前で指定できるようにしたいのですよね。
-      return this.easing;
-    }
-    getController(){
-      // CameraControllerの取得関数。整合性のために一応。
-      return this.controller;
-    }
-    linkWithCameraController(target){
-      // CM側もCCと連携できるようにしておこうね
-      // ただ循環参照になるのを防ぐためregistなどの操作はCC側からしか行えないものとする
-      // つまりこっちで自由にregistなどを実行する分にはあっちには登録などがされない
-      // のだ
-      // 逆にactivateの場合こっちに主導権がありあっちの操作を破棄させることができる
-      // 要するに領分の管理をしている
-      this.controller = target;
-      target.manager = this;
     }
     prepareCameraData(name, cam){
       const data = {};
@@ -6064,74 +6060,70 @@ const p5wgex = (function(){
     registCamera(name, cam){
       this.prepareCameraData(name, cam);
       // registの際に自動的にセットされる仕組み
-      // 柔軟性と利便性のバランスを取るのは難しい
       this.curCam = this.cams[name];
-
-      if (this.controller !== undefined) {
-        // this.controllerのregist処理
-        this.controller.prepareCameraData(name, cam);
-        this.controller.curCam = this.controller.cams[name];
-      }
     }
     setCamera(name){
       this.curCam = this.cams[name];
-
-      if (this.controller !== undefined) {
-        this.controller.curCam = this.controller.cams[name];
-      }
     }
     getCamera(name){
       // カメラを取得できるようにする。デフォルトカメラの取得はこれでないとできない。
       return this.cams[name].cam;
     }
-    setEasingFunction(func){
-      // 文字列指定
-      if (typeof func === "string") {
-        this.easingFunction = this.easing.get(func);
+    setEasing(name, func = ((x) => x)){
+      // 文字だけの場合はそれをeasingFunctionに据えるだけ（ただし上書きは不可）
+      if (this.easingInstance.funcs[name] !== undefined) {
+        this.easing = name;
         return;
       }
-      // 通常指定
-      this.easingFunction = func;
+      // 関数が指定されている場合はそれを新しく登録する
+      // regist関数なのでパラメータ指定でcompositeMultiを使うこともできる
+      this.easing.regist(name, func);
+    }
+    getEasing(){
+      // Easingを取得する関数。名前で定義する際にこのインスタンスに登録されている関数を使うんですが、
+      // 独自定義された関数を使いたい場合に名前で指定できるようにしたいのですよね。
+      return this.easingInstance;
     }
     setParam(params = {}){
       // パラメータ増やそう
-      const {
-        from:fn = this.fromStateName,
-        to:tn = this.toStateName,
-        duration:d = this.duration,
-        easingFunction:ef = this.easingFunction,
-        factor:f = this.factor
-      } = params;
-      this.fromStateName = fn;
-      this.toStateName = tn;
-      this.duration = d;
-      this.setEasingFunction(ef);
-      this.factor = f;
+      const keys = ["from", "to", "duration", "easing", "factor"];
+      // 以上のパラメータだけ上書きする
+      for(const name of keys){
+        if (params[name] !== undefined){
+          this[name] = params[name];
+        }
+      }
+    }
+    setTemporaryParam(params = {}){
+      // ParamsでなくParamなのは設定するパラメタが複数とは限らないため、です。
+      // paramの入力があるものだけ上書きする
+      // それ以外は設定されたものを使う
+      const keys = ["from", "to", "duration", "easing", "factor"];
+      for(const name of keys){
+        if (params[name] !== undefined){
+          this.temporaryParams[name] = params[name];
+        } else {
+          this.temporaryParams[name] = this[name];
+        }
+      }
     }
     activate(params = {}){
-      // controllerと連携してる場合はcontrollerサイドでinitializeCamera()を実行する
-      // これによりこっちで自由にactivateした場合にあっちの処理を無効化できる
-      if (this.controller !== undefined) {
-        this.controller.initializeCamera();
-      }
       // activate時にstateNameを指定できるようにすると柔軟性が増す
-      this.setParam(params);
+      // activate時にparamsで指定する場合、その時のみ使われるといった使い方になる
+      // つまり一時的に違うdurationや違うeasingで発動させることが可能になるわけ
+      this.setTemporaryParam(params);
       // fromStateNameが""の場合はその場でstateをセットする
       // この名前の場合、inActivateの際にfromStateNameが""に戻される
-      if (this.fromStateName === "") {
-        this.fromStateName = "_temporaryPreviousState_";
-        this.fromStateIsFree = true;
-        this.curCam.cam.setState(this.fromStateName);
+      if (this.temporaryParams.from === "") {
+        this.temporaryParams.from = "_temporaryPreviousState_";
+        this.curCam.cam.setState(this.temporaryParams.from);
       }
       // タイマーを発火させてdurationをターゲットに据える
-      this.timer.setElapsed(this.curCam.name, this.duration);
+      this.timer.setElapsed(this.curCam.name, this.temporaryParams.duration);
       this.active = true;
     }
     inActivate(){
-      if (this.fromStateIsFree) {
-        this.fromStateName = "";
-        this.fromStateIsFree = false;
-      }
+      // fromはtemporaryParamsを使うので、フラグはもう要らない。
       this.active = false;
     }
     isActive(){
@@ -6150,8 +6142,11 @@ const p5wgex = (function(){
       const {name, cam} = this.curCam;
       if (!this.active) return;
       const prg = this.timer.getProgress(name);
+      // temporaryParamsによって状態補間を実行する
       cam.lerpState(
-        this.fromStateName, this.toStateName, this.factor * this.easingFunction(prg)
+        this.temporaryParams.from,
+        this.temporaryParams.to,
+        this.temporaryParams.factor * this.easingInstance.apply(this.temporaryParams.easing, prg)
       );
       if (this.timer.check(name)) {
         this.inActivate();
@@ -6161,18 +6156,12 @@ const p5wgex = (function(){
       // タイマーを止める
       if (this.pause) return; // 重ね掛け回避
       this.timer.pauseAll();
-      if (this.controller !== undefined) {
-        this.controller.timer.pauseAll();
-      }
       this.pause = true;
     }
     start(){
       // タイマーを動かす
       if (!this.pause) return; // 重ね掛け回避
       this.timer.reStartAll();
-      if (this.controller !== undefined) {
-        this.controller.timer.reStartAll();
-      }
       this.pause = false;
     }
   }
@@ -6891,12 +6880,14 @@ const p5wgex = (function(){
   // 同じnodeである必要が...あるはず。
 
   // tfとCamを備え付けにしましょ。使わない場合もあるけどいちいち定義するのめんどくさいので。
+  // CCとCMはオプションとする。これらは両方使う場合、CC備え付けのCMと登録用のCMは異なるものとなる。
+  // これにより相互連携とかクソ面倒な問題を回避できる。
   class RenderingSystem{
     constructor(node){
       this.node = node;
       this.shaders = {};
       this.currentShader = undefined;
-      this.tf = new Transform();
+      this.transform = new Transform();
       this.cams = {};
       this.curCam = undefined;
       this.controller = undefined; // 連携用
@@ -6904,15 +6895,25 @@ const p5wgex = (function(){
       // ダミーカメラ（名前は共通でdefault）
       this.registCamera("default", new PerspectiveCamera({}));
     }
-    linkWithCameraController(target){
-      // CCとの連携
+    setController(target){
+      // CCをsetする
       this.controller = target;
-      target.system = this;
     }
-    linkWithCameraManager(target){
-      // CMとの連携
+    setManager(target){
+      // CMをsetする
       this.manager = target;
-      target.system = this;
+    }
+    getController(){
+      return this.controller;
+    }
+    getManager(){
+      return this.manager;
+    }
+    update(){
+      // 定義されていればupdateするだけ
+      if (this.controller !== undefined) { this.controller.update(); }
+      if (this.manager !== undefined) { this.manager.update(); }
+      return this;
     }
     prepareCameraData(name, cam){
       const data = {};
@@ -6927,13 +6928,11 @@ const p5wgex = (function(){
 
       if (this.controller !== undefined) {
         // this.controllerのregist処理
-        this.controller.prepareCameraData(name, cam);
-        this.controller.curCam = this.controller.cams[name];
+        this.controller.registCamera(name, cam);
       }
       if (this.manager !== undefined) {
         // this.managerのregist処理
-        this.manager.prepareCameraData(name, cam);
-        this.manager.curCam = this.manager.cams[name];
+        this.manager.registCamera(name, cam);
       }
     }
     setCamera(name){
@@ -6941,10 +6940,10 @@ const p5wgex = (function(){
       this.curCam = this.cams[name];
 
       if (this.controller !== undefined) {
-        this.controller.curCam = this.controller.cams[name];
+        this.controller.setCamera(name);
       }
       if (this.manager !== undefined) {
-        this.manager.curCam = this.manager.cams[name];
+        this.manager.setCamera(name);
       }
     }
     registShader(name, _shaderPrototype){
@@ -6954,18 +6953,15 @@ const p5wgex = (function(){
       this.bindShader(name);
       return this;
     }
+    setTransform(process = [], initializeTransform = true){
+      // transformの設定
+      if (initializeTransform) this.transform.initialize();
+      this.transform.create(process);
+      return this;
+    }
     getTransform(){
       // transformの取得
-      return this.tf;
-    }
-    setTransform(process = [], _initializeTransform = true){
-      // transformの設定
-      if (_initializeTransform) this.initializeTransform();
-      this.transform.create(process);
-    }
-    initializeTransform(){
-      // transformの初期化
-      this.tf.initialize();
+      return this.transform;
     }
     bindShader(name){
       this.currentShader = this.shaders[name];
@@ -7147,12 +7143,13 @@ const p5wgex = (function(){
         this.node.setUniform("uSpotLightDiffuseColor", this.spotLightParams.diffuseColor);
         this.node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
       }
+      return this;
     }
     setMatrixUniforms(){
       // transformの操作はsetTransformで実行する。
       // それとは別にMatrixUniformsを設定する。
       // そのうちドローコールもメソッドで出来るようにしてその中でこれを実行する形になるかも？
-      const tf = this.tf;
+      const tf = this.transform;
       const cam = this.curCam.cam;
 
       // deferredの場合はuViewMatrixを使わないので送らない
@@ -7174,6 +7171,7 @@ const p5wgex = (function(){
                .setUniform("uProjMatrix", projMat.m)
                .setUniform("uNormalMatrix", normalMat)
                .setUniform("uModelNormalMatrix", modelNormalMat);
+      return this;
     }
     renderPrepare(tf, cam, process = [], initializeTransform = true){
       // 廃止予定
