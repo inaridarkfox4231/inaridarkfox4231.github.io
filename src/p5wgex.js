@@ -5887,7 +5887,7 @@ const p5wgex = (function(){
             const upperLimit =
                   Math.max(-1.56, Math.min(1.56, this.getConstant("upperAngleLimit")));
             const lowerLimit =
-                  Math.max(-1.56, Math.min(1.56, this.getConstant("lowerAngleLimit"));
+                  Math.max(-1.56, Math.min(1.56, this.getConstant("lowerAngleLimit")));
             cam.angle(c.rotationVelocity.y * factor, upperLimit, lowerLimit);
             break;
           case "free":
@@ -7173,6 +7173,7 @@ const p5wgex = (function(){
                .setUniform("uModelNormalMatrix", modelNormalMat);
       return this;
     }
+    /*
     renderPrepare(tf, cam, process = [], initializeTransform = true){
       // 廃止予定
 
@@ -7188,6 +7189,7 @@ const p5wgex = (function(){
       // ドローコールはしない
       return this;
     }
+    */
     output(){
       // deferred用。そのうち準備する。
     }
