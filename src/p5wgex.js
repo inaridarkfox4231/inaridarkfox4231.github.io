@@ -5839,6 +5839,7 @@ const p5wgex = (function(){
     }
     getCamera(name){
       // カメラを取得できるようにする。デフォルトカメラの取得はこれでないとできない。
+      if (name === undefined) return this.curCam.cam; // 引数無しの場合
       return this.cams[name].cam;
     }
     /*
@@ -6103,6 +6104,7 @@ const p5wgex = (function(){
     }
     getCamera(name){
       // カメラを取得できるようにする。デフォルトカメラの取得はこれでないとできない。
+      if (name === undefined) return this.curCam.cam;
       return this.cams[name].cam;
     }
     setEasing(name, func = ((x) => x)){
