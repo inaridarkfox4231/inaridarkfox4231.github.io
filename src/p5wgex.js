@@ -6945,7 +6945,8 @@ const p5wgex = (function(){
       }
       // curCamが何であるかはLSサイドに主導権があるので、
       // registのたびにsetされるとはいえ、一致するとは限らないので、一致させる処理を実行する。
-      target.curCam = target.cams[this.curCam.name];
+      // setCameraでないとまずいね(CCの場合に備え付けのCMまでsetされない)
+      target.setCamera(this.curCam.name);
     }
     setController(target){
       // CCをsetする
