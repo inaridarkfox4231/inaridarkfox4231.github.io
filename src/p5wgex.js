@@ -7039,7 +7039,7 @@ const p5wgex = (function(){
           this.bindShader("deferredPrepare");
           break;
       }
-      this.initializeTransform();
+      this.transform.initialize();
       return this;
     }
     prepareLightingParameters(){
