@@ -7003,6 +7003,10 @@ const p5wgex = (function(){
         this.manager.setCamera(name);
       }
     }
+    getCamera(name){
+      if (name === undefined) return this.curCam.cam;
+      return this.cams[name].cam;
+    }
     registShader(name, _shaderPrototype){
       // 渡す前に作っておく
       if (this.shaders[name] !== undefined) { return this; }
