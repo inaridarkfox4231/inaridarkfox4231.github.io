@@ -606,16 +606,16 @@ const p5wgex = (function(){
 
   // HSVをRGBにしてくれる関数. ただし0～1で指定してね
   function hsv2rgb(h, s, v){
-    h = constrain(h, 0, 1);
-    s = constrain(s, 0, 1);
-    v = constrain(v, 0, 1);
-    let _r = constrain(abs(((6 * h) % 6) - 3) - 1, 0, 1);
-    let _g = constrain(abs(((6 * h + 4) % 6) - 3) - 1, 0, 1);
-    let _b = constrain(abs(((6 * h + 2) % 6) - 3) - 1, 0, 1);
+    h = clamp(h, 0, 1);
+    s = clamp(s, 0, 1);
+    v = clamp(v, 0, 1);
+    let _r = clamp(Math.abs(((6 * h) % 6) - 3) - 1, 0, 1);
+    let _g = clamp(Math.abs(((6 * h + 4) % 6) - 3) - 1, 0, 1);
+    let _b = clamp(Math.abs(((6 * h + 2) % 6) - 3) - 1, 0, 1);
     _r = _r * _r * (3 - 2 * _r);
     _g = _g * _g * (3 - 2 * _g);
     _b = _b * _b * (3 - 2 * _b);
-    let result = {};
+    const result = {};
     result.r = v * (1 - s + s * _r);
     result.g = v * (1 - s + s * _g);
     result.b = v * (1 - s + s * _b);
@@ -628,16 +628,50 @@ const p5wgex = (function(){
     return [obj.r, obj.g, obj.b];
   }
 
-  // colがconfig経由の値の場合、それを正しく解釈できるようにするための関数.
-  // 戻り値は0～255指定。なのでお手数ですが255で割ってください。
-  function getProperColor(col){
-    if(typeof(col) === "object"){
-      return {r:col.r, g:col.g, b:col.b};
-    }else if(typeof(col) === "string"){
-      col = color(col);
-      return {r:red(col), g:green(col), b:blue(col)};
+  // softLight関数
+  function _softLight(sr, sg, sb, dr, dg, db){
+    const func = (s, d) => {
+      if(s < 0.5){
+        return 2*s*d + d*d*(1-2*s);
+      }
+      return 2*d*(1-s) + Math.sqrt(d)*(2*s-1);
     }
-    return {r:255, g:255, b:255};
+    return {r:func(sr,dr), g:func(sg,dg), b:func(sb,db)};
+  }
+
+  // overlay関数
+  function _overlay(sr, sg, sb, dr, dg, db){
+    const func = (s, d) => {
+      if(d < 0.5){
+        return 2*s*d;
+      }
+      return 2*(s+d-s*d) - 1;
+    }
+    return {r:func(sr,dr), g:func(sg,dg), b:func(sb,db)};
+  }
+
+  // softLightを使ったhsl2rgb関数
+  function hsl2rgb_soft(h, s, l){
+    const hsv = hsv2rgb(h, s, 1);
+    l = clamp(l, 0, 1);
+    return _softLight(hsv.r, hsv.g, hsv.b, l, l, l);
+  }
+
+  function hslArray_soft(h, s, v){
+    const obj = hsl2rgb_soft(h, s, v);
+    return [obj.r, obj.g, obj.b];
+  }
+
+  // overlayを使ったhsl2rgb関数
+  function hsl2rgb_overlay(h, s, l){
+    const hsv = hsv2rgb(h, s, 1);
+    l = clamp(l, 0, 1);
+    return _overlay(hsv.r, hsv.g, hsv.b, l, l, l);
+  }
+
+  function hslArray_overlay(h, s, v){
+    const obj = hsl2rgb_overlay(h, s, v);
+    return [obj.r, obj.g, obj.b];
   }
 
   // window.alertがうっとうしいので1回しか呼ばないように
@@ -652,18 +686,18 @@ const p5wgex = (function(){
   // 簡単なclamp関数
   // 数と配列が対象
   function clamp(x, _min = 0, _max = 1){
-  if (typeof x === "number") {
-    return Math.max(_min, Math.min(_max, x));
-  }
-  if (Array.isArray(x)) {
-    const result = [];
-    for(let value of x) {
-      result.push(clamp(value, _min, _max));
+    if (typeof x === "number") {
+      return Math.max(_min, Math.min(_max, x));
     }
-    return result;
+    if (Array.isArray(x)) {
+      const result = [];
+      for(let value of x) {
+        result.push(clamp(value, _min, _max));
+      }
+      return result;
+    }
+    return x;
   }
-  return x;
-}
 
   // ---------------------------------------------------------------------------------------------- //
   // Timer.
@@ -7301,8 +7335,14 @@ const p5wgex = (function(){
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.getTranspose3x3 = getTranspose3x3; // これ必要ですね...
+  // 色関連
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
+  ex.hsl2rgb_soft = hsl2rgb_soft;
+  ex.hslArray_soft = hslArray_soft;
+  ex.hsl2rgb_overlay = hsl2rgb_overlay;
+  ex.hslArray_overlay = hslArray_overlay;
+  // そのうちやめたいnoLoop()
   ex.myAlert = myAlert; // 警告メッセージの後でnoLoop()を実行する
   ex.clamp = clamp; // clamp関数
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
