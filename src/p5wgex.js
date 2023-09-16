@@ -527,21 +527,22 @@ const foxIA = (function(){
   // clear
   // addとclearでよいです
   // addでイベントを追加しclearですべて破棄します
+  // addで登録するイベント名をリスナーに合わせました（有効化オプションもこれになってるので倣った形です）
   class Inspector extends Interaction{
     constructor(){
       super();
       this.functions = {
-        mouseDown:[],
-        mouseMove:[],
-        mouseUp:[],
+        mousedown:[],
+        mousemove:[],
+        mouseup:[],
         wheel:[],
         click:[],
-        mouseEnter:[],
-        mouseLeave:[],
-        dblClick:[],
-        dblTap:[],
-        keyDown:[],
-        keyUp:[]
+        mouseenter:[],
+        mouseleave:[],
+        dblclick:[],
+        dbltap:[],
+        keydown:[],
+        keyup:[]
       };
     }
     execute(name, args){
@@ -556,13 +557,13 @@ const foxIA = (function(){
       this.functions[name] = [];
     }
     mouseDownDefaultAction(e){
-      this.execute("mouseDown", arguments);
+      this.execute("mousedown", arguments);
     }
     mouseMoveDefaultAction(dx, dy, x, y){
-      this.execute("mouseMove", arguments);
+      this.execute("mousemove", arguments);
     }
     mouseUpDefaultAction(){
-      this.execute("mouseUp", arguments);
+      this.execute("mouseup", arguments);
     }
     wheelAction(e){
       this.execute("wheel", arguments);
@@ -571,22 +572,22 @@ const foxIA = (function(){
       this.execute("click", arguments);
     }
     mouseEnterAction(){
-      this.execute("mouseEnter", arguments);
+      this.execute("mouseenter", arguments);
     }
     mouseLeaveAction(){
-      this.execute("mouseLeave", arguments);
+      this.execute("mouseleave", arguments);
     }
     doubleClickAction(){
-      this.execute("dblClick", arguments);
+      this.execute("dblclick", arguments);
     }
     doubleTapAction(){
-      this.execute("dblTap", arguments);
+      this.execute("dbltap", arguments);
     }
     keyDownAction(e){
-      this.execute("keyDown", arguments);
+      this.execute("keydown", arguments);
     }
     keyUpAction(e){
-      this.execute("keyUp", arguments);
+      this.execute("keyup", arguments);
     }
   }
 
@@ -5754,6 +5755,7 @@ const p5wgex = (function(){
       return this.manager;
     }
     initializeDefaultConstants(){
+      this.defaultConstants = {};
       this.defaultConstants.velocityThreshold = 0.000001;
       this.defaultConstants.mouseScale = 0.0001;
       this.defaultConstants.mouseRotate = 0.001;
@@ -5805,7 +5807,7 @@ const p5wgex = (function(){
       if (sm === "dolly" || sm === "zoom") this.scaleMode = sm;
       if (cm === "frame" || cm === "time") this.controlMode = cm;
       // manager関連はまとめてsetParamで指定する
-      this.manager.setParam({from:f, to:t, duration:d, easing:e, factor:f})
+      this.manager.setParam({from:f, to:t, duration:d, easing:e, factor:fr});
     }
     prepareCameraData(name, cam){
       const data = {};
@@ -6929,13 +6931,31 @@ const p5wgex = (function(){
       // ダミーカメラ（名前は共通でdefault）
       this.registCamera("default", new PerspectiveCamera({}));
     }
+    complementCameras(target){
+      // targetとthisで互いに足りないカメラを補い合う処理
+      for (const name of Object.keys(target.cams)) {
+        if (this.cams[name] === undefined) {
+          this.registCamera(name, target.cams[name].cam);
+        }
+      }
+      for (const name of Object.keys(this.cams)) {
+        if (target.cams[name] === undefined) {
+          target.registCamera(name, this.cams[name].cam);
+        }
+      }
+      // curCamが何であるかはLSサイドに主導権があるので、
+      // registのたびにsetされるとはいえ、一致するとは限らないので、一致させる処理を実行する。
+      target.curCam = target.cams[this.curCam.name];
+    }
     setController(target){
       // CCをsetする
       this.controller = target;
+      this.complementCameras(target);
     }
     setManager(target){
       // CMをsetする
       this.manager = target;
+      this.complementCameras(target);
     }
     getController(){
       return this.controller;
@@ -6989,13 +7009,17 @@ const p5wgex = (function(){
     }
     setTransform(process = [], initializeTransform = true){
       // transformの設定
-      if (initializeTransform) this.transform.initialize();
+      if (initializeTransform) this.initializeTransform();
       this.transform.create(process);
       return this;
     }
     getTransform(){
       // transformの取得
       return this.transform;
+    }
+    initializeTransform(){
+      // 要るかどうか不明だが、一応用意しましょ
+      this.transform.initialize();
     }
     bindShader(name){
       this.currentShader = this.shaders[name];
@@ -7073,7 +7097,7 @@ const p5wgex = (function(){
           this.bindShader("deferredPrepare");
           break;
       }
-      this.transform.initialize();
+      this.initializeTransform();
       return this;
     }
     prepareLightingParameters(){

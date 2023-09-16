@@ -539,21 +539,22 @@ const foxIA = (function(){
   // clear
   // addとclearでよいです
   // addでイベントを追加しclearですべて破棄します
+  // addで登録するイベント名をリスナーに合わせました（有効化オプションもこれになってるので倣った形です）
   class Inspector extends Interaction{
     constructor(){
       super();
       this.functions = {
-        mouseDown:[],
-        mouseMove:[],
-        mouseUp:[],
+        mousedown:[],
+        mousemove:[],
+        mouseup:[],
         wheel:[],
         click:[],
-        mouseEnter:[],
-        mouseLeave:[],
-        dblClick:[],
-        dblTap:[],
-        keyDown:[],
-        keyUp:[]
+        mouseenter:[],
+        mouseleave:[],
+        dblclick:[],
+        dbltap:[],
+        keydown:[],
+        keyup:[]
       };
     }
     execute(name, args){
@@ -568,13 +569,13 @@ const foxIA = (function(){
       this.functions[name] = [];
     }
     mouseDownDefaultAction(e){
-      this.execute("mouseDown", arguments);
+      this.execute("mousedown", arguments);
     }
     mouseMoveDefaultAction(dx, dy, x, y){
-      this.execute("mouseMove", arguments);
+      this.execute("mousemove", arguments);
     }
     mouseUpDefaultAction(){
-      this.execute("mouseUp", arguments);
+      this.execute("mouseup", arguments);
     }
     wheelAction(e){
       this.execute("wheel", arguments);
@@ -583,22 +584,22 @@ const foxIA = (function(){
       this.execute("click", arguments);
     }
     mouseEnterAction(){
-      this.execute("mouseEnter", arguments);
+      this.execute("mouseenter", arguments);
     }
     mouseLeaveAction(){
-      this.execute("mouseLeave", arguments);
+      this.execute("mouseleave", arguments);
     }
     doubleClickAction(){
-      this.execute("dblClick", arguments);
+      this.execute("dblclick", arguments);
     }
     doubleTapAction(){
-      this.execute("dblTap", arguments);
+      this.execute("dbltap", arguments);
     }
     keyDownAction(e){
-      this.execute("keyDown", arguments);
+      this.execute("keydown", arguments);
     }
     keyUpAction(e){
-      this.execute("keyUp", arguments);
+      this.execute("keyup", arguments);
     }
   }
 
