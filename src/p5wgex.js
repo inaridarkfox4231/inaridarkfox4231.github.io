@@ -63,6 +63,9 @@
 // 問題発生
 // 問題解消しました
 
+// 20230917
+// CCとLSを新しくして色々改良中
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
@@ -6116,11 +6119,7 @@ const p5wgex = (function(){
       // 関数が指定されている場合はそれを新しく登録する
       // regist関数なのでパラメータ指定でcompositeMultiを使うこともできる
       this.easing.regist(name, func);
-    }
-    getEasing(){
-      // Easingを取得する関数。名前で定義する際にこのインスタンスに登録されている関数を使うんですが、
-      // 独自定義された関数を使いたい場合に名前で指定できるようにしたいのですよね。
-      return this.easingInstance;
+      // getEasingは不要ですね。
     }
     setParam(params = {}){
       // パラメータ増やそう
@@ -6632,11 +6631,18 @@ const p5wgex = (function(){
       return this;
     }
     addCode(content, addTarget, addLocation){
+      // 追加
       this[addLocation][addTarget] += content;
       return this;
     }
     clearCode(clearTarget, clearLocation){
+      // 消去
       this[clearLocation][clearTarget] = ``;
+      return this;
+    }
+    writeCode(content, writeTarget, writeLocation){
+      // 上書き
+      this[writeLocation][writeTarget] = content;
       return this;
     }
     registPainter(name, options = {}){
@@ -6887,15 +6893,27 @@ const p5wgex = (function(){
     constructor(node){
       super(node);
     }
-    initialize(options={}){
+    initialize(options = {}){
+      const {uvAlign = "leftUp", depth = 0.0} = options;
       this.attrs =[{type:"vec2", name:"aPosition"}];
       this.varyings =[{type:"vec2", name:"vUv"}];
       this.fs.outputs =
         `out vec4 fragColor;`;
-      this.vs.preProcess =
-        `vUv = aPosition * 0.5 + 0.5; vUv.y = 1.0 - vUv.y;`;
+      // uvAlignで事前の処理
+      switch(uvAlign){
+        case "leftUp": // 左上(0,0)で右が(1,0)で下が(0,1)
+          this.vs.preProcess = `vUv = aPosition * 0.5 + 0.5; vUv.y = 1.0 - vUv.y;`; break;
+        case "leftDown": // 左下(0,0)で右が(1,0)で上が(0,1)
+          this.vs.preProcess = `vUv = aPosition * 0.5 + 0.5;`; break;
+        case "center_yUp": // 中央(0,0)で上が(0,1)で右が(1,0)
+          this.vs.preProcess = `vUv = aPosition;`; break;
+        case "center_yDown": // 中央(0,0)で下が(0,1)で右が(1,0)
+          this.vs.preProcess = `vUv = aPosition; vUv.y = -vUv.y;`; break;
+      }
+
+      // 後ろに置くならdepthは1.0の方がいいし前において透明度補正掛けるなら0.0の方がいいですね
       this.vs.mainProcess =
-        `gl_Position = vec4(aPosition, 0.0, 1.0);`;
+        `gl_Position = vec4(aPosition, ` + depth + `, 1.0);`;
       this.fs.precisions =
         `precision highp float;`;
       this.fs.preProcess =
@@ -7172,6 +7190,11 @@ const p5wgex = (function(){
     lightOff(){
       this.lightingParams.use = false;
       this.node.setUniform("uUseLight", this.lightingParams.use);
+      return this;
+    }
+    setFlag(flag){
+      // フラグの切り替えめんどくさいんだよ
+      this.node.setUniform("uMaterialFlag", flag);
       return this;
     }
     setLightingUniforms(){
