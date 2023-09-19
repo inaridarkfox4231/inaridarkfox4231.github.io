@@ -7047,6 +7047,7 @@ const p5wgex = (function(){
       this.transform.initialize();
     }
     bindShader(name){
+      // 意味的にはsetShaderだろうか...改変するshaderをスイッチする処理。
       this.currentShader = this.shaders[name];
       return this;
     }
@@ -7084,6 +7085,10 @@ const p5wgex = (function(){
     }
     clearCode(clearTarget, clearLocation){
       this.currentShader.clearCode(clearTarget, clearLocation);
+      return this;
+    }
+    writeCode(content, writeTarget, writeLocation){
+      this.currentShader.writeCode(content, writeTarget, writeLocation);
       return this;
     }
     registPainter(name, options = {}){
