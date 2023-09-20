@@ -4703,6 +4703,7 @@ const p5wgex = (function(){
       // 実行
       // countはundefinedの場合は事前計算
       // TFで追加attrだけ更新する実験中
+      if (first === undefined) { first = 0; } // undefinedでも機能するが一応0とすべきだろうね
       if (count === undefined) { count = this.currentFigure.count; }
       this.gl.drawArrays(this.dict[mode], first, count);
       return this;
@@ -5845,34 +5846,6 @@ const p5wgex = (function(){
       if (name === undefined) return this.curCam.cam; // 引数無しの場合
       return this.cams[name].cam;
     }
-    /*
-    setRotationType(typeName = "default"){
-      if (typeof typeName !== "string") return;
-      if (typeName !== "angle" && typeName !== "free") return;
-      this.curCam.rotationType = typeName;
-    }
-    */
-    /*
-    setScaleType(typeName = "dolly"){
-      if (typeof typeName !== "string") return;
-      if (typeName !== "dolly" && typeName !== "zoom") return;
-      this.curCam.scaleType = typeName;
-    }
-    setControlType(typeName = "frame"){
-      // フレームカウントベースで動かすのか、時間ベースで動かすのか。
-      if (typeof typeName !== "string") return;
-      if (typeName !== "frame" && typeName !== "time") return;
-      this.curCam.controlType = typeName;
-      if (typeName === "time") {
-        // timeに切り替える際のジャンプを防ぐ。
-        const t = this.timer.getDelta(this.curCam.name);
-      }
-    }
-    setTargetResetState(stateName = "default"){
-      if (typeof stateName !== "string") return;
-      this.curCam.targetResetState = stateName;
-    }
-    */
     initializeCamera(){
       // そのときのカメラの状態をリセットする感じですね
       const c = this.curCam;
@@ -5885,9 +5858,6 @@ const p5wgex = (function(){
       const c = this.curCam;
       const cam = c.cam;
       const factor = (this.controlMode === "frame" ? 1 : 60 * this.timer.getDelta(c.name));
-      //const vt = this.defaultConstants.velocityThreshold * this.constantFactor.velocityThresholdFactor;
-      //const ual = this.defaultConstants.upperAngleLimit * this.constantFactor.upperAngleLimitFactor
-      //const lal = this.defaultConstants.lowerAngleLimit * this.constantFactor.lowerAngleLimitFactor
 
       // managerがactiveな場合はmanagerをupdateするだけ
       if (this.manager.isActive()) {
