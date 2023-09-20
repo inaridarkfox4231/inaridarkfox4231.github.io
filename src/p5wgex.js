@@ -721,7 +721,8 @@ const p5wgex = (function(){
         stump = window.performance.now(),
         duration = Infinity,
         scale = 1000,
-        completeFunction = () => {}
+        completeFunction = () => {},
+        stepFunction = (prg) => {}
       } = params;
       const newTimer = {};
       // 経過時間の計算に使うstump. 従来のstumpはこれになります。
@@ -737,6 +738,7 @@ const p5wgex = (function(){
       newTimer.pauseStump = 0;
       // checkがtrueの場合に実行される関数。
       newTimer.completeFunction = completeFunction;
+      newTimer.stepFunction = stepFunction;
       this.timers[name] = newTimer;
     }
     validateName(name, methodName){
@@ -793,9 +795,14 @@ const p5wgex = (function(){
       // stumpからの経過時間(elapsed)をdurationで割ることで進捗を調べるのに使う感じ
       if (!this.validateName(name, "getProgress")) return null;
       const target = this.timers[name];
+      // getProgressの内部でstepFunction(prg)が実行される。
+      // const prg=~~~とかする手間が省ける。
       if (target.duration > 0) {
-        return Math.min(1, this.getElapsedMillis(name) / target.duration);
+        const prg = Math.min(1, this.getElapsedMillis(name) / target.duration);
+        target.stepFunction(prg);
+        return prg;
       }
+      target.stepFunction(1);
       return 1; // durationが0の場合...つまり無限大ということ。
     }
     check(name, nextDuration){
@@ -875,10 +882,19 @@ const p5wgex = (function(){
         this.reStart(name);
       }
     }
-    setCompleteFunction(name, func){
+    setCompleteFunction(name, func = () => {}){
       // completeの時の関数を自由に変えたい場合
+      // funcのデフォルトは自明関数です
+      // たとえばcompleteFunction内でこれを実行すれば1回こっきりとかできますね
       if (!this.validateName(name, "setCompleteFunction")) return;
       this.timers[name].completeFunction = func;
+    }
+    setStepFunction(name, func = (prg) => {}){
+      // getProgressの際にprgを使って何かさせたい場合に用いる
+      // funcのデフォルトは自明関数
+      // 処理を破棄したい場合にどうぞ
+      if (!this.validateName(name, "setStepFunction")) return;
+      this.timers[name].stepFunction = func;
     }
   }
 
