@@ -717,14 +717,26 @@ const p5wgex = (function(){
       this.timers = {};
     }
     initialize(name, params = {}){
-      const {stump = window.performance.now(), duration = Infinity, scale = 1000} = params;
+      const {
+        stump = window.performance.now(),
+        duration = Infinity,
+        scale = 1000,
+        completeFunction = () => {}
+      } = params;
       const newTimer = {};
-      newTimer.elapsedStump = stump; // 経過時間の計算に使うstump. 従来のstumpはこれになります。
-      newTimer.deltaStump = window.performance.now(); // 前のフレームとの差分の計算をするのに使うstump.
-      newTimer.duration = duration; // 時間間隔を使ってなんかする場合に設定する。ミリ秒指定。
+      // 経過時間の計算に使うstump. 従来のstumpはこれになります。
+      newTimer.elapsedStump = stump;
+      // 前のフレームとの差分の計算をするのに使うstump.
+      newTimer.deltaStump = window.performance.now();
+      // 時間間隔を使ってなんかする場合に設定する。ミリ秒指定。
+      newTimer.duration = duration;
       newTimer.scale = scale;
       newTimer.pause = false;
-      newTimer.pauseStump = 0; // ポーズ時にその瞬間を記録するために使用されるstump. pause中の正確なelapsedTimeを計算するのに使う。
+      // ポーズ時にその瞬間を記録するために使用されるstump.
+      // pause中の正確なelapsedTimeを計算するのに使う。
+      newTimer.pauseStump = 0;
+      // checkがtrueの場合に実行される関数。
+      newTimer.completeFunction = completeFunction;
       this.timers[name] = newTimer;
     }
     validateName(name, methodName){
@@ -735,7 +747,8 @@ const p5wgex = (function(){
       return true;
     }
     setElapsed(name, duration){
-      // elapsedStumpをその時点に設定し、必要ならdurationも変更する。pause中は使えない。
+      // elapsedStumpをその時点に設定し、必要ならdurationも変更する。
+      // pause中は使えない。
       if (!this.validateName(name, "setElapsed")) return;
       const target = this.timers[name];
       // pause中にelapsedStumpを変更することはできない。
@@ -763,9 +776,11 @@ const p5wgex = (function(){
       return this.getElapsedMillis(name) / target.scale;
     }
     getElapsedDiscrete(name, interval = 1000, modulo = 1){
-      // deltaをintervalで割ってfloorした結果を返す。これが利用される場合、durationはInfinityを想定している。そうでなくても使えるけど。
+      // deltaをintervalで割ってfloorした結果を返す。これが利用される場合、
+      // durationはInfinityを想定している。そうでなくても使えるけど。
       // moduloが1より大きい場合はそれで%を取る。1の場合はそのまま整数を返す。
-      // たとえば250であれば0,1,2,3,...と1秒に4増えるし、moduloを4にすれば0,1,2,3,0,1,2,3,...となるわけ。
+      // たとえば250であれば0,1,2,3,...と1秒に4増えるし、
+      // moduloを4にすれば0,1,2,3,0,1,2,3,...となるわけ。
       if (!this.validateName(name, "getElapsedDiscrete")) return null;
       const elapsed = this.getElapsedMillis(name);
       const n = Math.floor(elapsed / interval);
@@ -792,6 +807,8 @@ const p5wgex = (function(){
       const target = this.timers[name];
       const elapsedTime = this.getElapsedMillis(name);
       if (elapsedTime > target.duration) {
+        // このタイミングで実行する
+        target.completeFunction();
         target.elapsedStump += target.duration;
         // 足しますよね。その時に計算されるelapsedStumpに基づいて計算されるelapsedTimeはduration未満であることが想定されていますが、
         // そうとは限らない。ぶっちゃけていうとelapsedTimeがduration2個分以上の場合困るねって話。その場合についてはFALさんはどうしてるかというと
@@ -857,6 +874,11 @@ const p5wgex = (function(){
       for (const name of Object.keys(this.timers)) {
         this.reStart(name);
       }
+    }
+    setCompleteFunction(name, func){
+      // completeの時の関数を自由に変えたい場合
+      if (!this.validateName(name, "setCompleteFunction")) return;
+      this.timers[name].completeFunction = func;
     }
   }
 
@@ -4715,6 +4737,7 @@ const p5wgex = (function(){
     }
     drawArraysInstanced(mode, instanceCount, first, count){
       // countはundefinedの場合は事前計算
+      if (first === undefined) { first = 0; } // undefinedでも機能するが一応0とすべきだろうね
       if (count === undefined) { count = this.currentFigure.count; }
       this.gl.drawArraysInstanced(this.dict[mode], first, count, instanceCount);
       return this;
