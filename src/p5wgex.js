@@ -712,6 +712,12 @@ const p5wgex = (function(){
   // pause時には0が返り、reStartした際にdeltaStumpがリセットされるのでジャンプは生じない。
   // 初期化時のstumpによる指定ではelapsedStumpが設定されます。
   // stumpのスタック欲しい？欲しい...ですか？まあ、必要になったら、用意しましょ。
+
+  // stepFunctionとcompleteFunctionを用意
+  // stepFunctionはgetProgressを実行すると遂行されるがfalseを指定して実行しないようにもできる
+  // セットする関数はいずれもthisのデフォルトが（function(){~~~}表記の場合）インスタンスになるので
+  // durationをいじったりみたいなこともできるにはできます、やりたければどうぞ。
+  // isActiveを用意しました。progressが正かどうかを見るだけの簡単な関数。
   class Timer{
     constructor(){
       this.timers = {};
@@ -725,6 +731,8 @@ const p5wgex = (function(){
         stepFunction = (prg) => {}
       } = params;
       const newTimer = {};
+      // 場合によっては名前もあった方がいいと思う
+      newTimer.name = name;
       // 経過時間の計算に使うstump. 従来のstumpはこれになります。
       newTimer.elapsedStump = stump;
       // 前のフレームとの差分の計算をするのに使うstump.
@@ -791,18 +799,25 @@ const p5wgex = (function(){
       }
       return n;
     }
-    getProgress(name){
+    isActive(name){
+      // progressが正かどうか確かめるだけ
+      if (!this.validateName(name, "isActive")) return null;
+      return this.getProgress(name, false) > 0;
+    }
+    getProgress(name, executeStepFunction = true){
       // stumpからの経過時間(elapsed)をdurationで割ることで進捗を調べるのに使う感じ
+      // executeStepFunctionをfalseにすると
+      // stepFunctionを実行させずにprogressを取得するだけという使い方ができる
       if (!this.validateName(name, "getProgress")) return null;
       const target = this.timers[name];
       // getProgressの内部でstepFunction(prg)が実行される。
       // const prg=~~~とかする手間が省ける。
       if (target.duration > 0) {
         const prg = Math.min(1, this.getElapsedMillis(name) / target.duration);
-        target.stepFunction(prg);
+        if (executeStepFunction) target.stepFunction(prg);
         return prg;
       }
-      target.stepFunction(1);
+      if (executeStepFunction) target.stepFunction(1);
       return 1; // durationが0の場合...つまり無限大ということ。
     }
     check(name, nextDuration){
@@ -814,8 +829,6 @@ const p5wgex = (function(){
       const target = this.timers[name];
       const elapsedTime = this.getElapsedMillis(name);
       if (elapsedTime > target.duration) {
-        // このタイミングで実行する
-        target.completeFunction();
         target.elapsedStump += target.duration;
         // 足しますよね。その時に計算されるelapsedStumpに基づいて計算されるelapsedTimeはduration未満であることが想定されていますが、
         // そうとは限らない。ぶっちゃけていうとelapsedTimeがduration2個分以上の場合困るねって話。その場合についてはFALさんはどうしてるかというと
@@ -826,6 +839,13 @@ const p5wgex = (function(){
           // もっともよほどのことが無い限りは実行されない。FALさんのメトロノームの場合、これは異常なほどBPMが速いケースなので、まず実行されない。
           target.elapsedStump = window.performance.now();
         }
+        // elapsedStumpを修正したうえでcompleteFunctionを実行する
+        // こうしないとcompleteFunction内部でdurationをいじりたい場合に不具合が発生する（邪道だけど）
+        // 具体的にはelapsedStumpの値が不自然になる
+        target.completeFunction();
+        // 引数でnextDurationをいじる場合はそっちが優先される
+        // ほんとはdurationをいじる関数用意してもいいんですけど
+        // 迂闊に用意するとバグの温床になりかねないので保留してる
         if (nextDuration !== undefined) {
           target.duration = nextDuration;
         }
@@ -2245,7 +2265,13 @@ const p5wgex = (function(){
     static cross(v1, v2){
       return v1.copy().cross(v2);
     }
-    static lerp(v1, v2, amt){
+    static lerp(v1, v2, amt, target){
+      // targetを用意することでここにセットされるようにする。
+      if (target !== undefined) {
+        target.set(v1);
+        target.lerp(v2, amt);
+        return target;
+      }
       return v1.copy().lerp(v2, amt);
     }
     static slerp(v1, v2, amt){
