@@ -718,13 +718,20 @@ const p5wgex = (function(){
   // セットする関数はいずれもthisのデフォルトが（function(){~~~}表記の場合）インスタンスになるので
   // durationをいじったりみたいなこともできるにはできます、やりたければどうぞ。
   // isActiveを用意しました。progressが正かどうかを見るだけの簡単な関数。
+
+  // 初期化時のstump指定を破棄しましょ。これ使ってないし。代わりにdelayを用意しよう。
+  // elapsedStump = window.performance.now() + delay;
+  // これで初期化する。たとえばdelayが500の場合、500ミリ秒経過するまではgetElapsedMillis()が負の数を返したり、
+  // progressが0を返したりする（clampに修正しました）. そのあとactiveになると。checkを実行してもfalseしか返さないし。
+  // ちゃんと最後は終わってくれるので問題なし
+  // 寿命を表現したりできるといいね。
   class Timer{
     constructor(){
       this.timers = {};
     }
     initialize(name, params = {}){
       const {
-        stump = window.performance.now(),
+        delay = 0,
         duration = Infinity,
         scale = 1000,
         completeFunction = () => {},
@@ -733,8 +740,8 @@ const p5wgex = (function(){
       const newTimer = {};
       // 場合によっては名前もあった方がいいと思う
       newTimer.name = name;
-      // 経過時間の計算に使うstump. 従来のstumpはこれになります。
-      newTimer.elapsedStump = stump;
+      // delayをwindow.performance.now()に足す
+      newTimer.elapsedStump = window.performance.now() + delay;
       // 前のフレームとの差分の計算をするのに使うstump.
       newTimer.deltaStump = window.performance.now();
       // 時間間隔を使ってなんかする場合に設定する。ミリ秒指定。
@@ -813,7 +820,8 @@ const p5wgex = (function(){
       // getProgressの内部でstepFunction(prg)が実行される。
       // const prg=~~~とかする手間が省ける。
       if (target.duration > 0) {
-        const prg = Math.min(1, this.getElapsedMillis(name) / target.duration);
+        // 要するにclampしましょってことです
+        const prg = Math.max(0, Math.min(1, this.getElapsedMillis(name) / target.duration));
         if (executeStepFunction) target.stepFunction(prg);
         return prg;
       }
@@ -915,6 +923,12 @@ const p5wgex = (function(){
       // 処理を破棄したい場合にどうぞ
       if (!this.validateName(name, "setStepFunction")) return;
       this.timers[name].stepFunction = func;
+    }
+    clearFunction(name){
+      // 関数を破棄する
+      if (!this.validateName(name, "clearFunction")) return;
+      this.setStepFunction(name);
+      this.setCompleteFunction(name);
     }
   }
 
