@@ -738,6 +738,8 @@ const p5wgex = (function(){
         stepFunction = (prg) => {}
       } = params;
       const newTimer = {};
+      // 先に登録を済ませる
+      this.timers[name] = newTimer;
       // 場合によっては名前もあった方がいいと思う
       newTimer.name = name;
       // delayをwindow.performance.now()に足す
@@ -754,7 +756,8 @@ const p5wgex = (function(){
       // checkがtrueの場合に実行される関数。
       newTimer.completeFunction = completeFunction;
       newTimer.stepFunction = stepFunction;
-      this.timers[name] = newTimer;
+      newTimer.active = true; // 関数の実行可否
+      return this;
     }
     validateName(name, methodName){
       if (this.timers[name] === undefined) {
@@ -806,11 +809,6 @@ const p5wgex = (function(){
       }
       return n;
     }
-    isActive(name){
-      // progressが正かどうか確かめるだけ
-      if (!this.validateName(name, "isActive")) return null;
-      return this.getProgress(name, false) > 0;
-    }
     getProgress(name, executeStepFunction = true){
       // stumpからの経過時間(elapsed)をdurationで割ることで進捗を調べるのに使う感じ
       // executeStepFunctionをfalseにすると
@@ -820,12 +818,11 @@ const p5wgex = (function(){
       // getProgressの内部でstepFunction(prg)が実行される。
       // const prg=~~~とかする手間が省ける。
       if (target.duration > 0) {
-        // 要するにclampしましょってことです
-        const prg = Math.max(0, Math.min(1, this.getElapsedMillis(name) / target.duration));
-        if (executeStepFunction) target.stepFunction(prg);
+        const prg = Math.min(1, this.getElapsedMillis(name) / target.duration);
+        if (executeStepFunction && target.active) target.stepFunction(prg);
         return prg;
       }
-      if (executeStepFunction) target.stepFunction(1);
+      if (executeStepFunction && target.active) target.stepFunction(1);
       return 1; // durationが0の場合...つまり無限大ということ。
     }
     check(name, nextDuration){
@@ -850,7 +847,7 @@ const p5wgex = (function(){
         // elapsedStumpを修正したうえでcompleteFunctionを実行する
         // こうしないとcompleteFunction内部でdurationをいじりたい場合に不具合が発生する（邪道だけど）
         // 具体的にはelapsedStumpの値が不自然になる
-        target.completeFunction();
+        if (target.active) target.completeFunction();
         // 引数でnextDurationをいじる場合はそっちが優先される
         // ほんとはdurationをいじる関数用意してもいいんですけど
         // 迂闊に用意するとバグの温床になりかねないので保留してる
@@ -924,11 +921,27 @@ const p5wgex = (function(){
       if (!this.validateName(name, "setStepFunction")) return;
       this.timers[name].stepFunction = func;
     }
-    clearFunction(name){
-      // 関数を破棄する
-      if (!this.validateName(name, "clearFunction")) return;
-      this.setStepFunction(name);
-      this.setCompleteFunction(name);
+    activate(name){
+      if (!this.validateName(name, "activate")) return;
+      this.timers[name].active = true;
+    }
+    inActivate(name){
+      // 関数の実行だけ止めたい場合
+      if (!this.validateName(name, "inActivate")) return;
+      this.timers[name].active = false;
+    }
+    off(name){
+      // タイマーをリセットしたうえで関数の実行も止める
+      if (!this.validateName(name, "off")) return;
+      this.timers[name].active = false;
+      this.setElapsed(name);
+      this.pause(name);
+    }
+    on(name){
+      // completeFunction内部でoffにすることでnon-looped-timerを実現する
+      if (!this.validateName(name, "on")) return;
+      this.timers[name].active = true;
+      this.reStart(name);
     }
   }
 
