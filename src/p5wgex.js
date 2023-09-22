@@ -943,6 +943,15 @@ const p5wgex = (function(){
       this.timers[name].active = true;
       this.reStart(name);
     }
+    update(){
+      // activeなものだけgetProgressとcheckを実行する
+      for(const name of Object.keys(this.timers)){
+        const target = this.timers[name];
+        if(!target.active) continue;
+        this.getProgress(name);
+        this.check(name);
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
