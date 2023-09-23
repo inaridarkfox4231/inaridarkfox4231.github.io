@@ -2875,6 +2875,7 @@ const p5wgex = (function(){
   // まあそれでも実装するけど。
 
   // おそらく合ってるはず. いいや。普通に成分だけで。
+  /*
   function getNormals(vertices, indices){
     const N = Math.floor(vertices.length / 3);
     let normals = new Array(N);
@@ -2937,6 +2938,7 @@ const p5wgex = (function(){
     }
     return result;
   }
+  */
 
   // ---------------------------------------------------------------------------------------------- //
   // Meshes.
@@ -4187,6 +4189,7 @@ const p5wgex = (function(){
 
   // 立方体
   // まあキューブマップ使いましょうね
+  /*
   function getCubeMesh(_size = 1){
     // 上の方の正方形がxMinusでその下にzPlus,xPlus,zMinusと続く
     // zPlusの左側がyMinusで、zPlusの右側がyPlusです。
@@ -4301,6 +4304,7 @@ const p5wgex = (function(){
     }
     return {v, f, n, uv};
   }
+  */
 
   // v, n, uv, fは予約されているとする。
   // 他にも使いたい場合は配列の形で付加的に用意する。
@@ -6421,20 +6425,6 @@ const p5wgex = (function(){
     }
   }
 
-  // getNormalMatrix.
-  // モデルビューは既に4x4の配列として計算済み。それに対し左上の3x3から逆転置を作って返す。
-  // この中で掛け算するのはいろいろと二度手間になりそうだったので却下。
-  // normalMatrixはVSで計算することになったので廃止で。いろいろ変えないとね...
-  /*
-  function getNormalMat(modelView){
-    const result = new Array(9).fill(0);
-    result[0] = modelView[0]; result[1] = modelView[1]; result[2] = modelView[2];
-    result[3] = modelView[4]; result[4] = modelView[5]; result[5] = modelView[6];
-    result[6] = modelView[8]; result[7] = modelView[9]; result[8] = modelView[10];
-    return getInverseTranspose3x3(result);
-  }
-  */
-
   // ---------------------------------------------------------------------------------------------- //
   // Snipet.
   const snipet = {
@@ -7459,7 +7449,7 @@ const p5wgex = (function(){
   const ex = {};
 
   // utility.
-  ex.getNormals = getNormals; // 廃止する予定
+  //ex.getNormals = getNormals; // 廃止する予定
 
   ex.getMult3x3 = getMult3x3; // 3x3の使い道があるかもしれない的な
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
@@ -7478,11 +7468,11 @@ const p5wgex = (function(){
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
 
   // geometry.
-  ex.getCubeMesh = getCubeMesh; // 廃止する予定
-  ex.getSphereMesh = getSphereMesh; // 廃止する予定
-  ex.getPlaneMesh = getPlaneMesh; // 廃止する予定
-  ex.getTorusMesh = getTorusMesh; // 廃止する予定
-  ex.registMesh = registMesh; // 廃止する予定
+  //ex.getCubeMesh = getCubeMesh; // 廃止する予定
+  //ex.getSphereMesh = getSphereMesh; // 廃止する予定
+  //ex.getPlaneMesh = getPlaneMesh; // 廃止する予定
+  //ex.getTorusMesh = getTorusMesh; // 廃止する予定
+  //ex.registMesh = registMesh; // 廃止する予定
 
   ex.meshUtil = meshUtil; // 最終的にはここにすべてまとめる。registMeshも廃止する方向で。getNormalsも不要です。
 
