@@ -6620,7 +6620,9 @@ const p5wgex = (function(){
   class ShaderPrototype{
     constructor(node){
       this.node = node;
-
+      this.initialize();
+    }
+    initialize(options = {}){
       this.attrs = [];
       this.varyings = [];
 
@@ -6642,8 +6644,6 @@ const p5wgex = (function(){
       this.fs.preProcess = ``;
       this.fs.mainProcess = ``;
       this.fs.postProcess = ``;
-    }
-    initialize(options = {}){
       return this;
     }
     clearAttrs(){
@@ -6764,6 +6764,7 @@ const p5wgex = (function(){
       super(node);
     }
     initialize(options = {}){
+      super.initialize();
       this.attrs = [
         {type:"vec3", name:"aPosition"},
         {type:"vec3", name:"aNormal"}
@@ -6928,6 +6929,7 @@ const p5wgex = (function(){
       super(node);
     }
     initialize(options = {}){
+      super.initialize();
       // TODO
     }
   }
@@ -6937,6 +6939,7 @@ const p5wgex = (function(){
       super(node);
     }
     initialize(options = {}){
+      super.initialize();
       // TODO
     }
   }
@@ -6955,6 +6958,7 @@ const p5wgex = (function(){
       super(node);
     }
     initialize(options = {}){
+      super.initialize();
       const {uvAlign = "leftUp", depth = 0.0} = options;
       this.attrs =[{type:"vec2", name:"aPosition"}];
       this.varyings =[{type:"vec2", name:"vUv"}];
