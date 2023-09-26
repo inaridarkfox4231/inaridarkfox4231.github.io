@@ -4924,7 +4924,7 @@ const p5wgex = (function(){
       return this;
     }
     drawArraysInstanced(mode, options = {}){
-      this.drawCall("arrayInstanced", mode, options);
+      this.drawCall("arraysInstanced", mode, options);
       return this;
     }
     drawElementsInstanced(mode, options = {}){
