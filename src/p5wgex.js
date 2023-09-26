@@ -2399,6 +2399,9 @@ const p5wgex = (function(){
       // texture以外です。
       _setUniform(this.gl, this.uniforms[name], data);
     }
+    /*
+    // なくしちゃおうね
+    // cubemapにも対応してるsetTextureを使ってね
     setTexture2D(name, _texture){
       // 非推奨。
       // 後方互換性のために非推奨指定したうえで残しておきます。
@@ -2409,6 +2412,7 @@ const p5wgex = (function(){
       gl.bindTexture(gl.TEXTURE_2D, _texture);
       gl.uniform1i(uniform.location, uniform.samplerIndex);
     }
+    */
     setTexture(name, _texture){
       // 2d, cube_map, 2d_arrayなどを想定
       const gl = this.gl;
@@ -2446,7 +2450,7 @@ const p5wgex = (function(){
   // ---------------------------------------------------------------------------------------------- //
   // defaultPainter.
   // まあ、なんかあった方がいいよね。
-
+/*
   function _validateForView(view, align = "left_top"){
     // viewをいじって左下ベースにする。この処理は汎用的かもしれない。
     const alignText = align.split("_");
@@ -2558,7 +2562,8 @@ const p5wgex = (function(){
     }
     // 以上。swapはメインコードで。
   }
-
+  */
+/*
   // copy.
   function getCopyShaders(){
     // flipとviewを配列にして渡す。あとはシェーダの仕事。
@@ -2682,14 +2687,14 @@ const p5wgex = (function(){
     `;
     return {v:vs, f:fs};
   }
-
+*/
   // infoの仕様(example)
   // swapはnodeが要るのでここで判断に入れるのはやめよう
   // {dst:{type:null/"fb", name:dstName},
   //  src:{type:"tex"/"fb", name:srcName, flip:true/false(typeによりデフォ分岐),
   //       view:[0,0,0.5,0.5], align:"left_top" ,attach:"color", index:0},
   //  blend:true/false, blendFunc:{src:"src_alpha", dst:"one_minus_src_alpha"}, depthOff:false/true}
-
+/*
   // 第一弾。copyPainter.（苦労したぜ...）
   // info.dstで描画先のframebufferを指定
   // そこにinfo.srcの内容を描画する
@@ -2791,6 +2796,7 @@ const p5wgex = (function(){
     // 元のFBOに戻す
     node.bindFBO(previousFBO);
   }
+  */
 
   // ---------------------------------------------------------------------------------------------- //
   // Figure.
@@ -4360,8 +4366,12 @@ const p5wgex = (function(){
       this.currentFBO = null; // これがないとfbの一時的な切り替えができないので。文字列またはnull.
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
-      this.prepareDefault(); // defaultShaderの構築
+      //this.prepareDefault(); // defaultShaderの構築
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
+
+      // 一般的なboard. 要するにfoxBoardって書けば普通にこれ使えるので、もういちいち用意しなくていいんよ。
+      // drawArraysは"triangle_strip"です。板ポリ全般で使えます。
+      this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
     }
     enableExtensions(){
       // color_buffer_floatのEXT処理。pavelさんはこれ使ってwebgl2でもfloatへの書き込みが出来るようにしてた。
@@ -4370,13 +4380,15 @@ const p5wgex = (function(){
       // 最後のはなんじゃい...
       this.gl.getExtension('EXT_color_buffer_float');
     }
-    prepareDefault(){
+    //prepareDefault(){ // 廃止
       // copy.
-      const _copy = getCopyShaders();
-      this.registPainter("foxCopyPainter", _copy.v, _copy.f);
-      // 一般的なboard. 要するにfoxBoardって書けば普通にこれ使えるので、もういちいち用意しなくていいんよ。
-      this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
+      //const _copy = getCopyShaders();
+      //this.registPainter("foxCopyPainter", _copy.v, _copy.f);
+
+
+
       // 4枚のquad. 必要なだけ使う。UVは表示する際に適宜いじる。indexで位置を決めるのでaPositionは不要。
+      /*
       const aIndexArray = new Array(4*8);
       const aUvArray = new Array(2*4*8);
       for(let i=0; i<4*8; i++){ aIndexArray[i] = i; }
@@ -4387,7 +4399,8 @@ const p5wgex = (function(){
       this.registFigure("foxQuads", [{size:1, name:"aIndex", data:aIndexArray}, {size:2, name:"aUv", data:aUvArray}]);
       this.registIBO("foxIBOForQuads", {data:[0,1,2, 2,1,3, 4,5,6, 6,5,7, 8,9,10, 10,9,11, 12,13,14, 14,13,15,
                                         16,17,18, 18,17,19, 20,21,22, 22,21,23, 24,25,26, 26,25,27, 28,29,30, 30,29,31]});
-    }
+      */
+    //}
     clearColor(r, g, b, a){
       // clearに使う色を決めるところ
       this.gl.clearColor(r, g, b, a);
@@ -4431,6 +4444,8 @@ const p5wgex = (function(){
       this.gl.cullFace(this.dict[mode]); // default: back.
       return this;
     }
+    /*
+    // どっちも廃止
     blendFunc(sFactorName, dFactorName){
       // blendFunc. ファクターを一律に決める。
       this.gl.blendFunc(this.dict[sFactorName], this.dict[dFactorName]);
@@ -4439,6 +4454,46 @@ const p5wgex = (function(){
     blendFuncSeparate(sRGBFactorName, dRGBFactorName, sAFactorName, dAFactorName){
       // separate.
       this.gl.blendFuncSeparate(this.dict[sRGBFactorName], this.dict[dRGBFactorName], this.dict[sAFactorName], this.dict[dAFactorName]);
+      return this;
+    }
+    */
+    getCurrentBlend(){
+      // sRGB, dRGB, sA, dAのその時の状態を取得し配列の形で返す関数。applyBlendの引数に用いるとブレンドの状態を復元できる。
+      const sRGB = this.gl.getParameter(gl.BLEND_SRC_RGB);
+      const dRGB = this.gl.getParameter(gl.BLEND_DST_RGB);
+      const sA = this.gl.getParameter(gl.BLEND_SRC_ALPHA);
+      const dA = this.gl.getParameter(gl.BLEND_DST_ALPHA);
+      return [sRGB, dRGB, sA, dA];
+    }
+    applyBlend(data){
+      if (typeof data === "string") {
+        // とりあえずblendだけ用意しました
+        switch(data) {
+          case "blend":
+            this.applyBlend(["one", "one_minus_src_alpha"]);
+            break;
+        }
+        return this;
+      } else if (Array.isArray(data)) {
+        const _data = data.slice();
+        switch(_data.length) {
+          case 1:
+            _data.push(data[0], data[0], data[0]);
+            break;
+          case 2:
+            // srcRGB, dstRGBの場合はsrcA, dstAにそれぞれ同じものが使われる
+            _data.push(data[0], data[1]);
+            break;
+          case 3:
+            _data.push(data[2]);
+            break;
+        }
+        if (typeof data[0] === 'number') {
+          this.gl.blendFuncSeparate(data[0], data[1], data[2], data[3]);
+        } else if (typeof data[0] === 'number'){
+          this.gl.blendFuncSeparate(this.dict[data[0]], this.dict[data[1]], this.dict[data[2]], this.dict[data[3]]);
+        }
+      }
       return this;
     }
     disable(name){
@@ -4455,6 +4510,15 @@ const p5wgex = (function(){
       const newPainter = new Painter(this.gl, name, vs, fs, outVaryings);
       this.painters[name] = newPainter;
       return this;
+    }
+    getPainter(name){
+      // uniformの情報とか取得できるので、まあ必要な場合もあるかな、と。
+      const _painter = this.painters[name];
+      if (_painter === undefined) {
+        myAlert("getPainter() failed: invalid name.");
+        return null;
+      }
+      return _painter;
     }
     registFigure(name, attrs){
       // attrsは配列です。
@@ -4640,6 +4704,9 @@ const p5wgex = (function(){
       this.gl.bufferSubData(this.dict[targetName], dstByteOffset, srcData, srcOffset); // srcDataはFloat32Arrayの何か
       return this;
     }
+    /*
+    // これもなくしちゃおうね
+    // もう不要なので
     setTexture2D(name, _texture){
       // 非推奨（後方互換性）
       // 有効になっているPainterがテクスチャユニフォームを持っているとして、それを使えるようにbindする。
@@ -4653,6 +4720,7 @@ const p5wgex = (function(){
       this.currentPainter.setTexture2D(name, _texture);
       return this;
     }
+    */
     setTexture(name, _texture){
       // なるべくこっちを使ってね
       // _textureがstringの場合は登録されているのを使う。
@@ -4770,13 +4838,15 @@ const p5wgex = (function(){
         // doubleの場合はreadをセットする
         // 配列の場合は...
         const _texture_double = (Array.isArray(fbo.read[kind]) ? fbo.read[kind][index] : fbo.read[kind]);
-        this.setTexture2D(uniformName, _texture_double);
+        //this.setTexture2D(uniformName, _texture_double);
+        this.setTexture(uniformName, _texture_double);
         return this;
       }
       // 通常時
       // 配列の場合は...
       const _texture = (Array.isArray(fbo[kind]) ? fbo[kind][index] : fbo[kind]);
-      this.setTexture2D(uniformName, _texture);
+      //this.setTexture2D(uniformName, _texture);
+      this.setTexture(uniformName, _texture);
       return this;
     }
     swapFBO(fboName){
@@ -4800,38 +4870,60 @@ const p5wgex = (function(){
       fig.swapAttribute(attrName0, attrName1);
       return this;
     }
-    drawArrays(mode, first, count){
-      // modeは文字列指定でドローの仕方を指定する(7種類)。
-      // 残りの引数は0とMAXでいいです。
-      // firstはvertexのスタート、countはそこからの個数なので、たとえば8つあって
-      // 終わりの4つだけ使う場合は(4,4)のように指定する。4,5,6,7というわけ。
-      // こういうのは説明きちんとしないと混乱するわね...英語見ろよって話ではあるんだけど、
-      // fool proofって大事だと思うので。誤解の原因は常に撲滅すべきだと思う。
-
-      // modeの文字列からgl定数を取得
-      // 実行
-      // countはundefinedの場合は事前計算
-      // TFで追加attrだけ更新する実験中
-      if (first === undefined) { first = 0; } // undefinedでも機能するが一応0とすべきだろうね
-      if (count === undefined) { count = this.currentFigure.count; }
-      this.gl.drawArrays(this.dict[mode], first, count);
+    drawCall(callName, mode, options = {}){
+      // 総合ドローコール関数
+      // 元のあれこれもそのままおいとくけどね。後方互換性。なくすかも...しれないが...
+      // type: arrays, elements, arraysInstanced, elementsInstanced.
+      // mode: triangles, lines, points, triangle_strip, 以下略
+      // options: first(基本0), count(基本計算済みだがTF-INSTANCEDでは使う場合も？), blend.
+      const {first = 0, count = this.currentFigure.count, blend = "", instanceCount = 1} = options;
+      // blendが""のデフォの場合、blendが非有効であれば有効化されないし、何も起きない。
+      // 有効なら外部でapplyBlendで設定したblendingがそのまま使われる。要するに特別なことを何もしない。
+      // blendに有効な引数が入ってる場合には有効化される。
+      // 但し、blendに"disable"を指定すると、有効であっても、一時的にnon-blendで描画される（ケースが思いつかないが）
+      // 有効かどうか調べておく
+      const blendEnabled = this.gl.getParameter(this.gl.BLEND);
+      // 一時的に特別な指定をする場合は現在の状態を記録して保存しておく。
+      const curBlend = this.getCurrentBlend();
+      // blendがdisableの場合は非有効にする
+      if (blend === "disable"){
+        this.disable("blend");
+      } else if (blend !== "") {
+        this.enable("blend"); // ""でも"disable"でもなければ有効にする
+        // blendを適用する。disableならすべきことはない。
+        this.applyBlend(blend);
+      }
+      switch(callName) {
+        case "arrays":
+          this.gl.drawArrays(this.dict[mode], first, count); break;
+        case "elements":
+          this.gl.drawElements(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0); break;
+        case "arraysInstanced":
+          this.gl.drawArraysInstanced(this.dict[mode], first, count, instanceCount); break;
+        case "elementsInstanced":
+          this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount); break;
+      }
+      // blendの有効状態を復元する。描画の前後で異なってはならない。
+      // もともと有効なら有効にする。もともと非有効なら非有効に戻す。重複しても問題ない。
+      if (blendEnabled){ this.enable("blend"); } else { this.disable("blend"); }
+      // blendの状態を復元する。復元する必要があるのは""でも"disable"でもない場合だけ。
+      if (blend !== "disable" && blend !== "") this.applyBlend(curBlend);
       return this;
     }
-    drawElements(mode){
-      // typeとsizeがそのまま使えると思う
-      this.gl.drawElements(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0);
+    drawArrays(mode, options = {}){
+      this.drawCall("arrays", mode, options);
       return this;
     }
-    drawArraysInstanced(mode, instanceCount, first, count){
-      // countはundefinedの場合は事前計算
-      if (first === undefined) { first = 0; } // undefinedでも機能するが一応0とすべきだろうね
-      if (count === undefined) { count = this.currentFigure.count; }
-      this.gl.drawArraysInstanced(this.dict[mode], first, count, instanceCount);
+    drawElements(mode, options = {}){
+      this.drawCall("elements", mode, options);
       return this;
     }
-    drawElementsInstanced(mode, instanceCount){
-      /*これでいいはず*/
-      this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount);
+    drawArraysInstanced(mode, options = {}){
+      this.drawCall("arrayInstanced", mode, options);
+      return this;
+    }
+    drawElementsInstanced(mode, options = {}){
+      this.drawCall("elementsInstanced", mode, options);
       return this;
     }
     unbind(){
@@ -6762,6 +6854,9 @@ const p5wgex = (function(){
       this.node.registPainter(name, _vs, _fs);
       return this;
     }
+    draw(options = {}){
+      // Shader自身に何かしら描画命令を持たせたい場合にどうぞ。
+    }
   }
 
   class ForwardLightingShader extends ShaderPrototype{
@@ -7359,97 +7454,76 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
-  //　Performance checker
+  // Performance checker
   // 前でも後でもOKなフレームレート表示用関数
   // クラスで定義します
   // いい加減面倒になってきたので
 
   // 作るときにキャンバスのサイズを指定します
   // 必要ならレートも指定します
-  // options詳細
-  // wとhで枠のサイズ
-  // bgColorは背景色、グラデーションを使わないならこれ
-  // barColorはパフォーマンスバーの色。使わないなら0,0,0,0を指定
-  // gradationのflag:true, start,stopは初めの2つでオフセット、
-  // そのあとの4つで色指定。
-  // textはsize, style, alignを指定できる。p5に依存しまくり
-  // p5便利
-  // colorでtext色、offsetはalignにフィットさせる
-  // 以上です
+  // これを使う場合、blendingはone --- one_minus_src_alphaにしないといけない
+  // そのうち整備するつもり
   class PerformanceChecker{
-    constructor(node, width, height, targetFrameRate = 60){
+    constructor(node, w, h, targetFrameRate = 60){
       this.node = node;
-      this.w = width;
-      this.h = height;
+      this.initialize(w, h);
       this.targetFrameRate = targetFrameRate;
-      this.bgColor = [];
-      this.barColor = [];
-      this.gradationInfo = {};
-      this.textInfo = {};
+      this.timer = new Timer();
+      this.timer.initialize("pfc");
+      this.pause = false; // タイマーの動作を止めたいときに使う
     }
-    loadGraphic(){
-      return this.node.getTextureSource("foxPerformanceChecker");
+    initialize(w, h){
+      this.node.registTexture("__foxPerformanceChecker", {src:(function(){
+        const gr = createGraphics(w, h);
+        gr.textAlign(CENTER, CENTER);
+        gr.drawingContext.font = 'italic 20px system-ui';
+        gr.noStroke();
+        return gr;
+      })()});
+      const sh = new PlaneShader(this.node);
+      sh.initialize();
+      sh.addUniform("sampler2D", "uInfo", "fs");
+      sh.addCode(`
+        color = texture(uInfo, uv);
+        color.rgb *= color.a;
+      `, "preProcess", "fs");
+      sh.registPainter("__foxPerformanceChecker");
     }
-    updateGraphic(){
-      this.node.updateTexture("foxPerformanceChecker");
+    setTargetFrameRate(rate){
+      this.targetFrameRate = rate;
     }
-    initialize(options = {}){
-      const {w = 60} = options;
-      const {h = 28} = options;
-      this.node.registTexture("foxPerformanceChecker", {src:createGraphics(w, h)});
-      const {bgColor = [0,0,0,1]} = options; // nonGrad用背景色
-      this.bgColor = bgColor;
-      const {barColor = [1,1,1,0.3]} = options; // barColor.
-      this.barColor = barColor;
-      const {gradation = {}} = options;
-      const {flag = false} = gradation;
-      const {start = []} = gradation;
-      const {stop = []} = gradation;
-      this.gradationInfo = {flag, start, stop};
-      const {text = {}} = options;
-      const {style = ITALIC} = text;
-      const {size = 18} = text;
-      const {align = [CENTER, CENTER]} = text;
-      const {color = [1,1,1,1]} = text;
-      const {offset = [w/2, h/2]} = text;
-      this.textInfo = {color, offset};
-      const gr = this.loadGraphic();
-      gr.textStyle(style);
-      gr.textSize(size);
-      gr.textAlign(...align);
-      this.updateGraphic();
+    show(_blend = "blend"){
+      // デフォルトで"blend". これで一時的にあれする必要なくなる...はず。
+      if (this.pause) return;
+      this.update();
+      this.node.use("__foxPerformanceChecker", "foxBoard");
+      this.node.setTexture("uInfo", "__foxPerformanceChecker");
+      this.node.drawArrays("triangle_strip", {blend:_blend});
+      this.node.unbind();
     }
-    show(){
-      const gr = this.loadGraphic();
+    update(){
+      const gr = this.node.getTextureSource("__foxPerformanceChecker");
+      const dt = this.timer.getDelta("pfc");
+      const _frameRate = (dt > 0 ? 1/dt : 0); // 一応0割り対策
+      const ratio = _frameRate / this.targetFrameRate;
       gr.clear();
-      // prepare gradation bg
-      const param = {};
-      param.name = "foxPerformanceChecker";
-      param.view = [0, 0, gr.width/this.w, gr.height/this.h];
-      if (this.gradationInfo.flag) {
-        param.gradationFlag = this.gradationInfo.flag;
-        param.gradationStart = this.gradationInfo.start;
-        param.gradationStop = this.gradationInfo.stop;
-      } else {
-        const c = this.bgColor;
-        gr.background(c[0]*255, c[1]*255, c[2]*255, c[3]*255);
-      }
-      // get frameRate
-      const rate = frameRate();
-      // draw bar
-      const b = this.barColor;
-      gr.fill(b[0]*255, b[1]*255, b[2]*255, b[3]*255);
-      const level = rate / this.targetFrameRate;
-      gr.rect(0,0, gr.width*level, gr.height);
-      // draw rate
-      const t = this.textInfo.color;
-      gr.fill(t[0]*255, t[1]*255, t[2]*255, t[3]*255);
-      const o = this.textInfo.offset;
-      gr.text(rate.toFixed(2), o[0], o[1]);
-      // update
-      this.updateGraphic();
-      // draw result
-      copyPainter(this.node, {src:param});
+      gr.fill(0);
+      gr.rect(0, 0, 76, 30);
+      gr.fill(128);
+      gr.rect(0, 0, 76*ratio, 30);
+      gr.fill(255);
+      gr.text(_frameRate.toFixed(3), 38, 15);
+      this.node.updateTexture("__foxPerformanceChecker");
+    }
+    pause(){
+      // 止めたいとき
+      this.timer("pfc").pause();
+      this.pause = true;
+    }
+    reStart(){
+      // 動かしたいとき
+      this.timer("pfc").reStart();
+      this.pause = false;
     }
   }
 
@@ -7474,7 +7548,7 @@ const p5wgex = (function(){
   // そのうちやめたいnoLoop()
   ex.myAlert = myAlert; // 警告メッセージの後でnoLoop()を実行する
   ex.clamp = clamp; // clamp関数
-  ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用
+  ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用。新しくしました。
 
   // geometry.
   //ex.getCubeMesh = getCubeMesh; // 廃止する予定
@@ -7514,7 +7588,7 @@ const p5wgex = (function(){
   // cameraHelper（種類に応じてfrustumを可視化）
   // customRectHelper（自由に直方体を指定して辺描画で位置を可視化）
   // data格納用のシェーダ欲しいですね...欲しい...めんどくさい...
-  ex.copyPainter = copyPainter;
+  //ex.copyPainter = copyPainter; // 廃止予定 // まあ、廃止。
 
   return ex;
 })();
