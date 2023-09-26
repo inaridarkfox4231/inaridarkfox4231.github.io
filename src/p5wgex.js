@@ -7484,7 +7484,8 @@ const p5wgex = (function(){
         return gr;
       })()});
       const sh = new PlaneShader(this.node);
-      sh.initialize();
+      // 内容的にはカバーなので、depthを-1.0にして一番上に来るようにする。
+      sh.initialize({depth:-1.0});
       sh.addUniform("sampler2D", "uInfo", "fs");
       sh.addCode(`
         color = texture(uInfo, uv);
@@ -7535,8 +7536,6 @@ const p5wgex = (function(){
   const ex = {};
 
   // utility.
-  //ex.getNormals = getNormals; // 廃止する予定
-
   ex.getMult3x3 = getMult3x3; // 3x3の使い道があるかもしれない的な
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
@@ -7552,13 +7551,6 @@ const p5wgex = (function(){
   ex.myAlert = myAlert; // 警告メッセージの後でnoLoop()を実行する
   ex.clamp = clamp; // clamp関数
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用。新しくしました。
-
-  // geometry.
-  //ex.getCubeMesh = getCubeMesh; // 廃止する予定
-  //ex.getSphereMesh = getSphereMesh; // 廃止する予定
-  //ex.getPlaneMesh = getPlaneMesh; // 廃止する予定
-  //ex.getTorusMesh = getTorusMesh; // 廃止する予定
-  //ex.registMesh = registMesh; // 廃止する予定
 
   ex.meshUtil = meshUtil; // 最終的にはここにすべてまとめる。registMeshも廃止する方向で。getNormalsも不要です。
 
@@ -7586,12 +7578,7 @@ const p5wgex = (function(){
   ex.Transform = Transform;
   ex.Vec3 = Vec3;
 
-  // defaultShader.
-  // axisHelper（座標軸を長さ指定して可視化）
-  // cameraHelper（種類に応じてfrustumを可視化）
-  // customRectHelper（自由に直方体を指定して辺描画で位置を可視化）
-  // data格納用のシェーダ欲しいですね...欲しい...めんどくさい...
-  //ex.copyPainter = copyPainter; // 廃止予定 // まあ、廃止。
+  // data格納用のshader欲しいかも
 
   return ex;
 })();
