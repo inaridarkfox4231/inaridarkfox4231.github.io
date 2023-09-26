@@ -6557,7 +6557,7 @@ const p5wgex = (function(){
       `,
     overlay:
       `
-        vec3 overLay(vec3 src, vec3 dst){
+        vec3 overlay(vec3 src, vec3 dst){
           vec3 result;
             if(dst.r < 0.5){ result.r = 2.0*src.r*dst.r; }else{ result.r = 2.0*(src.r+dst.r-src.r*dst.r)-1.0; }
             if(dst.g < 0.5){ result.g = 2.0*src.g*dst.g; }else{ result.g = 2.0*(src.g+dst.g-src.g*dst.g)-1.0; }
