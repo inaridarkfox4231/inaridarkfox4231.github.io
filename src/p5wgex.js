@@ -7520,14 +7520,14 @@ const p5wgex = (function(){
       gr.text(_frameRate.toFixed(3), 38, 15);
       this.node.updateTexture("__foxPerformanceChecker");
     }
-    pause(){
+    stop(){
       // 止めたいとき
-      this.timer("pfc").pause();
+      this.timer.pause("pfc");
       this.pause = true;
     }
-    reStart(){
+    start(){
       // 動かしたいとき
-      this.timer("pfc").reStart();
+      this.timer.reStart("pfc");
       this.pause = false;
     }
   }
