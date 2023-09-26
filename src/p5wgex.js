@@ -4373,6 +4373,7 @@ const p5wgex = (function(){
       this.dict = getDict(this.gl); // 辞書を生成
       //this.prepareDefault(); // defaultShaderの構築
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
+      this.blendState = {use:false, state:[]}; // use, state.
 
       // 一般的なboard. 要するにfoxBoardって書けば普通にこれ使えるので、もういちいち用意しなくていいんよ。
       // drawArraysは"triangle_strip"です。板ポリ全般で使えます。
@@ -4438,6 +4439,8 @@ const p5wgex = (function(){
       }
       // 有効化指定(cull_face, depth_test, blendなど)
       this.gl.enable(this.dict[name]);
+      // blendのenable時にフラグを立てる
+      if (name === "blend") this.blendState.use = true;
       return this;
     }
     cullFace(mode){
@@ -4462,14 +4465,6 @@ const p5wgex = (function(){
       return this;
     }
     */
-    getCurrentBlend(){
-      // sRGB, dRGB, sA, dAのその時の状態を取得し配列の形で返す関数。applyBlendの引数に用いるとブレンドの状態を復元できる。
-      const sRGB = this.gl.getParameter(this.gl.BLEND_SRC_RGB);
-      const dRGB = this.gl.getParameter(this.gl.BLEND_DST_RGB);
-      const sA = this.gl.getParameter(this.gl.BLEND_SRC_ALPHA);
-      const dA = this.gl.getParameter(this.gl.BLEND_DST_ALPHA);
-      return [sRGB, dRGB, sA, dA];
-    }
     applyBlend(data){
       if (typeof data === "string") {
         // とりあえずblendだけ用意しました
@@ -4494,9 +4489,11 @@ const p5wgex = (function(){
             break;
         }
         if (typeof _data[0] === 'number') {
-          this.gl.blendFuncSeparate(_data[0], _data[1], _data[2], _data[3]);
+          this.blendState.state = [_data[0], _data[1], _data[2], _data[3]];
+          this.gl.blendFuncSeparate(...this.blendState.state);
         } else if (typeof _data[0] === 'string'){
-          this.gl.blendFuncSeparate(this.dict[_data[0]], this.dict[_data[1]], this.dict[_data[2]], this.dict[_data[3]]);
+          this.blendState.state = [this.dict[_data[0]], this.dict[_data[1]], this.dict[_data[2]], this.dict[_data[3]]];
+          this.gl.blendFuncSeparate(...this.blendState.state);
         }
       }
       return this;
@@ -4508,6 +4505,7 @@ const p5wgex = (function(){
       }
       // 非有効化(cull_face, depth_test, blend)
       this.gl.disable(this.dict[name]);
+      if (name === "blend") this.blendState.use = false;
       return this;
     }
     registPainter(name, vs, fs, outVaryings = []){
@@ -4887,9 +4885,9 @@ const p5wgex = (function(){
       // blendに有効な引数が入ってる場合には有効化される。
       // 但し、blendに"disable"を指定すると、有効であっても、一時的にnon-blendで描画される（ケースが思いつかないが）
       // 有効かどうか調べておく
-      const blendEnabled = this.gl.getParameter(this.gl.BLEND);
+      const blendEnabled = this.blendState.use;
       // 一時的に特別な指定をする場合は現在の状態を記録して保存しておく。
-      const curBlend = this.getCurrentBlend();
+      const curBlend = this.blendState.state.slice();
       // blendがdisableの場合は非有効にする
       if (blend === "disable"){
         this.disable("blend");
