@@ -66,6 +66,11 @@
 // 20230917
 // CCとLSを新しくして色々改良中
 
+// 20230926
+// copyPainter死んだ
+// draw時のblendを可能にした
+// 今んとこそんくらい
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
@@ -4459,10 +4464,10 @@ const p5wgex = (function(){
     */
     getCurrentBlend(){
       // sRGB, dRGB, sA, dAのその時の状態を取得し配列の形で返す関数。applyBlendの引数に用いるとブレンドの状態を復元できる。
-      const sRGB = this.gl.getParameter(gl.BLEND_SRC_RGB);
-      const dRGB = this.gl.getParameter(gl.BLEND_DST_RGB);
-      const sA = this.gl.getParameter(gl.BLEND_SRC_ALPHA);
-      const dA = this.gl.getParameter(gl.BLEND_DST_ALPHA);
+      const sRGB = this.gl.getParameter(this.gl.BLEND_SRC_RGB);
+      const dRGB = this.gl.getParameter(this.gl.BLEND_DST_RGB);
+      const sA = this.gl.getParameter(this.gl.BLEND_SRC_ALPHA);
+      const dA = this.gl.getParameter(this.gl.BLEND_DST_ALPHA);
       return [sRGB, dRGB, sA, dA];
     }
     applyBlend(data){
@@ -4488,10 +4493,10 @@ const p5wgex = (function(){
             _data.push(data[2]);
             break;
         }
-        if (typeof data[0] === 'number') {
-          this.gl.blendFuncSeparate(data[0], data[1], data[2], data[3]);
-        } else if (typeof data[0] === 'number'){
-          this.gl.blendFuncSeparate(this.dict[data[0]], this.dict[data[1]], this.dict[data[2]], this.dict[data[3]]);
+        if (typeof _data[0] === 'number') {
+          this.gl.blendFuncSeparate(_data[0], _data[1], _data[2], _data[3]);
+        } else if (typeof _data[0] === 'string'){
+          this.gl.blendFuncSeparate(this.dict[_data[0]], this.dict[_data[1]], this.dict[_data[2]], this.dict[_data[3]]);
         }
       }
       return this;
