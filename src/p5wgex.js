@@ -4755,6 +4755,11 @@ const p5wgex = (function(){
         myAlert("setFBOtexture2D failure: Inappropriate name setting.");
         return null;
       }
+      if(kind !== undefined && (typeof kind !== 'string')){
+        // MRTでkindを数字にしてしまうエラーが頻発してるので。
+        myAlert("setFBOtexture2D failure: 'kind' must be string. Ordinary value is 'color'.");
+        return null;
+      }
       let fbo = this.fbos[fboName];
       if(!fbo){
         // fboが無い場合の警告
