@@ -608,7 +608,7 @@ const foxIA = (function(){
   // 単純に位置を取得するだけ。押してる間だけその状態を認識し続ける。
   // 簡易版なので多くを期待しないでください...ちゃんといろいろやりたいならPointerPrototypeを使ってね
   // あっちでいろいろやってIA.Interactionで取得すればしたいことは全部できますので。
-  class Locater extends foxIA.Interaction{
+  class Locater extends Interaction{
   	constructor(){
   		super();
   		this.active = false;
