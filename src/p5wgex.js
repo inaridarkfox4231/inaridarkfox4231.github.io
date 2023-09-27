@@ -3222,12 +3222,14 @@ const p5wgex = (function(){
   // params: size=100, detail=1
   // sizeは1辺の長さの半分でdetailは何分割するかです
   // UVはboxと一緒、展開図方式です。
+  // 対角線はdiagonalLine:falseで消せます
   function cubeMesh(params = {}){
-    const {size:s = 100, detail:dt = 1} = params;
+    const {size:s = 100, detail:dt = 1, diagonalLine = true} = params;
 
     return boxMesh({
       size:{x:s, y:s, z:s},
-      detail:{x:dt, y:dt, z:dt}
+      detail:{x:dt, y:dt, z:dt},
+      diagonalLine
     });
   }
 
