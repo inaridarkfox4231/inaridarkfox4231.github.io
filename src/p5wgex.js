@@ -7596,9 +7596,8 @@ const p5wgex = (function(){
         return gr;
       })()});
       const sh = new PlaneShader(this.node);
-      // 内容的にはカバーなので、depthを-1.0にして一番上に来るようにする。
-      // ほんとは一時的にdepth_testをfalseにすべきなんだろうけど。
-      sh.initialize({depth:-1.0});
+      // 描画時にdepthのtestとmaskを両方切ることにした
+      sh.initialize();
       sh.addUniform("sampler2D", "uInfo", "fs");
       sh.addCode(`
         color = texture(uInfo, uv);
@@ -7609,13 +7608,14 @@ const p5wgex = (function(){
     setTargetFrameRate(rate){
       this.targetFrameRate = rate;
     }
-    show(_blend = "blend"){
+    show(){
       // デフォルトで"blend". これで一時的にあれする必要なくなる...はず。
+      // さらにdepthTestの判定も切る、書き込みもしない。クロコなので。
       if (this.pause) return;
       this.update();
       this.node.use("__foxPerformanceChecker", "foxBoard");
       this.node.setTexture("uInfo", "__foxPerformanceChecker");
-      this.node.drawArrays("triangle_strip", {blend:_blend});
+      this.node.drawArrays("triangle_strip", {blend:"blend", depthTest:false, depthMask:false});
       this.node.unbind();
     }
     update(){
