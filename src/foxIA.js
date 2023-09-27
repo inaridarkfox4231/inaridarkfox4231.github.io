@@ -603,9 +603,60 @@ const foxIA = (function(){
     }
   }
 
+  // これクラス化しよ？？Locaterがいい。
+  // タッチの場合は0番のswipeだけを認識する。
+  // 単純に位置を取得するだけ。押してる間だけその状態を認識し続ける。
+  // 簡易版なので多くを期待しないでください...ちゃんといろいろやりたいならPointerPrototypeを使ってね
+  // あっちでいろいろやってIA.Interactionで取得すればしたいことは全部できますので。
+  class Locater extends foxIA.Interaction{
+  	constructor(){
+  		super();
+  		this.active = false;
+  		this.x = 0;
+  		this.y = 0;
+  		this.dx = 0;
+  		this.dy = 0;
+  	}
+  	isActive(){
+  		return this.active;
+  	}
+  	getPos(){
+  		return {x:this.x, y:this.y, dx:this.dx, dy:this.dy};
+  	}
+  	mouseDownDefaultAction(){
+  		this.active = true;
+  	}
+    mouseMoveDefaultAction(dx, dy, x, y){
+      if(this.active){
+        this.x = x;
+        this.y = y;
+  			this.dx = dx;
+  			this.dy = dy;
+      }
+    }
+    mouseUpDefaultAction(){
+      this.active = false;
+    }
+    touchStartDefaultAction(e){
+      this.active = true;
+    }
+    touchSwipeAction(dx, dy, x, y, px, py){
+      if(this.active){
+        this.x = x;
+        this.y = y;
+  			this.dx = dx;
+  			this.dy = dy;
+      }
+    }
+    touchEndDefaultAction(e){
+      this.active = false;
+    }
+  }
+
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
   fox.Inspector = Inspector;
+  fox.Locater = Locater;
 
   return fox;
 })();

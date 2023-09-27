@@ -3037,7 +3037,8 @@ const p5wgex = (function(){
   // v0,v1,v2,v3はそれぞれ{v:Vec3, uv:Vec3}というオブジェクトで、
   // dtxとdtyに応じて分割される。結果がmeshに登録される。新たに頂点が追加され、
   // それに基づいて面の番号が追加される。
-  function quadMeshPartition(mesh, v0, v1, v2, v3, dtx, dty){
+  // diagonalLineがfalseの場合、対角線は用意されない。
+  function quadMeshPartition(mesh, v0, v1, v2, v3, dtx, dty, diagonalLine = true){
     const vn = mesh.v.length/3; // これがベース. 3で割ってね。
     const dx = v1.v.copy().sub(v0.v);
     const dy = v2.v.copy().sub(v0.v);
@@ -3068,7 +3069,8 @@ const p5wgex = (function(){
         const lu = vn + (dtx+1)*(k+1) + i;
         const ru = vn + (dtx+1)*(k+1) + i+1;
         mesh.f.push(ld, rd, lu, lu, rd, ru);
-        mesh.l.push(ld, rd, rd, lu, ld, lu);
+        mesh.l.push(ld, rd, ld, lu); // 周だけ
+        if (diagonalLine) mesh.l.push(rd, lu); // 対角線
         if (i === dtx-1){
           mesh.l.push(rd, ru);
         }
@@ -3081,13 +3083,13 @@ const p5wgex = (function(){
 
   // squareMeshPartition.
   // quadでv3がv0とv1から平行四辺形を為すように決まる場合。
-  function squareMeshPartition(mesh, v0, v1, v2, dtx, dty){
+  function squareMeshPartition(mesh, v0, v1, v2, dtx, dty, diagonalLine = true){
     const v3 = {};
     const dx = v1.v.copy().sub(v0.v);
     v3.v = v2.v.copy().add(dx);
     const uvx = v1.uv.copy().sub(v0.uv);
     v3.uv = v2.uv.copy().add(uvx);
-    quadMeshPartition(mesh, v0, v1, v2, v3, dtx, dty);
+    quadMeshPartition(mesh, v0, v1, v2, v3, dtx, dty, diagonalLine);
   }
 
   // triangleMeshPartition.
@@ -3151,6 +3153,7 @@ const p5wgex = (function(){
   // auv,buv,cuv,duvはUVを指定するオプションです。
   // 第3引数は使わないので[0,1]とか[1,1]で問題ないです。
   // デフォルトは左下、右下、左上、右上で(0,1),(1,1),(0,0),(1,0).
+  // 対角線が要らない場合はdiagonalLineをfalseに指定する
   function planeMesh(params = {}){
     const {size = {}} = params;
     const {x:sx = 100, y:sy = 100} = size;
@@ -3174,7 +3177,7 @@ const p5wgex = (function(){
     const {
       a = [0,0,0], b = [100,0,0], c = [0,100,0], d = [100,100,0],
       auv = [0,1,0], buv = [1,1,0], cuv = [0,0,0], duv = [1,0,0],
-      detail = {}
+      detail = {}, diagonalLine = true
     } = params;
     const {x:dtx = 1, y:dty = 1} = detail;
     const mesh = new Geometry();
@@ -3187,7 +3190,7 @@ const p5wgex = (function(){
     const uv2 = new Vec3(cuv);
     const uv3 = new Vec3(duv);
     quadMeshPartition(
-      mesh, {v:v0, uv:uv0}, {v:v1, uv:uv1}, {v:v2, uv:uv2}, {v:v3, uv:uv3}, dtx, dty
+      mesh, {v:v0, uv:uv0}, {v:v1, uv:uv1}, {v:v2, uv:uv2}, {v:v3, uv:uv3}, dtx, dty, diagonalLine
     );
     return mesh;
   }
@@ -3240,8 +3243,9 @@ const p5wgex = (function(){
   // ・・・x+x+・・・
   // ・・・z-z-・・・
   // ・・・z-z-・・・
+  // 対角線が要らない場合はdiagonalLineをfalseに指定する
   function boxMesh(params = {}){
-    const {size = {}, detail = {}} = params;
+    const {size = {}, detail = {}, diagonalLine = true} = params;
     const {x:sx = 100, y:sy = 100, z:sz = 100} = size;
     const {x:dtx = 1, y:dty = 1, z:dtz = 1} = detail;
     const mesh = new Geometry();
@@ -3278,7 +3282,8 @@ const p5wgex = (function(){
         {v:vVerts[i0], uv:uvVerts[k0]},
         {v:vVerts[i1], uv:uvVerts[k1]},
         {v:vVerts[i2], uv:uvVerts[k2]},
-        dt1, dt2
+        dt1, dt2,
+        diagonalLine
       );
     }
     smp(0,2,4,2,3,0, dty, dtz);
@@ -3532,8 +3537,9 @@ const p5wgex = (function(){
   // UVは若干複雑。上下の円を埋めないなら全体になるが、両サイドも埋めないなら正方形で側面全体。
   // 両サイドを埋める場合、断面のUVは台形となり、これに合わせてUVの設定領域が指定される。側面は横に1/2に圧縮される。
   // さらに上下の円も埋めるならば、これら全体が縦に1/2となり上に移動し、左下と右下に小さい円が2つ。これらが上と下の円になる。
+  // 側面の対角線が要らない場合はdiagonalLineをfalseに指定する
   function truncatedConeMesh(params, isCone = false){
-    const {top = 100, bottom = 0, radius = {}, detail = {}, fillType = {}, angle = {}} = params;
+    const {top = 100, bottom = 0, radius = {}, detail = {}, fillType = {}, angle = {}, diagonalLine = true} = params;
     const {upper:upperRadius = 50, lower:lowerRadius = 50} = radius;
     const {x:dtx = 16, y:dty = 16} = detail;
     const {upper:fillUpper = "fill", lower:fillLower = "fill", side:fillSide = "open"} = fillType;
@@ -3568,7 +3574,7 @@ const p5wgex = (function(){
         const rd = ld + 1;
         mesh.f.push(lu, ld, rd, lu, rd, ru);
         mesh.l.push(lu, ld, lu, rd);
-        if (k>0) {
+        if (k > 0) {
           mesh.l.push(lu, ru);
         }
       }
@@ -3588,7 +3594,8 @@ const p5wgex = (function(){
         a:[0, 0, bottom], b:[lowerRadius, 0, bottom],
         c:[0, 0, top], d:[upperRadius, 0, top],
         auv:[0,1,0], buv:[lowerUVLength,1,0],
-        cuv:[0,0,0], duv:[upperUVLength,0,0], detail:{x:1, y:dty}
+        cuv:[0,0,0], duv:[upperUVLength,0,0], detail:{x:1, y:dty},
+        diagonalLine
       }) : triangleMesh({
         a:[0, 0, bottom], b:[lowerRadius, 0, bottom], c:[0, 0, top],
         auv:[0,1,0], buv:[1,1,0], cuv:[0,0,0], detail:dty
@@ -3597,7 +3604,8 @@ const p5wgex = (function(){
         a:[-lowerRadius, 0, bottom], b:[0, 0, bottom],
         c:[-upperRadius, 0, top], d:[0, 0, top],
         auv:[1-lowerUVLength,1,0], buv:[1,1,0],
-        cuv:[1-upperUVLength,0,0], duv:[1,0,0], detail:{x:1, y:dty}
+        cuv:[1-upperUVLength,0,0], duv:[1,0,0], detail:{x:1, y:dty},
+        diagonalLine
       }) : triangleMesh({
         a:[-lowerRadius, 0, bottom], b:[0, 0, bottom], c:[0, 0, top],
         auv:[0,1,0], buv:[1,1,0], cuv:[1,0,0], detail:dty
