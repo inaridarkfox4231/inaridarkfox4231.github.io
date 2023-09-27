@@ -4327,11 +4327,17 @@ const p5wgex = (function(){
   // largeを自動的に付与させるように仕様変更
   function registMesh(node, mesh, meshName, optionalData = {}){
     const attrData = [];
-    attrData.push(
-      {name:"aPosition", size:3, data:mesh.v},
-      {name:"aNormal", size:3, data:mesh.n},
-      {name:"aTexCoord", size:2, data:mesh.uv}
-    );
+    // aPosition, aNormal, aTexCoordにpropertyを追加する為のオプション
+    // たとえばaPositionにusage:"dynamic_copy"とoutIndex:0を追加したいなら、単純にv:{usage:~~~, outIndex:~~~}でいい。
+    // TF-INSTANCEDの場合はdivisorも指定しないといけないようです...レアケースかもしれないけど。
+    const {v = {}, n = {}, uv = {}} = optionalData;
+    const vData = {name:"aPosition", size:3, data:mesh.v};
+    for(const prop of Object.keys(v)) vData[prop] = v[prop];
+    const nData = {name:"aNormal", size:3, data:mesh.n};
+    for(const prop of Object.keys(n)) nData[prop] = n[prop];
+    const uvData = {name:"aTexCoord", size:2, data:mesh.uv};
+    for(const prop of Object.keys(uv)) uvData[prop] = uv[prop];
+    attrData.push(vData, nData, uvData);
     // これだとインスタンシングやトラフィーに対応できないのでそのままぶち込めばいい
     /*
     for(const attr of otherAttrs){
@@ -6681,21 +6687,33 @@ const p5wgex = (function(){
   // 重複部分が多い場合、同じのをいちいち書くのが面倒なので、
   // テンプレートを作りましょうって話。
 
-  // utilities.
-  function _convertAttributesToText(attrs, version = 2){
+  // attrを用意する
+  function _convertAttributesToText(attrs){
     let result = ``;
-    const prefix = (version === 2 ? `in` : `attribute`);
-    for(let i=0; i<attrs.length; i++){
+    const prefix = `in`;
+    for (let i = 0; i < attrs.length; i++) {
       const attr = attrs[i];
       result += prefix +  ` ` + attr.type + ` ` + attr.name + `;`;
     }
     return result;
   }
 
-  function _convertVaryingsToText(varyings, location, version = 2){
+  // TF用のoutVaryingsはinの後で用意する
+  function _convertOutVaryingsToText(outVaryings){
     let result = ``;
-    const prefix = (version === 1 ? `varying` : (location === `vs` ? `out` : `in`));
-    for(let i=0; i<varyings.length; i++){
+    const prefix = `out`;
+    for (let i = 0; i < outVaryings.length; i++) {
+      const outVarying = outVaryings[i];
+      result += prefix +  ` ` + outVarying.type + ` ` + outVarying.name + `;`;
+    }
+    return result;
+  }
+
+  // varyingsを用意する
+  function _convertVaryingsToText(varyings, location){
+    let result = ``;
+    const prefix = (location === `vs` ? `out` : `in`);
+    for (let i = 0; i < varyings.length; i++) {
       const varying = varyings[i];
       result += prefix +  ` ` + varying.type + ` ` + varying.name + `;`;
     }
@@ -6724,6 +6742,7 @@ const p5wgex = (function(){
     }
     initialize(options = {}){
       this.attrs = [];
+      this.outVaryings = [];
       this.varyings = [];
 
       this.vs = {};
@@ -6752,6 +6771,14 @@ const p5wgex = (function(){
     }
     addAttr(type, name){
       this.attrs.push({type, name});
+      return this;
+    }
+    clearOutVaryings(){
+      this.outVaryings = [];
+      return this;
+    }
+    addOutVarying(type, name){
+      this.outVaryings.push({type, name});
       return this;
     }
     clearVaryings(){
@@ -6812,6 +6839,7 @@ const p5wgex = (function(){
       `;
       _vs += this.vs.precisions;
       _vs += _convertAttributesToText(this.attrs);
+      _vs += _convertOutVaryingsToText(this.outVaryings);
       _vs += this.vs.constants;
       _vs += this.vs.uniforms;
       _vs += _convertVaryingsToText(this.varyings, "vs");
@@ -6854,7 +6882,9 @@ const p5wgex = (function(){
       if (showVertexShader) { console.log(_vs); }
       if (showFragmentShader) { console.log(_fs); }
       // 登録
-      this.node.registPainter(name, _vs, _fs);
+      // TFの場合はoutVaryingsが必要になる。それをoptionsで指定する。
+      const {outVaryings = []} = options;
+      this.node.registPainter(name, _vs, _fs, outVaryings);
       return this;
     }
     draw(options = {}){
@@ -6988,6 +7018,8 @@ const p5wgex = (function(){
           color.rgb = result;
         }
       `;
+      // おそらくこっちにpostProcessを持ってきているのは、あれですね。
+      // mainProcessで取得したcolorに何か加工をすることが出来るようにするためですね。
       this.fs.postProcess =
       `
         fragColor = color * vec4(vec3(color.a), 1.0);
@@ -7227,6 +7259,10 @@ const p5wgex = (function(){
       this.currentShader.addAttr(type, name);
       return this;
     }
+    addOutVarying(type, name){
+      this.currentShader.addOutVarying(type, name);
+      return this;
+    }
     addVarying(type, name){
       this.currentShader.addVarying(type, name);
       return this;
@@ -7434,23 +7470,6 @@ const p5wgex = (function(){
                .setUniform("uModelNormalMatrix", modelNormalMat);
       return this;
     }
-    /*
-    renderPrepare(tf, cam, process = [], initializeTransform = true){
-      // 廃止予定
-
-      // render改めrenderPrepare.
-      // ここでは準備するだけにしよう。
-      // forwardは個別のレンダリング用。
-      // deferredはシーンを用意するだけ。
-      // デフォルトではtfをレンダーのたびに初期化します
-      if (initializeTransform) tf.initialize();
-      // トランスフォームの実行
-      tf.create(process);
-      this.setMatrixUniforms(tf, cam);
-      // ドローコールはしない
-      return this;
-    }
-    */
     output(){
       // deferred用。そのうち準備する。
     }
@@ -7485,6 +7504,7 @@ const p5wgex = (function(){
       })()});
       const sh = new PlaneShader(this.node);
       // 内容的にはカバーなので、depthを-1.0にして一番上に来るようにする。
+      // ほんとは一時的にdepth_testをfalseにすべきなんだろうけど。
       sh.initialize({depth:-1.0});
       sh.addUniform("sampler2D", "uInfo", "fs");
       sh.addCode(`
