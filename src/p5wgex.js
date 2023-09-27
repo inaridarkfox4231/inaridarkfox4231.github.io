@@ -4438,9 +4438,10 @@ const p5wgex = (function(){
       this.currentFBO = null; // これがないとfbの一時的な切り替えができないので。文字列またはnull.
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
-      //this.prepareDefault(); // defaultShaderの構築
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
-      this.blendState = {use:false, state:[]}; // use, state.
+      this.blendState = {use:false, state:[1,0,1,0]}; // useはデフォルトでfalse, stateはデフォルトで1,0,1,0です。単純に上書き。
+      this.depthState = {test:true, write:true}; // testは実行する、writeも実行するのがデフォルト。
+      this.cullState = {use:false, mode:"back"}; // useはデフォルトでfalse. modeは"back"がデフォルト。前面のみ描画される。
 
       // 一般的なboard. 要するにfoxBoardって書けば普通にこれ使えるので、もういちいち用意しなくていいんよ。
       // drawArraysは"triangle_strip"です。板ポリ全般で使えます。
@@ -4453,27 +4454,6 @@ const p5wgex = (function(){
       // 最後のはなんじゃい...
       this.gl.getExtension('EXT_color_buffer_float');
     }
-    //prepareDefault(){ // 廃止
-      // copy.
-      //const _copy = getCopyShaders();
-      //this.registPainter("foxCopyPainter", _copy.v, _copy.f);
-
-
-
-      // 4枚のquad. 必要なだけ使う。UVは表示する際に適宜いじる。indexで位置を決めるのでaPositionは不要。
-      /*
-      const aIndexArray = new Array(4*8);
-      const aUvArray = new Array(2*4*8);
-      for(let i=0; i<4*8; i++){ aIndexArray[i] = i; }
-      for(let i=0; i<8; i++){
-        aUvArray[8*i] = 0; aUvArray[8*i+1] = 0; aUvArray[8*i+2] = 1; aUvArray[8*i+3] = 0;
-        aUvArray[8*i+4] = 0; aUvArray[8*i+5] = 1; aUvArray[8*i+6] = 1; aUvArray[8*i+7] = 1;
-      }
-      this.registFigure("foxQuads", [{size:1, name:"aIndex", data:aIndexArray}, {size:2, name:"aUv", data:aUvArray}]);
-      this.registIBO("foxIBOForQuads", {data:[0,1,2, 2,1,3, 4,5,6, 6,5,7, 8,9,10, 10,9,11, 12,13,14, 14,13,15,
-                                        16,17,18, 18,17,19, 20,21,22, 22,21,23, 24,25,26, 26,25,27, 28,29,30, 30,29,31]});
-      */
-    //}
     clearColor(r, g, b, a){
       // clearに使う色を決めるところ
       this.gl.clearColor(r, g, b, a);
@@ -4508,15 +4488,19 @@ const p5wgex = (function(){
       this.gl.enable(this.dict[name]);
       // blendのenable時にフラグを立てる
       if (name === "blend") this.blendState.use = true;
+      if (name === "depth_test") this.depthState.test = true;
+      if (name === "cull_face") this.cullState.use = true;
       return this;
     }
     cullFace(mode){
+      // back, front, front_and_backから選べる。front_and_backって全消しじゃん。要るの？
       if(this.dict[mode] === undefined){
         myAlert("cullFace failured: invalid mode name.");
         return null;
       }
       // デフォルトはBACK（上から見て反時計回り）
       this.gl.cullFace(this.dict[mode]); // default: back.
+      this.cullState.mode = mode; // modeを記録する。
       return this;
     }
     /*
@@ -4536,6 +4520,9 @@ const p5wgex = (function(){
       if (typeof data === "string") {
         // とりあえずblendだけ用意しました
         switch(data) {
+          case "default":
+            this.applyBlend(["one", "zero"]);
+            break;
           case "blend":
             this.applyBlend(["one", "one_minus_src_alpha"]);
             break;
@@ -4573,6 +4560,14 @@ const p5wgex = (function(){
       // 非有効化(cull_face, depth_test, blend)
       this.gl.disable(this.dict[name]);
       if (name === "blend") this.blendState.use = false;
+      if (name === "depth_test") this.depthState.test = false;
+      if (name === "cull_face") this.cullState.use = false;
+      return this;
+    }
+    depthMask(flag){
+      // depthへの書き込みを禁止することができる。そのためにはfalseを指定する。
+      this.gl.depthMask(flag);
+      this.depthState.write = flag; // flagを記録する。
       return this;
     }
     registPainter(name, vs, fs, outVaryings = []){
@@ -4946,7 +4941,10 @@ const p5wgex = (function(){
       // type: arrays, elements, arraysInstanced, elementsInstanced.
       // mode: triangles, lines, points, triangle_strip, 以下略
       // options: first(基本0), count(基本計算済みだがTF-INSTANCEDでは使う場合も？), blend.
-      const {first = 0, count = this.currentFigure.count, blend = "", instanceCount = 1} = options;
+      const {
+        first = 0, count = this.currentFigure.count, blend = "", instanceCount = 1,
+        depthTest = "", depthMask = "", cullFace = ""
+      } = options;
       // blendが""のデフォの場合、blendが非有効であれば有効化されないし、何も起きない。
       // 有効なら外部でapplyBlendで設定したblendingがそのまま使われる。要するに特別なことを何もしない。
       // blendに有効な引数が入ってる場合には有効化される。
@@ -4956,12 +4954,37 @@ const p5wgex = (function(){
       // 一時的に特別な指定をする場合は現在の状態を記録して保存しておく。
       const curBlend = this.blendState.state.slice();
       // blendがdisableの場合は非有効にする
+      // applyBlendは入力がinvalidの場合何もしない(gl関数が何もしないので)。
+      // たとえば blend:"enable" などとした場合、enable("blend")だけが実行されapplyBlend自体は失敗するので設定がそのまま使われる。
+      // つまりblendFuncだけ設定してそれの有効/非有効だけを切り替える使い方ができるが、それが結局 blend:"hoge" とかでもできてしまうので
+      // あまり意味がない...バリデーションの負荷を考えるとこの方がいいと思う。いわゆるホテルのカード差し込み的なあれ。技術の負荷とのトレードオフ。
       if (blend === "disable"){
         this.disable("blend");
       } else if (blend !== "") {
         this.enable("blend"); // ""でも"disable"でもなければ有効にする
         // blendを適用する。disableならすべきことはない。
         this.applyBlend(blend);
+      }
+      // depthはいずれもフラグなので、単純に""でなければtrue/falseの入力をそのまま使うだけでいいし、後で戻せばいいだけ。
+      const depthTestEnabled = this.depthState.test;
+      const depthMaskEnabled = this.depthState.write;
+      if (depthTest !== "") {
+        if (depthTest) { this.enable("depth_test"); } else { this.disable("depth_test"); }
+      }
+      if (depthMask !== "") {
+        this.depthMask(depthMask);
+      }
+      // カリングについて。ほぼblendと同じ。たとえば一時的に切るには"disable", 一時的に付けるには"enable"（気持ちだけ）.
+      // "back"や"front"を指定した場合、一時的にオンになる処理も実行される。
+      const cullFaceEnabled = this.cullState.use;
+      const curCullFace = this.cullState.mode;
+      if (cullFace === "disable") {
+        this.disable("cull_face");
+      } else if (cullFace !== "") {
+        // "disable"以外が明示的に指定されていれば有効化される。
+        this.enable("cull_face");
+        // "back"や"front"を指定すれば、カリングの状態も変更される。invalidの場合何も起きない。
+        this.cullFace(cullFace);
       }
       switch(callName) {
         case "arrays":
@@ -4973,11 +4996,23 @@ const p5wgex = (function(){
         case "elementsInstanced":
           this.gl.drawElementsInstanced(this.dict[mode], this.currentIBO.count, this.currentIBO.intType, 0, instanceCount); break;
       }
-      // blendの有効状態を復元する。描画の前後で異なってはならない。
-      // もともと有効なら有効にする。もともと非有効なら非有効に戻す。重複しても問題ない。
-      if (blendEnabled){ this.enable("blend"); } else { this.disable("blend"); }
-      // blendの状態を復元する。復元する必要があるのは""でも"disable"でもない場合だけ。
-      if (blend !== "disable" && blend !== "") this.applyBlend(curBlend);
+      // blendについて。処理の必要があるのは指定があるときだけ。
+      if (blend !== "") {
+        // もともと有効なら有効にする。もともと非有効なら非有効に戻す。重複しても問題ない。
+        if (blendEnabled) { this.enable("blend"); } else { this.disable("blend"); }
+        // blendの状態を復元する。復元する必要があるのは""でも"disable"でもない場合だけ。
+        if (blend !== "disable") this.applyBlend(curBlend);
+      }
+      // depthTest, depthMaskの状態を復元する。いずれも復元の必要があるのは指定された場合のみである。
+      if (depthTest !== "") {
+        if (depthTestEnabled) { this.enable("depth_test"); } else { this.disable("depth_test"); }
+      }
+      if (depthMask !== "") { this.depthMask(depthMaskEnabled); }
+      // カリングを戻す処理もblendとほぼ同様。
+      if (cullFace !== "") {
+        if (cullFaceEnabled) { this.enable("cull_face"); } else { this.disable("cull_face"); }
+        if (cullFace !== "disable") this.cullFace(curCullFace);
+      }
       return this;
     }
     drawArrays(mode, options = {}){
@@ -6947,9 +6982,6 @@ const p5wgex = (function(){
       const {outVaryings = []} = options;
       this.node.registPainter(name, _vs, _fs, outVaryings);
       return this;
-    }
-    draw(options = {}){
-      // Shader自身に何かしら描画命令を持たせたい場合にどうぞ。
     }
   }
 
