@@ -1255,6 +1255,10 @@ const p5wgex = (function(){
     d.dst_alpha = gl.DST_ALPHA;
     d.one_minus_src_alpha = gl.ONE_MINUS_SRC_ALPHA;
     d.one_minus_dst_alpha = gl.ONE_MINUS_DST_ALPHA;
+    d.const_color = gl.CONSTANT_COLOR;
+    d.one_minus_const_color = gl.ONE_MINUS_CONSTANT_COLOR;
+    d.const.alpha = gl.CONSTANT_ALPHA;
+    d.one_minus_const_alpha = gl.ONE_MINUS_CONSTANT_ALPHA;
     // -------enable-------//
     d.blend = gl.BLEND;
     d.cull_face = gl.CULL_FACE;
@@ -5061,6 +5065,15 @@ const p5wgex = (function(){
       this.drawCall("elementsInstanced", mode, options);
       return this;
     }
+    renderFoxBoard(painterName, options = {}){
+      // foxBoardは_nodeの管轄なのでこっちでやろう。グローバル増やしたくない。
+      // optionsにいろいろ、blendとか、指定を書く。
+      this.use(painterName, "foxBoard");
+      const {uniforms = {}} = options;
+      this.setUniforms(uniforms);
+      this.drawArrays("triangle_strip", options);
+      this.unbind();
+    }
     unbind(){
       // 各種bind解除
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
@@ -7244,14 +7257,6 @@ const p5wgex = (function(){
       this.fs.mainProcess =
         `fragColor = color;`;
       return this;
-    }
-    render(painterName, options = {}){
-      // optionsにいろいろ、blendとか、指定を書く。
-      this.node.use(painterName, "foxBoard");
-      const {uniforms = {}} = options;
-      this.node.setUniforms(uniforms);
-      this.node.drawArrays("triangle_strip", options);
-      this.node.unbind();
     }
   }
 
