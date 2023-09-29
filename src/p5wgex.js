@@ -4811,6 +4811,36 @@ const p5wgex = (function(){
       }
       return this;
     }
+    setUniforms(uniforms = {}){
+      // まとめてuniformをセットする関数。簡易版。
+      // tex,fbo,colorそれぞれについて用意するつもり。{'tex/uTex':myTexのように指定する。}
+      for (const uniformName of Object.keys(uniforms)) {
+        const prop = uniforms[uniformName]; // 値
+        const data = uniformName.split("/");
+        const identifier = data[0];
+        switch(identifier){
+          case "tex":
+            if (data.length > 1) {
+              this.setTexture(data[1], prop);
+            }
+            break;
+          case "fbo":
+            if (data.length > 2) {
+              // たとえばMRTの場合"color", 0 のように指定するので。
+              data[3] = Number(data[3]);
+              this.setFBOtexture2D(data[1], prop, data[2], data[3]);
+            } else if (data.length > 1) {
+              // もうこれでいいやめんどくさい
+              this.setFBOtexture2D(data[1], prop);
+            }
+            break;
+          default:
+            // "/"が使われていない場合。ユニフォーム名に"/"は使えない決まりなので問題ない。
+            this.setUniform(uniformName, prop);
+        }
+      }
+      return this;
+    }
     setViewport(x, y, w, h){
       // 仕様変更で(x,y)は左上の割合座標、wだけそこから右、hだけそこから下にしよう。分かりづらいから。
       // currentのFBOの概念があれば簡単でしょ。たとえば0, 0, 0.5, 0.5なら左上1/4領域。
@@ -7215,6 +7245,14 @@ const p5wgex = (function(){
         `fragColor = color;`;
       return this;
     }
+    render(painterName, options = {}){
+      // optionsにいろいろ、blendとか、指定を書く。
+      this.node.use(painterName, "foxBoard");
+      const {uniforms = {}} = options;
+      this.node.setUniforms(uniforms);
+      this.node.drawArrays("triangle_strip", options);
+      this.node.unbind();
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
@@ -7610,12 +7648,12 @@ const p5wgex = (function(){
     }
     show(){
       // デフォルトで"blend". これで一時的にあれする必要なくなる...はず。
-      // さらにdepthTestの判定も切る、書き込みもしない。クロコなので。
+      // さらにdepthTestの判定も切る、書き込みもしない。クロコなので。cullFaceもdisableにして適用されなくする。
       if (this.pause) return;
       this.update();
       this.node.use("__foxPerformanceChecker", "foxBoard");
       this.node.setTexture("uInfo", "__foxPerformanceChecker");
-      this.node.drawArrays("triangle_strip", {blend:"blend", depthTest:false, depthMask:false});
+      this.node.drawArrays("triangle_strip", {blend:"blend", depthTest:false, depthMask:false, cullFace:"disable"});
       this.node.unbind();
     }
     update(){
