@@ -613,7 +613,7 @@ const foxIA = (function(){
       this.execute("keyup", arguments);
     }
     touchStartDefaultAction(e){
-      this.execute("touchStart", arguments);
+      this.execute("touchstart", arguments);
     }
     doubleTapAction(){
       this.execute("dbltap", arguments);
