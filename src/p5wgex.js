@@ -536,6 +536,8 @@ const foxIA = (function(){
   // addとclearでよいです
   // addでイベントを追加しclearですべて破棄します
   // addで登録するイベント名をリスナーに合わせました（有効化オプションもこれになってるので倣った形です）
+  // 一応touchStartとdbltapと複数登録用意しました、が、一応デスクトップでの運用が主なので、
+  // 本格的にやるならCCみたいに継承してね。
   class Inspector extends Interaction{
     constructor(){
       super();
@@ -550,7 +552,9 @@ const foxIA = (function(){
         dblclick:[],
         dbltap:[],
         keydown:[],
-        keyup:[]
+        keyup:[],
+        touchstart:[], // スマホだとclickが発動しないので代わりに。
+        dbltap:[] // doubleTapですね。これも用意しておきましょ。
       };
     }
     execute(name, args){
@@ -559,7 +563,14 @@ const foxIA = (function(){
       }
     }
     add(name, func){
-      this.functions[name].push(func);
+      // 複数のインタラクションを同時に設定できるようにする
+      if (typeof name === 'string') {
+        this.functions[name].push(func);
+      } else if (Array.isArray(name)) {
+        for (const functionName of name) {
+          this.functions[functionName].push(func);
+        }
+      }
     }
     clear(name){
       this.functions[name] = [];
@@ -596,6 +607,12 @@ const foxIA = (function(){
     }
     keyUpAction(e){
       this.execute("keyup", arguments);
+    }
+    touchStartDefaultAction(e){
+      this.execute("touchStart", arguments);
+    }
+    doubleTapAction(){
+      this.execute("dbltap", arguments);
     }
   }
 
@@ -994,6 +1011,17 @@ const p5wgex = (function(){
       }
     }
     return [1,1,1,1]; // default is white.
+  }
+
+  // coulourの出力であるRGBA(0～1)をcssのrgb表記にコンバートするための関数
+  // これを使わないとfillStyleにぶち込めない
+  function _convertToCssColor(col) {
+    let result = 'rgb(';
+    result += (255*col[0]).toFixed(3).toString() + ", ";
+    result += (255*col[1]).toFixed(3).toString() + ", ";
+    result += (255*col[2]).toFixed(3).toString() + ", ";
+    result += (255*col[3]).toFixed(3).toString() + ")";
+    return result;
   }
 
   // window.alertがうっとうしいので1回しか呼ばないように
@@ -7879,75 +7907,78 @@ const p5wgex = (function(){
   // クラスで定義します
   // いい加減面倒になってきたので
 
-  // 作るときにキャンバスのサイズを指定します
-  // 必要ならレートも指定します
-  // これを使う場合、blendingはone --- one_minus_src_alphaにしないといけない
-  // そのうち整備するつもり
+  // 冷静に考えてレンダリングでやるのは馬鹿げてるのでこの方式でいきます
   class PerformanceChecker{
-    constructor(node, w, h, targetFrameRate = 60){
-      this.node = node;
-      this.initialize(w, h);
+    constructor(canvas, options = {}){
+      const {targetFrameRate = 60, barColor = 'gray', textColor = 'white'} = options;
       this.targetFrameRate = targetFrameRate;
+      this.barColor = barColor;
+      this.textColor = textColor;
+      this.visible = true;
+      // キャンバス要素の作成
+      this.cvs = document.createElement('canvas');
+      this.cvs.width = 76;
+      this.cvs.height = 30;
+      this.cvs.style.position = 'absolute';
+      this.cvs.style.display = 'block';
+      this.cvs.id = 'performanceChecker';
+      this.cvs.style['z-index'] = 1;
+      // キャンバスの親要素の先頭に追加する
+      canvas.parentElement.prepend(this.cvs);
+      // コンテキストの取得
+      this.ctx = this.cvs.getContext('2d');
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.font = 'italic 20px system-ui';
+      // タイマーの用意
       this.timer = new Timer();
       this.timer.initialize("pfc");
-      this.pause = false; // タイマーの動作を止めたいときに使う
     }
-    initialize(w, h){
-      this.node.registTexture("__foxPerformanceChecker", {src:(function(){
-        const gr = createGraphics(w, h);
-        gr.textAlign(CENTER, CENTER);
-        gr.drawingContext.font = 'italic 20px system-ui';
-        gr.noStroke();
-        return gr;
-      })()});
-      const sh = new PlaneShader(this.node);
-      // 描画時にdepthのtestとmaskを両方切ることにした
-      sh.initialize();
-      sh.addUniform("sampler2D", "uInfo", "fs");
-      sh.addCode(`
-        color = texture(uInfo, uv);
-        color.rgb *= color.a;
-      `, "preProcess", "fs");
-      sh.registPainter("__foxPerformanceChecker");
+    isVisible(){
+      return this.visible;
     }
-    setTargetFrameRate(rate){
-      this.targetFrameRate = rate;
-    }
-    show(){
-      // デフォルトで"blend". これで一時的にあれする必要なくなる...はず。
-      // さらにdepthTestの判定も切る、書き込みもしない。クロコなので。cullFaceもdisableにして適用されなくする。
-      if (this.pause) return;
-      this.update();
-      this.node.use("__foxPerformanceChecker", "foxBoard");
-      this.node.setTexture("uInfo", "__foxPerformanceChecker");
-      this.node.drawArrays("triangle_strip", {blend:"blend", depthTest:false, depthMask:false, cullFace:"disable"});
-      this.node.unbind();
+    setColor(params = {}){
+      const {
+        bar, txt, css = false
+      } = params;
+      if (bar !== undefined) {
+        if (css) { this.barColor = bar; } else {
+          this.barColor = _convertToCssColor(coulour(bar));
+        }
+      }
+      if (txt !== undefined) {
+        if (css) { this.textColor = txt; } else {
+          this.textColor = _convertToCssColor(coulour(txt));
+        }
+      }
     }
     update(){
-      const gr = this.node.getTextureSource("__foxPerformanceChecker");
+      if (!this.visible) return;
       const dt = this.timer.getDelta("pfc");
-      const _frameRate = (dt > 0 ? 1/dt : 0); // 一応0割り対策
+      // 一応、0割り対策。
+      const _frameRate = (dt > 0 ? 1/dt : 0);
       const ratio = _frameRate / this.targetFrameRate;
-      gr.clear();
-      gr.fill(0);
-      gr.rect(0, 0, 76, 30);
-      gr.fill(128);
-      gr.rect(0, 0, 76*ratio, 30);
-      gr.fill(255);
-      gr.text(_frameRate.toFixed(3), 38, 15);
-      this.node.updateTexture("__foxPerformanceChecker");
+      this.ctx.fillStyle = "black";
+      this.ctx.fillRect(0,0,76,30);
+      this.ctx.fillStyle = this.barColor;
+      this.ctx.fillRect(0,0,76*Math.min(ratio, 1),30);
+      this.ctx.fillStyle = this.textColor;
+      this.ctx.fillText(Math.min(_frameRate, this.targetFrameRate).toFixed(3), 38, 15);
     }
-    stop(){
-      // 止めたいとき
-      this.timer.pause("pfc");
-      this.pause = true;
-    }
-    start(){
-      // 動かしたいとき
+    show(){
+      if (this.visible) return;
+      this.cvs.style.display = 'block';
+      this.visible = true;
       this.timer.reStart("pfc");
-      this.pause = false;
+    }
+    hide(){
+      if (!this.visible) return;
+      this.cvs.style.display = 'none';
+      this.visible = false;
+      this.timer.pause("pfc");
     }
   }
+
 
   // ---------------------------------------------------------------------------------------------- //
   // Export.

@@ -540,6 +540,8 @@ const foxIA = (function(){
   // addとclearでよいです
   // addでイベントを追加しclearですべて破棄します
   // addで登録するイベント名をリスナーに合わせました（有効化オプションもこれになってるので倣った形です）
+  // 一応touchStartとdbltapと複数登録用意しました、が、一応デスクトップでの運用が主なので、
+  // 本格的にやるならCCみたいに継承してね。
   class Inspector extends Interaction{
     constructor(){
       super();
@@ -554,7 +556,9 @@ const foxIA = (function(){
         dblclick:[],
         dbltap:[],
         keydown:[],
-        keyup:[]
+        keyup:[],
+        touchstart:[], // スマホだとclickが発動しないので代わりに。
+        dbltap:[] // doubleTapですね。これも用意しておきましょ。
       };
     }
     execute(name, args){
@@ -563,7 +567,14 @@ const foxIA = (function(){
       }
     }
     add(name, func){
-      this.functions[name].push(func);
+      // 複数のインタラクションを同時に設定できるようにする
+      if (typeof name === 'string') {
+        this.functions[name].push(func);
+      } else if (Array.isArray(name)) {
+        for (const functionName of name) {
+          this.functions[functionName].push(func);
+        }
+      }
     }
     clear(name){
       this.functions[name] = [];
@@ -600,6 +611,12 @@ const foxIA = (function(){
     }
     keyUpAction(e){
       this.execute("keyup", arguments);
+    }
+    touchStartDefaultAction(e){
+      this.execute("touchStart", arguments);
+    }
+    doubleTapAction(){
+      this.execute("dbltap", arguments);
     }
   }
 
