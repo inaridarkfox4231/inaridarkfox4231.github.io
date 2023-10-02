@@ -5214,6 +5214,11 @@ const p5wgex = (function(){
               this.setFBOtexture2D(data[1], prop);
             }
             break;
+          case "color":
+            // color/で始まるようにすると、coulour表記が使える。
+            if (data.length > 1) {
+              this.setUniform(data[1], coulour(prop));
+            }
           default:
             // "/"が使われていない場合。ユニフォーム名に"/"は使えない決まりなので問題ない。
             this.setUniform(uniformName, prop);
