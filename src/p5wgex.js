@@ -5166,23 +5166,6 @@ const p5wgex = (function(){
       this.gl.bufferSubData(this.dict[targetName], dstByteOffset, srcData, srcOffset); // srcDataはFloat32Arrayの何か
       return this;
     }
-    /*
-    // これもなくしちゃおうね
-    // もう不要なので
-    setTexture2D(name, _texture){
-      // 非推奨（後方互換性）
-      // 有効になっているPainterがテクスチャユニフォームを持っているとして、それを使えるようにbindする。
-      // 分岐処理！
-      // _textureがstringの場合は登録されているのを使う。
-      if(typeof(_texture) === "string"){
-        this.currentPainter.setTexture2D(name, this.textures[_texture].tex);
-        return this;
-      }
-      // そうでない場合は直接放り込む形で。
-      this.currentPainter.setTexture2D(name, _texture);
-      return this;
-    }
-    */
     setTexture(name, _texture){
       // なるべくこっちを使ってね
       // _textureがstringの場合は登録されているのを使う。
@@ -5369,9 +5352,12 @@ const p5wgex = (function(){
       // mode: triangles, lines, points, triangle_strip, 以下略
       // options: first(基本0), count(基本計算済みだがTF-INSTANCEDでは使う場合も？), blend.
       const {
+        uniforms = {},
         first = 0, count = this.currentFigure.count, blend = "", instanceCount = 1,
         depthTest = "", depthMask = "", cullFace = ""
       } = options;
+      // uniformsに指定することで、直前にsetUniformsで必要なuniformをすべて用意できる。横着したい場合にどうぞ。
+      this.setUniforms(uniforms);
       // blendが""のデフォの場合、blendが非有効であれば有効化されないし、何も起きない。
       // 有効なら外部でapplyBlendで設定したblendingがそのまま使われる。要するに特別なことを何もしない。
       // blendに有効な引数が入ってる場合には有効化される。
