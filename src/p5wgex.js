@@ -294,8 +294,18 @@ const foxIA = (function(){
       // ホイールはキャンバス外で実行することはまずないですね...canvasでいいかと。
       if (wheel) { canvas.addEventListener('wheel', this.wheelAction.bind(this), {passive:false}); }
 
+      // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
+      window.addEventListener('resize', (function(){
+        const newRect = canvas.getBoundingClientRect();
+        this.updateCanvasData(newRect.left, newRect.top);
+      }).bind(this));
+
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
-      const {mouseenter = false, mouseleave = false, click = false, dblclick = false, keydown = false, keyup = false} = options;
+      // リサイズも滅多に使わないのでオプションで。
+      const {
+        mouseenter = false, mouseleave = false, click = false, dblclick = false,
+        keydown = false, keyup = false, resize = false
+      } = options;
       // マウスの出入り
       if (mouseenter) { canvas.addEventListener('mouseenter', this.mouseEnterAction.bind(this), {passive:false}); }
       if (mouseleave) { canvas.addEventListener('mouseleave', this.mouseLeaveAction.bind(this), {passive:false}); }
@@ -306,11 +316,8 @@ const foxIA = (function(){
       // いわゆる押しっぱなしの時の処理についてはフラグの切り替えのために両方必要になるわね
       if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
       if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
-      // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
-      window.addEventListener('resize', (function(){
-        const newRect = canvas.getBoundingClientRect();
-        this.updateCanvasData(newRect.left, newRect.top);
-      }).bind(this));
+      // リサイズ。
+      if (resize) { canvas.addEventListener('resize', this.resizeAction.bind(this), {passive:false}); }
     }
     updateCanvasData(left, top){
       this.canvasLeft = left;
@@ -525,6 +532,9 @@ const foxIA = (function(){
       // キーが離れた時
       //console.log(e.code);
     }
+    resizeAction(){
+      // リサイズ時の処理。
+    }
     getPointers(){
       return this.pointers;
     }
@@ -621,6 +631,8 @@ const foxIA = (function(){
   // 単純に位置を取得するだけ。押してる間だけその状態を認識し続ける。
   // 簡易版なので多くを期待しないでください...ちゃんといろいろやりたいならPointerPrototypeを使ってね
   // あっちでいろいろやってIA.Interactionで取得すればしたいことは全部できますので。
+  // とはいえ、一応activate, move, inActivateによる処理を追加しておきます。
+  // ボタンの種類で分岐処理とかしたい場合は...本家の方を...
   class Locater extends Interaction{
   	constructor(){
   		super();
@@ -629,7 +641,15 @@ const foxIA = (function(){
   		this.y = 0;
   		this.dx = 0;
   		this.dy = 0;
+      this.actions = {}; // activate, inActivate, move.
+      // 関数のデフォルト。
+      this.actions.activate = () => {};
+      this.actions.move = (x, y, dx, dy) => {};
+      this.actions.inActivate = () => {};
   	}
+    setAction(name, func){
+      this.actions[name] = func;
+    }
   	isActive(){
   		return this.active;
   	}
@@ -638,6 +658,7 @@ const foxIA = (function(){
   	}
   	mouseDownDefaultAction(){
   		this.active = true;
+      this.actions.activate();
   	}
     mouseMoveDefaultAction(dx, dy, x, y){
       if(this.active){
@@ -645,13 +666,16 @@ const foxIA = (function(){
         this.y = y;
   			this.dx = dx;
   			this.dy = dy;
+        this.actions.move(x, y, dx, dy);
       }
     }
     mouseUpDefaultAction(){
       this.active = false;
+      this.actions.inActivate();
     }
     touchStartDefaultAction(e){
       this.active = true;
+      this.actions.activate();
     }
     touchSwipeAction(dx, dy, x, y, px, py){
       if(this.active){
@@ -659,10 +683,12 @@ const foxIA = (function(){
         this.y = y;
   			this.dx = dx;
   			this.dy = dy;
+        this.actions.move(x, y, dx, dy);
       }
     }
     touchEndDefaultAction(e){
       this.active = false;
+      this.actions.inActivate();
     }
   }
 
