@@ -188,15 +188,18 @@ const foxIA = (function(){
       this.dy = 0;
       this.prevX = 0;
       this.prevY = 0;
-      this.canvasLeft = 0;
-      this.canvasTop = 0;
+      //this.canvasLeft = 0;
+      //this.canvasTop = 0;
+      this.rect = {width:0, height:0, left:0, top:0};
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
-    mouseInitialize(e, left, top){
-      this.x = e.clientX - left;
-      this.y = e.clientY - top;
-      this.canvasLeft = left;
-      this.canvasTop = top;
+    mouseInitialize(e, rect){
+      this.x = e.clientX - rect.left;
+      this.y = e.clientY - rect.top;
+      //this.canvasLeft = left;
+      //this.canvasTop = top;
+      const {width, height, left, top} = rect;
+      this.rect = {width, height, left, top};
       this.prevX = this.x;
       this.prevY = this.y;
       this.button = e.button; // 0:left, 1:center, 2:right
@@ -206,44 +209,48 @@ const foxIA = (function(){
     mouseUpdate(e){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (e.clientX - this.canvasLeft - this.x);
-      this.dy = (e.clientY - this.canvasTop - this.y);
-      this.x = e.clientX - this.canvasLeft;
-      this.y = e.clientY - this.canvasTop;
+      this.dx = (e.clientX - this.rect.left - this.x);
+      this.dy = (e.clientY - this.rect.top - this.y);
+      this.x = e.clientX - this.rect.left;
+      this.y = e.clientY - this.rect.top;
     }
     mouseMoveAction(e){
     }
     mouseUpAction(){
     }
-    touchInitialize(t, left, top){
+    touchInitialize(t, rect){
       this.id = t.identifier;
-      this.x = t.pageX - left; // 要するにmouseX的なやつ
-      this.y = t.pageY - top; // 要するにmouseY的なやつ
-      this.canvasLeft = left;
-      this.canvasTop = top;
+      this.x = t.pageX - rect.left; // 要するにmouseX的なやつ
+      this.y = t.pageY - rect.top; // 要するにmouseY的なやつ
+      //this.canvasLeft = left;
+      //this.canvasTop = top;
+      const {width, height, left, top} = rect;
+      this.rect = {width, height, left, top};
       this.prevX = this.x;
       this.prevY = this.y;
     }
-    updateCanvasData(left, top){
+    updateCanvasData(rect){
       // マウスでもタッチでも実行する
-      const prevLeft = this.canvasLeft;
-      const prevTop = this.canvasTop;
-      this.canvasLeft = left;
-      this.canvasTop = top;
-      this.x += prevLeft - left;
-      this.y += prevTop - top;
-      this.prevX += prevLeft - left;
-      this.prevY += prevTop - top;
+      const prevLeft = this.rect.left;
+      const prevTop = this.rect.top;
+      //this.canvasLeft = left;
+      //this.canvasTop = top;
+      const {width, height, left, top} = rect;
+      this.rect = {width, height, left, top};
+      this.x += prevLeft - l;
+      this.y += prevTop - t;
+      this.prevX += prevLeft - l;
+      this.prevY += prevTop - t;
     }
     touchStartAction(t){
     }
     touchUpdate(t){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (t.pageX - this.canvasLeft - this.x);
-      this.dy = (t.pageY - this.canvasTop - this.y);
-      this.x = t.pageX - this.canvasLeft;
-      this.y = t.pageY - this.canvasTop;
+      this.dx = (t.pageX - this.rect.left - this.x);
+      this.dy = (t.pageY - this.rect.top - this.y);
+      this.x = t.pageX - this.rect.left;
+      this.y = t.pageY - this.rect.top;
     }
     touchMoveAction(t){
     }
@@ -255,25 +262,46 @@ const foxIA = (function(){
   // 一部のメソッドはオプションで用意するかしないか決めることにしましょう
   // mouseLeaveとかdoubleClickとか場合によっては使わないでしょう
   // そこらへん
+  // canvasで初期化できるようにするか～。で、factoryはoptionsに含めてしまおう。
+  // 特に指定が無ければ空っぽのoptionsでやればいい。factoryが欲しい、clickやdblclickを有効化したい場合に
+  // optionsを書けばいいわね。
+  // setFactoryは必要になったら用意しましょ
   class Interaction{
-    constructor(factory = (() => new PointerPrototype())){
+    constructor(canvas, options = {}){
       this.pointers = [];
-      this.factory = factory;
-      this.width = 0;
-      this.height = 0;
-      this.canvasLeft = 0; // touch用
-      this.canvasTop = 0; // touch用
+      this.factory = (() => new PointerPrototype());
+      //this.width = 0;
+      //this.height = 0;
+      // leftとtopがwindowのサイズ変更に対応するために必要
+      // コンストラクタでは出来ませんね。初期化時の処理。
+      this.rect = {width:0, height:0, left:0, top:0};
+      //this.canvasWidth = 0;
+      //this.canvasHeight = 0;
+      //this.canvasLeft = 0; // touch用
+      //this.canvasTop = 0; // touch用
       this.tapCount = 0; // ダブルタップ判定用
       this.firstTapped = {x:0, y:0};
+      // コンストラクタで初期化しましょ
+      this.initialize(canvas, options);
     }
     initialize(canvas, options = {}){
+      // 念のためpointersを空にする
+      this.pointers = [];
+      // factoryを定義
+      const {factory = (() => new PointerPrototype())} = options;
+      this.factory = factory;
       // 横幅縦幅を定義
-      this.width = Number((canvas.style.width).split("px")[0]);
-      this.height = Number((canvas.style.height).split("px")[0]);
+      //this.width = Number((canvas.style.width).split("px")[0]);
+      //this.height = Number((canvas.style.height).split("px")[0]);
       // touchの場合はこうしないときちんとキャンバス上の座標が取得できない
-      const rect = canvas.getBoundingClientRect();
-      this.canvasLeft = rect.left;
-      this.canvasTop = rect.top;
+      // どうもrectからwidthとheightが出る？じゃあそれでいいですね。pixelDensityによらない、css上の値。
+      //const rect = canvas.getBoundingClientRect();
+      const {width, height, left, top} = canvas.getBoundingClientRect();
+      this.rect = {width, height, left, top};
+      //this.canvasWidth = rect.width;
+      //this.canvasHeight = rect.height;
+      //this.canvasLeft = rect.left;
+      //this.canvasTop = rect.top;
       // 右クリック時のメニュー表示を殺す
       document.oncontextmenu = (e) => { e.preventDefault(); }
       // touchのデフォルトアクションを殺す
@@ -298,8 +326,19 @@ const foxIA = (function(){
       // ホイールはキャンバス外で実行することはまずないですね...canvasでいいかと。
       if (wheel) { canvas.addEventListener('wheel', this.wheelAction.bind(this), {passive:false}); }
 
+      // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
+      window.addEventListener('resize', (function(){
+        const newRect = canvas.getBoundingClientRect();
+        //this.updateCanvasData(newRect.left, newRect.top);
+        this.updateCanvasData(newRect);
+      }).bind(this));
+
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
-      const {mouseenter = false, mouseleave = false, click = false, dblclick = false, keydown = false, keyup = false} = options;
+      // リサイズも滅多に使わないのでオプションで。
+      const {
+        mouseenter = false, mouseleave = false, click = false, dblclick = false,
+        keydown = false, keyup = false, resize = false
+      } = options;
       // マウスの出入り
       if (mouseenter) { canvas.addEventListener('mouseenter', this.mouseEnterAction.bind(this), {passive:false}); }
       if (mouseleave) { canvas.addEventListener('mouseleave', this.mouseLeaveAction.bind(this), {passive:false}); }
@@ -310,16 +349,16 @@ const foxIA = (function(){
       // いわゆる押しっぱなしの時の処理についてはフラグの切り替えのために両方必要になるわね
       if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
       if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
-      // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
-      window.addEventListener('resize', (function(){
-        const newRect = canvas.getBoundingClientRect();
-        this.updateCanvasData(newRect.left, newRect.top);
-      }).bind(this));
+      // リサイズ。
+      if (resize) { canvas.addEventListener('resize', this.resizeAction.bind(this), {passive:false}); }
     }
-    updateCanvasData(left, top){
-      this.canvasLeft = left;
-      this.canvasTop = top;
-      for(const p of this.pointers){ p.updateCanvasData(left, top); }
+    updateCanvasData(rect){
+      // 対象のキャンバスを更新
+      const {width, height, left, top} = rect;
+      this.rect = {width, height, left, top};
+      //this.canvasLeft = left;
+      //this.canvasTop = top;
+      for(const p of this.pointers){ p.updateCanvasData(rect); }
     }
     mouseDownAction(e){
       this.mouseDownPointerAction(e);
@@ -327,7 +366,8 @@ const foxIA = (function(){
     }
     mouseDownPointerAction(e){
       const p = this.factory();
-      p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
+      //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
+      p.mouseInitialize(e, this.rect);
       p.mouseDownAction(e);
       this.pointers.push(p);
     }
@@ -336,7 +376,8 @@ const foxIA = (function(){
     }
     mouseMoveAction(e){
       this.mouseMovePointerAction(e);
-      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.canvasLeft, e.clientY - this.canvasTop);
+      //this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.canvasLeft, e.clientY - this.canvasTop);
+      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.rect.left, e.clientY - this.rect.top);
     }
     mouseMovePointerAction(e){
       if(this.pointers.length == 0){ return; }
@@ -426,7 +467,8 @@ const foxIA = (function(){
         }
         if(!equalFlag){
           const p = this.factory();
-          p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
+          //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
+          p.touchInitialize(currentTouches[i], this.rect);
           p.touchStartAction(currentTouches[i]);
           newPointers.push(p);
         }
@@ -529,6 +571,9 @@ const foxIA = (function(){
       // キーが離れた時
       //console.log(e.code);
     }
+    resizeAction(){
+      // リサイズ時の処理。
+    }
     getPointers(){
       return this.pointers;
     }
@@ -543,8 +588,8 @@ const foxIA = (function(){
   // 一応touchStartとdbltapと複数登録用意しました、が、一応デスクトップでの運用が主なので、
   // 本格的にやるならCCみたいに継承してね。
   class Inspector extends Interaction{
-    constructor(){
-      super();
+    constructor(canvas, options = {}){
+      super(canvas, options);
       this.functions = {
         mousedown:[],
         mousemove:[],
@@ -621,52 +666,97 @@ const foxIA = (function(){
   }
 
   // これクラス化しよ？？Locaterがいい。
-  // タッチの場合は0番のswipeだけを認識する。
-  // 単純に位置を取得するだけ。押してる間だけその状態を認識し続ける。
-  // 簡易版なので多くを期待しないでください...ちゃんといろいろやりたいならPointerPrototypeを使ってね
-  // あっちでいろいろやってIA.Interactionで取得すればしたいことは全部できますので。
+  // 簡易版。毎フレームupdateする。pointersを調べて末尾を取る。末尾なので、常に新規が採用される。
+  // 位置情報を更新する。x,y,dx,dyを使う。また関数を導入できる。
+  // 発動時、移動時、activeを前提として常時、終了時のアクションが存在する。終了時はタッチの場合、
+  // pointersが空になるとき。なぜなら常に新規で更新されるので。
+  // 取得するときclampとnormalizeのoptionを設けるようにしました。
+  // factorを設けてすぐに値が変わらないようにできる仕組みを導入しました。
+  // 自由に変えられるようにするかどうかは応相談...できるだけ軽量で行きたいので。
   class Locater extends Interaction{
-  	constructor(){
-  		super();
+  	constructor(canvas, options = {}){
+  		super(canvas, options);
   		this.active = false;
   		this.x = 0;
   		this.y = 0;
   		this.dx = 0;
   		this.dy = 0;
+      // 位置情報を滑らかに変化させたいときはoptionsでfactorを定義する。
+      const {factor = 1} = options;
+      this.factor = factor;
+      // 関数族
+      this.actions = {}; // activate, inActivate, move.
+      // 関数のデフォルト。
+      this.actions.activate = () => {};
+      this.actions.move = (x, y, dx, dy) => {};
+      this.actions.update = (x, y, dx, dy) => {};
+      this.actions.inActivate = () => {};
   	}
+    update(){
+      if (this.pointers.length > 0) {
+        // 末尾（新規）を採用する。
+        const p = this.pointers[this.pointers.length - 1];
+        // 急に変化させたくない場合に徐々に変化させる選択肢を設ける
+        const factor = this.factor;
+        this.x += (p.x - this.x) * factor;
+        this.y += (p.y - this.y) * factor;
+        this.dx += (p.dx - this.dx) * factor;
+        this.dy += (p.dy - this.dy) * factor;
+      }
+      if (this.active) {
+        this.actions.update(this.x, this.y, this.dx, this.dy);
+      }
+    }
+    setAction(name, func){
+      this.actions[name] = func;
+    }
   	isActive(){
   		return this.active;
   	}
-  	getPos(){
-  		return {x:this.x, y:this.y, dx:this.dx, dy:this.dy};
+  	getPos(options = {}){
+      const {clamp = false, normalize = false} = options;
+      const {width:w, height:h} = this.rect;
+      // clampのoptionsがある場合は先にclampしてから正規化する。
+      // dxとdyはclampの必要がない。
+      const result = {x:this.x, y:this.y, dx:this.dx, dy:this.dy};
+      if (clamp) {
+        result.x = Math.max(0, Math.min(w, result.x));
+        result.y = Math.max(0, Math.min(h, result.y));
+      }
+      // 正規化して0～1の値を返せるようにする。
+      if (normalize) {
+        result.x /= w;
+        result.y /= h;
+        result.dx /= w;
+        result.dy /= h;
+      }
+  		return result;
   	}
   	mouseDownDefaultAction(){
   		this.active = true;
+      this.actions.activate();
   	}
     mouseMoveDefaultAction(dx, dy, x, y){
       if(this.active){
-        this.x = x;
-        this.y = y;
-  			this.dx = dx;
-  			this.dy = dy;
+        this.actions.move(x, y, dx, dy);
       }
     }
     mouseUpDefaultAction(){
       this.active = false;
+      this.actions.inActivate();
     }
     touchStartDefaultAction(e){
       this.active = true;
+      this.actions.activate();
     }
     touchSwipeAction(dx, dy, x, y, px, py){
-      if(this.active){
-        this.x = x;
-        this.y = y;
-  			this.dx = dx;
-  			this.dy = dy;
+      if (this.active) {
+        this.actions.move(x, y, dx, dy);
       }
     }
     touchEndDefaultAction(e){
       this.active = false;
+      this.actions.inActivate();
     }
   }
 

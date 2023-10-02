@@ -4845,14 +4845,20 @@ const p5wgex = (function(){
       // 最後のはなんじゃい...
       this.gl.getExtension('EXT_color_buffer_float');
     }
-    clearColor(r, g, b, a){
+    clearColor(...args){
       // clearに使う色を決めるところ
-      this.gl.clearColor(r, g, b, a);
+      // 従来のr,g,b,aも含め、coulour表記でもOKとする
+      this.gl.clearColor(...coulour(...args));
       return this;
     }
-    clear(){
+    clear(...args){
       // 通常のクリア。対象はスクリーンバッファ、もしくはその時のフレームバッファ
       // カスタムできた方がいいのかどうかはまだよくわからないが...
+      // 引数がある場合にclearColorを更新する処理を実行する。
+      // 毎回変えたいなら引数あり、固定したいなら引数無し、状況に応じて使い分ける。
+      if (arguments.length > 0) {
+        this.clearColor(...args);
+      }
       this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
       return this;
     }
