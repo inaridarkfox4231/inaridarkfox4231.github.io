@@ -2112,6 +2112,7 @@ const p5wgex = (function(){
     if(src === undefined){ return null; }
     if(src instanceof Uint8Array || src instanceof Float32Array){ return src; }
     if(src instanceof HTMLImageElement){ return src; }
+    if(src instanceof HTMLCanvasElement){ return src; }
     if(src instanceof p5.Graphics){ return src.elt; }
     if(src instanceof p5.Image){ return src.canvas; }
     myAlert("You cannot extract data from that source.");
@@ -5219,6 +5220,7 @@ const p5wgex = (function(){
             if (data.length > 1) {
               this.setUniform(data[1], coulour(prop));
             }
+            break;
           default:
             // "/"が使われていない場合。ユニフォーム名に"/"は使えない決まりなので問題ない。
             this.setUniform(uniformName, prop);
