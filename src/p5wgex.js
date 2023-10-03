@@ -4851,6 +4851,67 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
+  // Default Painters.
+
+  // textureRenderer.
+  // 表示位置をいじれるようにするのとか色々付け加えたいところ。
+  function _createTextureRenderer(node){
+    // デフォルトの"leftUp"とする。
+    const sh = new ex.PlaneShader(node);
+    sh.initialize();
+    sh.addUniform("bool", "uFlip", "vs");
+    sh.addCode(`
+      // fboの場合はuvを逆にする。
+      if (uFlip) {
+        vUv.y = 1.0 - vUv.y;
+      }
+    `, "preProcess", "vs");
+    sh.addUniform("sampler2D", "uTex", "fs");
+    sh.addUniform("vec4", "uMonoColor", "fs");
+    sh.addUniform("vec4", "uFromColor", "fs");
+    sh.addUniform("vec4", "uToColor", "fs");
+    sh.addUniform("vec4", "uGradStop", "fs");
+    sh.addUniform("int", "uGradType", "fs");
+    sh.addUniform("int", "uMaterialFlag", "fs");
+    sh.addUniform("bool", "uSmoothGrad", "fs");
+    sh.addCode(`
+      vec4 linearGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in vec2 p){
+        vec2 n = normalize(toPos - fromPos);
+        float l = length(toPos - fromPos);
+        float ratio = clamp(dot(p - fromPos, n), 0.0, l)/l;
+        if (uSmoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
+        return (1.0 - ratio) * fromColor + ratio * toColor;
+      }
+      vec4 radialGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in vec2 p){
+        float l = length(toPos - fromPos);
+        float ratio = clamp(length(p - fromPos), 0.0, l)/l;
+        if (uSmoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
+        return (1.0 - ratio) * fromColor + ratio * toColor;
+      }
+    `, "routines", "fs");
+    sh.addCode(`
+      if (uMaterialFlag == 0) {
+        color = texture(uTex, uv);
+        color.rgb *= color.a;
+      }
+      if (uMaterialFlag == 1) {
+        color = uMonoColor;
+        color.rgb *= color.a;
+      }
+      if (uMaterialFlag == 2) {
+        if (uGradType == 0) {
+          color = linearGradient(uFromColor, uToColor, uGradStop.xy, uGradStop.zw, uv);
+        }
+        if (uGradType == 1) {
+          color = radialGradient(uFromColor, uToColor, uGradStop.xy, uGradStop.zw, uv);
+        }
+        color.rgb *= color.a;
+      }
+    `, "preProcess", "fs");
+    sh.registPainter("__foxTextureRenderer__");
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
   // RenderNode.
 
   class RenderNode{
@@ -4876,6 +4937,10 @@ const p5wgex = (function(){
       // 一般的なboard. 要するにfoxBoardって書けば普通にこれ使えるので、もういちいち用意しなくていいんよ。
       // drawArraysは"triangle_strip"です。板ポリ全般で使えます。
       this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
+    }
+    createDefaultPainters(){
+      // デフォルトのペインターを作る
+      _createTextureRenderer();
     }
     enableExtensions(){
       // color_buffer_floatのEXT処理。pavelさんはこれ使ってwebgl2でもfloatへの書き込みが出来るようにしてた。
@@ -4939,19 +5004,6 @@ const p5wgex = (function(){
       this.cullState.mode = mode; // modeを記録する。
       return this;
     }
-    /*
-    // どっちも廃止
-    blendFunc(sFactorName, dFactorName){
-      // blendFunc. ファクターを一律に決める。
-      this.gl.blendFunc(this.dict[sFactorName], this.dict[dFactorName]);
-      return this;
-    }
-    blendFuncSeparate(sRGBFactorName, dRGBFactorName, sAFactorName, dAFactorName){
-      // separate.
-      this.gl.blendFuncSeparate(this.dict[sRGBFactorName], this.dict[dRGBFactorName], this.dict[sAFactorName], this.dict[dAFactorName]);
-      return this;
-    }
-    */
     blendColor(...args){
       // colorのblendに使う色指定
       this.gl.blendColor(...coulour(...args));
@@ -5077,6 +5129,14 @@ const p5wgex = (function(){
       return this;
     }
     registTexture(name, info = {}){
+      // infoに誤ってsrcをそのままぶちこまないようにしないといけない？
+      // infoが次のタイプの場合は{src:info}で置き換えることとする。
+      // もっともこの定義の仕方では他のオプションを用意できないので、あくまでも簡易措置である。
+      if (info instanceof Uint8Array || info instanceof Float32Array || info instanceof HTMLImageElement ||
+          info instanceof HTMLCanvasElement || info instanceof p5.Graphics || info instanceof p5.Image) {
+        this.registTexture(name, {src:info});
+        return this;
+      }
       // お待たせしました！！
       info.name = name;
       const newTexture = new Texture(this.gl, info, this.dict);
@@ -5518,6 +5578,54 @@ const p5wgex = (function(){
       this.setUniforms(uniforms);
       this.drawArrays("triangle_strip", options);
       this.unbind();
+    }
+    renderTexture(materialType, target, options = {}){
+      _node.use("__foxTextureRenderer__", "foxBoard");
+      const materialTypeData = materialType.split('/');
+      const identifier = materialTypeData[0];
+      materialTypeData.shift(0);
+      if (identifier === 'fbo') {
+        // fboの場合はuvを縦にflipする
+        _node.setUniform("uFlip", true);
+      } else {
+        _node.setUniform("uFlip", false);
+      }
+      switch(identifier){
+        case 'tex':
+          _node.setUniform("uMaterialFlag", 0);
+          _node.setTexture("uTex", target);
+          break;
+        case 'fbo':
+          _node.setUniform("uMaterialFlag", 0);
+          if (materialTypeData.length > 0) {
+            _node.setFBOtexture2D("uTex", target, materialTypeData[0], Number(materialTypeData[1]));
+          } else {
+            _node.setFBOtexture2D("uTex", target);
+          }
+          break;
+        case 'color':
+          _node.setUniform("uMaterialFlag", 1);
+          _node.setUniform("uMonoColor", ex.coulour(target));
+          break;
+        case 'grad':
+          const {from = {}, to = {}, type = "linear", smooth = false} = target;
+          const {color:fromColor = "white", x:fromX = 0, y:fromY = 0} = from;
+          const {color:toColor = "black", x:toX = 1, y:toY = 1} = to;
+          _node.setUniform("uMaterialFlag", 2);
+          _node.setUniform("uFromColor", ex.coulour(fromColor));
+          _node.setUniform("uToColor", ex.coulour(toColor));
+          _node.setUniform("uGradStop", [fromX, fromY, toX, toY]);
+          _node.setUniform("uGradType", (type === "linear" ? 0 : 1));
+          _node.setUniform("uSmoothGrad", smooth);
+          break;
+      }
+      const {blend = "blend", depthMask = false, depthTest = false, cullFace = "disable"} = options;
+      options.blend = blend;
+      options.depthMask = depthMask;
+      options.depthTest = depthTest;
+      options.cullFace = cullFace;
+      _node.drawArrays("triangle_strip", options);
+      _node.unbind();
     }
     unbind(){
       // 各種bind解除
