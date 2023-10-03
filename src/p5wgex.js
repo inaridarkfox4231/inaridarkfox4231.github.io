@@ -4831,7 +4831,8 @@ const p5wgex = (function(){
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
-      this.blendState = {use:false, state:[1,0,1,0]}; // useはデフォルトでfalse, stateはデフォルトで1,0,1,0です。単純に上書き。
+      // useはデフォルトでfalse, stateはデフォルトで1,0,1,0です。単純に上書き。colorはblendColorに使うやつ。
+      this.blendState = {use:false, state:[1,0,1,0], color:[0,0,0,0]};
       this.depthState = {test:true, write:true}; // testは実行する、writeも実行するのがデフォルト。
       this.cullState = {use:false, mode:"back"}; // useはデフォルトでfalse. modeは"back"がデフォルト。前面のみ描画される。
 
@@ -4914,15 +4915,23 @@ const p5wgex = (function(){
       return this;
     }
     */
+    blendColor(...args){
+      // colorのblendに使う色指定
+      this.gl.blendColor(...coulour(...args));
+      return this;
+    }
     applyBlend(data){
       if (typeof data === "string") {
-        // とりあえずblendだけ用意しました
+        // とりあえずblendだけ用意しました. colorを実験的に追加
         switch(data) {
           case "default":
             this.applyBlend(["one", "zero"]);
             break;
           case "blend":
             this.applyBlend(["one", "one_minus_src_alpha"]);
+            break;
+          case "color":
+            this.applyBlend(["const_color", "one_minus_const_color"]);
             break;
         }
         return this;
@@ -5045,8 +5054,11 @@ const p5wgex = (function(){
       // source取得。これでp5.Graphicsを取得...
       return this.textures[name].getTextureSource();
     }
-    updateTexture(name){
-      // まあいいか。
+    updateTexture(name, updateFunction = (src) => {}){
+      // 第二引数に関数を付け加えて、srcをいじる関数を受け取るようにするか。
+      // cubemapの場合などは、xpやynを取り出して更新すればよい。
+      const src = this.textures[name].getTextureSource();
+      updateFunction(src);
       this.textures[name].updateTexture();
       return this;
     }
@@ -5360,7 +5372,7 @@ const p5wgex = (function(){
       // options: first(基本0), count(基本計算済みだがTF-INSTANCEDでは使う場合も？), blend.
       const {
         uniforms = {},
-        first = 0, count = this.currentFigure.count, blend = "", instanceCount = 1,
+        first = 0, count = this.currentFigure.count, blend = "", color = "", instanceCount = 1,
         depthTest = "", depthMask = "", cullFace = ""
       } = options;
       // uniformsに指定することで、直前にsetUniformsで必要なuniformをすべて用意できる。横着したい場合にどうぞ。
@@ -5372,12 +5384,18 @@ const p5wgex = (function(){
       // 有効かどうか調べておく
       const blendEnabled = this.blendState.use;
       // 一時的に特別な指定をする場合は現在の状態を記録して保存しておく。
-      const curBlend = this.blendState.state.slice();
+      const curBlendMode = this.blendState.state.slice();
+      // 直前のblendColorを保存しておく
+      const curBlendColor = this.blendState.color.slice();
       // blendがdisableの場合は非有効にする
       // applyBlendは入力がinvalidの場合何もしない(gl関数が何もしないので)。
       // たとえば blend:"enable" などとした場合、enable("blend")だけが実行されapplyBlend自体は失敗するので設定がそのまま使われる。
       // つまりblendFuncだけ設定してそれの有効/非有効だけを切り替える使い方ができるが、それが結局 blend:"hoge" とかでもできてしまうので
       // あまり意味がない...バリデーションの負荷を考えるとこの方がいいと思う。いわゆるホテルのカード差し込み的なあれ。技術の負荷とのトレードオフ。
+      // 色変更する場合は事前に変更する. coulour表記が可能。
+      if (color !== "") {
+        this.blendColor(color);
+      }
       if (blend === "disable"){
         this.disable("blend");
       } else if (blend !== "") {
@@ -5421,7 +5439,11 @@ const p5wgex = (function(){
         // もともと有効なら有効にする。もともと非有効なら非有効に戻す。重複しても問題ない。
         if (blendEnabled) { this.enable("blend"); } else { this.disable("blend"); }
         // blendの状態を復元する。復元する必要があるのは""でも"disable"でもない場合だけ。
-        if (blend !== "disable") this.applyBlend(curBlend);
+        if (blend !== "disable") this.applyBlend(curBlendMode);
+      }
+      // blendColorの復元. blendが""であったとしても、たとえばblend:"color"のまま色だけ変えたい場合もあるでしょう。独立させるべき。
+      if (color !== "") {
+        this.blendColor(curBlendColor);
       }
       // depthTest, depthMaskの状態を復元する。いずれも復元の必要があるのは指定された場合のみである。
       if (depthTest !== "") {
