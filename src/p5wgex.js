@@ -1081,29 +1081,31 @@ const p5wgex = (function(){
       if (identifier[0] === '#') {
         const h = arg[0].slice(1);
         switch(h.length){
-          case 0:
-            return [1,1,1,1]; // default is white.
-          case 1:
+          case 0: // default is white.
+            return [1,1,1,1];
+          case 1: // 16段階グレースケール, 不透明
             return _parseHexToColor(h[0]+h[0]+h[0]+h[0]+h[0]+h[0]+"FF");
-          case 2:
+          case 2: // 16段階グレースケール, アルファ
             return _parseHexToColor(h[0]+h[0]+h[0]+h[0]+h[0]+h[0]+h[1]+h[1]);
-          case 3:
+          case 3: // 16段階RGB, 不透明
             return _parseHexToColor(h[0]+h[0]+h[1]+h[1]+h[2]+h[2]+"FF");
-          case 4:
+          case 4: // 16段階RGB, アルファ
             return _parseHexToColor(h[0]+h[0]+h[1]+h[1]+h[2]+h[2]+h[3]+h[3]);
-          case 5:
+          case 5: // 16段階RGB, 256段階アルファ
             return _parseHexToColor(h[0]+h[0]+h[1]+h[1]+h[2]+h[2]+h[3]+h[4]);
-          case 6:
+          case 6: // 256段階RGB, 不透明
             return _parseHexToColor(h+"FF");
-          case 7:
+          case 7: // 256段階RGB, 16段階アルファ
             return _parseHexToColor(h+h[6]);
-          default:
+          default: // 256段階RGB, アルファ
             return _parseHexToColor(h);
         }
       }
 
       // 以降、頭以外の引数からなる配列を取ったものを使う
-      const col = arg.slice(1);
+      // ただしarg[1]が配列の場合はそれを使う。たとえば("rgb255", [36, 49, 163])のような使い方。
+      // それもできた方がいいでしょう。でないといちいち("rgb255", ...someArrayObject) のように書かなければならないので。
+      const col = (Array.isArray(arg[1]) ? arg[1] : arg.slice(1));
 
       // preset指定を使う場合
       const presetColor = presetColors[identifier];
