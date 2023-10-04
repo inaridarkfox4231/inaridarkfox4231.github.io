@@ -1683,6 +1683,11 @@ const p5wgex = (function(){
     d.one_minus_const_color = gl.ONE_MINUS_CONSTANT_COLOR;
     d.const_alpha = gl.CONSTANT_ALPHA;
     d.one_minus_const_alpha = gl.ONE_MINUS_CONSTANT_ALPHA;
+    d.func_add = gl.FUNC_ADD;
+    d.func_sub = gl.gl.FUNC_SUBTRACT;
+    d.func_reverse_sub = gl.FUNC_REVERSE_SUBTRACT;
+    d.func_min = gl.MIN;
+    d.func_max = gl.MAX;
     // -------enable-------//
     d.blend = gl.BLEND;
     d.cull_face = gl.CULL_FACE;
@@ -4931,7 +4936,7 @@ const p5wgex = (function(){
       this.dict = getDict(this.gl); // 辞書を生成
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
       // useはデフォルトでfalse, stateはデフォルトで1,0,1,0です。単純に上書き。colorはblendColorに使うやつ。
-      this.blendState = {use:false, state:[1,0,1,0], color:[0,0,0,0]};
+      this.blendState = {use:false, state:[1,0,1,0], color:[0,0,0,0], equation:["func_add", "func_add"]};
       this.depthState = {test:true, write:true}; // testは実行する、writeも実行するのがデフォルト。
       this.cullState = {use:false, mode:"back"}; // useはデフォルトでfalse. modeは"back"がデフォルト。前面のみ描画される。
 
@@ -5005,7 +5010,17 @@ const p5wgex = (function(){
     }
     blendColor(...args){
       // colorのblendに使う色指定
-      this.gl.blendColor(...coulour(...args));
+      const col = coulour(...args);
+      this.blendState.color = col; // colorを記録する。
+      this.gl.blendColor(...col);
+      return this;
+    }
+    blendEquation(modeRGB, modeAlpha){
+      if (modeAlpha === undefined) {
+        modeAlpha = modeRGB;
+      }
+      this.blendState.equation = [modeRGB, modeAlpha]; // equationを記録する。
+      this.gl.blendEquationSeparate(this.dict[modeRGB], this.dict[modeAlpha]);
       return this;
     }
     applyBlend(data){
@@ -5480,9 +5495,11 @@ const p5wgex = (function(){
       // type: arrays, elements, arraysInstanced, elementsInstanced.
       // mode: triangles, lines, points, triangle_strip, 以下略
       // options: first(基本0), count(基本計算済みだがTF-INSTANCEDでは使う場合も？), blend.
+      // blendにcolorを追加。
       const {
         uniforms = {},
-        first = 0, count = this.currentFigure.count, blend = "", color = "", instanceCount = 1,
+        first = 0, count = this.currentFigure.count, blend = "", color = "", equation = "",
+        instanceCount = 1,
         depthTest = "", depthMask = "", cullFace = ""
       } = options;
       // uniformsに指定することで、直前にsetUniformsで必要なuniformをすべて用意できる。横着したい場合にどうぞ。
@@ -5497,6 +5514,9 @@ const p5wgex = (function(){
       const curBlendMode = this.blendState.state.slice();
       // 直前のblendColorを保存しておく
       const curBlendColor = this.blendState.color.slice();
+      // 直前のblendEquationを記録しておく
+      const curBlendEquation = this.blendState.equation.slice();
+      // 直前のblend
       // blendがdisableの場合は非有効にする
       // applyBlendは入力がinvalidの場合何もしない(gl関数が何もしないので)。
       // たとえば blend:"enable" などとした場合、enable("blend")だけが実行されapplyBlend自体は失敗するので設定がそのまま使われる。
@@ -5505,6 +5525,10 @@ const p5wgex = (function(){
       // 色変更する場合は事前に変更する. coulour表記が可能。
       if (color !== "") {
         this.blendColor(color);
+      }
+      if (equation !== "") {
+        // [func_min, func_add]のように指定する
+        this.blendEquation(...equation);
       }
       if (blend === "disable"){
         this.disable("blend");
@@ -5554,6 +5578,10 @@ const p5wgex = (function(){
       // blendColorの復元. blendが""であったとしても、たとえばblend:"color"のまま色だけ変えたい場合もあるでしょう。独立させるべき。
       if (color !== "") {
         this.blendColor(curBlendColor);
+      }
+      // blendEquationの復元
+      if (equation !== "") {
+        this.blendEquation(...curBlendEquation);
       }
       // depthTest, depthMaskの状態を復元する。いずれも復元の必要があるのは指定された場合のみである。
       if (depthTest !== "") {
