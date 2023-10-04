@@ -5633,6 +5633,7 @@ const p5wgex = (function(){
           _node.setUniform("uSmoothGrad", smooth);
           break;
       }
+      // depth関連はすべて切るのがデフォルト。blendも"blend"がデフォルト。変えるのは自由。
       const {blend = "blend", depthMask = false, depthTest = false, cullFace = "disable"} = options;
       options.blend = blend;
       options.depthMask = depthMask;
@@ -7793,6 +7794,7 @@ const p5wgex = (function(){
   // ですから"foxBoard"ってやればそこに落ちる
   // もちろん描画先を別のfbにすることも可能。
   // vUvのままではまずいのでuvを用意しましょう。
+  // depthは後方互換性の為に残しますが、多分もう使わないかも....
   class PlaneShader extends ShaderPrototype{
     constructor(node){
       super(node);
@@ -7815,10 +7817,13 @@ const p5wgex = (function(){
         case "center_yDown": // 中央(0,0)で下が(0,1)で右が(1,0)
           this.vs.preProcess = `vUv = aPosition; vUv.y = -vUv.y;`; break;
       }
+      // positionをpreProcess内部でいじれるようにする. これにより描画位置をいじれる。
+      // たとえばposition*=2.0などとすれば原点中心に0.5倍に縮小して描画される。
+      this.vs.preProcess += `vec2 position = aPosition;`;
 
       // 後ろに置くならdepthは1.0の方がいいし前において透明度補正掛けるなら0.0の方がいいですね
       this.vs.mainProcess =
-        `gl_Position = vec4(aPosition, ` + depth + `, 1.0);`;
+        `gl_Position = vec4(position, ` + depth + `, 1.0);`;
       this.fs.precisions =
         `precision highp float;`;
       this.fs.preProcess =
