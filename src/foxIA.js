@@ -673,35 +673,53 @@ const foxIA = (function(){
   // 取得するときclampとnormalizeのoptionを設けるようにしました。
   // factorを設けてすぐに値が変わらないようにできる仕組みを導入しました。
   // 自由に変えられるようにするかどうかは応相談...できるだけ軽量で行きたいので。
+  // mouseFreeUpdateにより、マウスの場合にマウス移動で位置更新がされるようにするオプションを追加
   class Locater extends Interaction{
-  	constructor(canvas, options = {}){
-  		super(canvas, options);
-  		this.active = false;
-  		this.x = 0;
-  		this.y = 0;
-  		this.dx = 0;
-  		this.dy = 0;
+    constructor(canvas, options = {}){
+      super(canvas, options);
+      this.active = false;
+      this.x = 0;
+      this.y = 0;
+      this.dx = 0;
+      this.dy = 0;
       // 位置情報を滑らかに変化させたいときはoptionsでfactorを定義する。
       const {factor = 1} = options;
       this.factor = factor;
+      // マウス操作の場合、位置情報をマウス移動に伴って変化させたい場合もあるでしょう。
+      // mouseFreeUpdateのoptionを設けてそれが実現されるようにします
+      const {mouseFreeUpdate = false} = options;
+      this.mouseFreeUpdate = mouseFreeUpdate;
       // 関数族
       this.actions = {}; // activate, inActivate, move.
       // 関数のデフォルト。
-      this.actions.activate = () => {};
+      this.actions.activate = (e) => {};
       this.actions.move = (x, y, dx, dy) => {};
       this.actions.update = (x, y, dx, dy) => {};
       this.actions.inActivate = () => {};
-  	}
+      // ボタン.
+      this.button = -1;
+    }
+    positionUpdate(x, y, dx, dy){
+      // 位置情報の更新を関数化する
+      // 急に変化させたくない場合に徐々に変化させる選択肢を設ける
+      const factor = this.factor;
+      this.x += (x - this.x) * factor;
+      this.y += (y - this.y) * factor;
+      this.dx += (dx - this.dx) * factor;
+      this.dy += (dy - this.dy) * factor;
+    }
     update(){
       if (this.pointers.length > 0) {
         // 末尾（新規）を採用する。
-        const p = this.pointers[this.pointers.length - 1];
-        // 急に変化させたくない場合に徐々に変化させる選択肢を設ける
-        const factor = this.factor;
-        this.x += (p.x - this.x) * factor;
-        this.y += (p.y - this.y) * factor;
-        this.dx += (p.dx - this.dx) * factor;
-        this.dy += (p.dy - this.dy) * factor;
+        // マウス操作でmouseFreeUpdateの場合これが実行されないようにするには、結局pointer.length>0ということは
+        // もうactivateされててbutton>=0であるから、タッチならここが-1だから、そこで判定できる。そこで、
+        // (this.button >= 0 && this.mouseFreeUpdate)の場合にキャンセルさせる。この場合!を使った方が分かりやすい。
+        // 「マウスアクションにおいてmouseFreeUpdateの場合はactive時にはpositionをupdateしない」という日本語の翻訳になる。
+        // buttonを使うことでタッチとマウスの処理を分けられるわけ。
+        if (!(this.button >= 0 && this.mouseFreeUpdate)) {
+          const p = this.pointers[this.pointers.length - 1];
+          this.positionUpdate(p.x, p.y, p.dx, p.dy);
+        }
       }
       if (this.active) {
         this.actions.update(this.x, this.y, this.dx, this.dy);
@@ -710,10 +728,10 @@ const foxIA = (function(){
     setAction(name, func){
       this.actions[name] = func;
     }
-  	isActive(){
-  		return this.active;
-  	}
-  	getPos(options = {}){
+    isActive(){
+      return this.active;
+    }
+    getPos(options = {}){
       const {clamp = false, normalize = false} = options;
       const {width:w, height:h} = this.rect;
       // clampのoptionsがある場合は先にclampしてから正規化する。
@@ -730,24 +748,35 @@ const foxIA = (function(){
         result.dx /= w;
         result.dy /= h;
       }
-  		return result;
-  	}
-  	mouseDownDefaultAction(){
-  		this.active = true;
-      this.actions.activate();
-  	}
+      return result;
+    }
+    mouseDownDefaultAction(e){
+      // ボタン. 0:left, 1:center, 2:right
+      this.button = e.button;
+      this.active = true;
+      this.actions.activate(e); // e.buttonで処理分けた方が楽だわ。タッチの場合は常に-1だけどね。
+    }
     mouseMoveDefaultAction(dx, dy, x, y){
+      // mouseFreeUpdateがtrueであれば常に位置更新がされるようにする
+      // タッチの場合ここは実行されないため、mouseFreeUpdateがtrueでも問題ない。
+      if (this.mouseFreeUpdate) {
+        this.positionUpdate(x, y, dx, dy);
+      }
       if(this.active){
         this.actions.move(x, y, dx, dy);
       }
     }
     mouseUpDefaultAction(){
+      // activateされていないなら各種の処理は不要
+      if (!this.active) return;
       this.active = false;
       this.actions.inActivate();
+      // ボタンリセット
+      this.button = -1;
     }
     touchStartDefaultAction(e){
       this.active = true;
-      this.actions.activate();
+      this.actions.activate(e);
     }
     touchSwipeAction(dx, dy, x, y, px, py){
       if (this.active) {
@@ -755,8 +784,14 @@ const foxIA = (function(){
       }
     }
     touchEndDefaultAction(e){
-      this.active = false;
-      this.actions.inActivate();
+      // ここ、タッチポインタが一つでも外れるとオフになる仕様なんだけど、
+      // タッチポインタ、末尾採用にしたから、全部空の時だけ発動でいいよ。
+      // 空っぽになる場合、この時点でちゃんと空っぽだから。
+      // ここもactiveでないのに実行されてしまうようですね...防いでおくか。
+      if (this.active && this.pointers.length === 0) {
+        this.active = false;
+        this.actions.inActivate();
+      }
     }
   }
 
