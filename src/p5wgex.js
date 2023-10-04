@@ -5413,7 +5413,7 @@ const p5wgex = (function(){
         myAlert("fboStuck is empty.");
         return null;
       }
-      this.bindFBO(fboStuck.pop());
+      this.bindFBO(this.fboStuck.pop());
       return this;
     }
     setFBOtexture2D(uniformName, fboName, kind = "color", index = 0){
