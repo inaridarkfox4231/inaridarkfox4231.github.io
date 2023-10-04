@@ -4926,6 +4926,7 @@ const p5wgex = (function(){
       this.currentFigure = undefined;
       this.currentIBO = undefined; // このくらいはいいか。
       this.currentFBO = null; // これがないとfbの一時的な切り替えができないので。文字列またはnull.
+      this.fboStuck = []; // fboのstuck.一時的にFBOをbindするのに使う。メソッド内で変える場合、そのあと戻す必要があるので。
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
@@ -4937,10 +4938,8 @@ const p5wgex = (function(){
       // 一般的なboard. 要するにfoxBoardって書けば普通にこれ使えるので、もういちいち用意しなくていいんよ。
       // drawArraysは"triangle_strip"です。板ポリ全般で使えます。
       this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
-    }
-    createDefaultPainters(){
       // デフォルトのペインターを作る
-      _createTextureRenderer();
+      _createTextureRenderer(this);
     }
     enableExtensions(){
       // color_buffer_floatのEXT処理。pavelさんはこれ使ってwebgl2でもfloatへの書き込みが出来るようにしてた。
@@ -5403,6 +5402,20 @@ const p5wgex = (function(){
       // 現在bindしているfboの名前を返す
       return this.currentFBO;
     }
+    pushFBO(){
+      // 現在のfboをstuckする
+      this.fboStuck.push(this.currentFBO);
+      return this;
+    }
+    popFBO(){
+      // fboをpopしてセットする
+      if (this.fboStuck.length === 0) {
+        myAlert("fboStuck is empty.");
+        return null;
+      }
+      this.bindFBO(fboStuck.pop());
+      return this;
+    }
     setFBOtexture2D(uniformName, fboName, kind = "color", index = 0){
       // CUBE_MAPも使うようになればいずれ非推奨、今は無理。
 
@@ -5580,6 +5593,7 @@ const p5wgex = (function(){
       this.unbind();
     }
     renderTexture(materialType, target, options = {}){
+      // textureのレンダリング
       _node.use("__foxTextureRenderer__", "foxBoard");
       const materialTypeData = materialType.split('/');
       const identifier = materialTypeData[0];
