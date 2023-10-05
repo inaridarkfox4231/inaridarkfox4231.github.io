@@ -5033,14 +5033,19 @@ const p5wgex = (function(){
     applyBlend(data){
       if (typeof data === "string") {
         // とりあえずblendだけ用意しました. colorを実験的に追加
+        // よく考えたらdefault,blend,color用意したけどこれら全部func_add前提なのよね
+        // なのでここでいじりましょ。で、後で戻せばいいか。
         switch(data) {
           case "default":
+            this.blendEquation(["func_add"]);
             this.applyBlend(["one", "zero"]);
             break;
           case "blend":
+            this.blendEquation(["func_add"]);
             this.applyBlend(["one", "one_minus_src_alpha"]);
             break;
           case "color":
+            this.blendEquation(["func_add"]);
             this.applyBlend(["const_color", "one_minus_const_color"]);
             break;
         }
@@ -5060,6 +5065,7 @@ const p5wgex = (function(){
             break;
         }
         if (typeof _data[0] === 'number') {
+          // gl定数はnumber扱いなので、gl定数でも機能するようにこうすることにする。
           this.blendState.state = [_data[0], _data[1], _data[2], _data[3]];
           this.gl.blendFuncSeparate(...this.blendState.state);
         } else if (typeof _data[0] === 'string'){
@@ -5537,6 +5543,13 @@ const p5wgex = (function(){
         // [func_min, func_add]のように指定する
         this.blendEquation(...equation);
       }
+      // blendがpresetの場合、equationをいじってるので、後で戻す必要がある。
+      const usePresetBlending = [
+        "default", "blend", "color"
+      ].includes(blend);
+      // blendがdisableなら一時的にノンブレンドで実行する。""なら直前の仕様が使われる（デフォルト）。あとはいろいろ。
+      // カスタムブレンドの場合、方程式をいじるのは自前で実行するが、プリセットブレンドは方程式も設定するのでそっちも
+      // いじってて、それをあとで直す必要があるのだ。
       if (blend === "disable"){
         this.disable("blend");
       } else if (blend !== "") {
@@ -5586,8 +5599,8 @@ const p5wgex = (function(){
       if (color !== "") {
         this.blendColor(curBlendColor);
       }
-      // blendEquationの復元
-      if (equation !== "") {
+      // blendEquationの復元. usePresetBlendingがtrueの場合もequationが変化してる可能性がある。
+      if (equation !== "" || usePresetBlending) {
         this.blendEquation(...curBlendEquation);
       }
       // depthTest, depthMaskの状態を復元する。いずれも復元の必要があるのは指定された場合のみである。
