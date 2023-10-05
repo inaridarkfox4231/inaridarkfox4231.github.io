@@ -4860,16 +4860,23 @@ const p5wgex = (function(){
 
   // textureRenderer.
   // 表示位置をいじれるようにするのとか色々付け加えたいところ。
+  // ただめんどうなのでplaneのtransform作ったら終わりでいいです
   function _createTextureRenderer(node){
     // デフォルトの"leftUp"とする。
     const sh = new ex.PlaneShader(node);
     sh.initialize();
     sh.addUniform("bool", "uFlip", "vs");
+    sh.addUniform("vec2", "uScale", "vs");
+    sh.addUniform("float", "uRotation", "vs");
+    sh.addUniform("vec2", "uTranslate", "vs");
     sh.addCode(`
       // fboの場合はuvを逆にする。
       if (uFlip) {
         vUv.y = 1.0 - vUv.y;
       }
+      position *= uScale;
+      position *= mat2(cos(uRotation), -sin(uRotation), sin(uRotation), cos(uRotation));
+      position += uTranslate;
     `, "preProcess", "vs");
     sh.addUniform("sampler2D", "uTex", "fs");
     sh.addUniform("vec4", "uMonoColor", "fs");
@@ -5661,6 +5668,12 @@ const p5wgex = (function(){
           _node.setUniform("uSmoothGrad", smooth);
           break;
       }
+      const {transform = {}} = options;
+      // 表示位置の変更。原点中心、正規化デバイス座標上での位置変更。
+      const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
+      _node.setUniforms({
+        uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
+      });
       // depth関連はすべて切るのがデフォルト。blendも"blend"がデフォルト。変えるのは自由。
       const {blend = "blend", depthMask = false, depthTest = false, cullFace = "disable"} = options;
       options.blend = blend;
