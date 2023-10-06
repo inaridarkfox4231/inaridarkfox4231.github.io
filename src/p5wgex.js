@@ -4939,11 +4939,13 @@ const p5wgex = (function(){
       this.currentIBO = undefined; // このくらいはいいか。
       this.currentFBO = null; // これがないとfbの一時的な切り替えができないので。文字列またはnull.
       this.fboStuck = []; // fboのstuck.一時的にFBOをbindするのに使う。メソッド内で変える場合、そのあと戻す必要があるので。
+      this.renderingPropertyStuck = []; // blend,depth,cullの状態を記録するためのstuck.
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
-      // useはデフォルトでfalse, stateはデフォルトで1,0,1,0です。単純に上書き。colorはblendColorに使うやつ。
-      this.blendState = {use:false, state:[1,0,1,0], color:[0,0,0,0], equation:["func_add", "func_add"]};
+      // useはデフォルトでfalse, funcはデフォルトで1,0,1,0です。単純に上書き。colorはblendColorに使うやつ。
+      // equationのデフォはADD/ADDです。funcもequationも保持するのはgl定数、数です。文字列だと不便なので。
+      this.blendState = {use:false, func:[1,0,1,0], color:[0,0,0,0], equation:[gl.FUNC_ADD, gl.FUNC_ADD]};
       this.depthState = {test:true, write:true}; // testは実行する、writeも実行するのがデフォルト。
       this.cullState = {use:false, mode:"back"}; // useはデフォルトでfalse. modeは"back"がデフォルト。前面のみ描画される。
 
@@ -5026,11 +5028,19 @@ const p5wgex = (function(){
       if (modeAlpha === undefined) {
         modeAlpha = modeRGB;
       }
-      this.blendState.equation = [modeRGB, modeAlpha]; // equationを記録する。
-      this.gl.blendEquationSeparate(this.dict[modeRGB], this.dict[modeAlpha]);
+      // 数でもOKにする（gl定数）
+      if (typeof modeRGB === 'number') {
+        this.blendState.equation = [modeRGB, modeAlpha]; // equationを記録する。
+        this.gl.blendEquationSeparate(...this.blendState.equation);
+      } else if (typeof _data[0] === 'string'){
+        this.blendState.equation = [this.dict[modeRGB], this.dict[modeAlpha]]; // equationを記録する。
+        this.gl.blendEquationSeparate(...this.blendState.equation);
+      }
       return this;
     }
     applyBlend(data){
+      // blendFuncにしないのは
+      // equationもまとめて設定する場合があるためですね
       if (typeof data === "string") {
         // とりあえずblendだけ用意しました. colorを実験的に追加
         // よく考えたらdefault,blend,color用意したけどこれら全部func_add前提なのよね
@@ -5054,23 +5064,66 @@ const p5wgex = (function(){
         const _data = data.slice();
         switch(_data.length) {
           case 1:
+            // "one"や"zero"の場合くらいだろうけど、全部一緒の場合。
             _data.push(data[0], data[0], data[0]);
             break;
           case 2:
-            // srcRGB, dstRGBの場合はsrcA, dstAにそれぞれ同じものが使われる
+            // [srcRGB, dstRGB]の場合はsrcA, dstAにそれぞれ同じものが使われる
             _data.push(data[0], data[1]);
             break;
           case 3:
+            // あんまないかな...alphaだけ同じものを使う場合。ただの穴埋め。
             _data.push(data[2]);
             break;
         }
         if (typeof _data[0] === 'number') {
           // gl定数はnumber扱いなので、gl定数でも機能するようにこうすることにする。
-          this.blendState.state = [_data[0], _data[1], _data[2], _data[3]];
-          this.gl.blendFuncSeparate(...this.blendState.state);
+          this.blendState.func = [_data[0], _data[1], _data[2], _data[3]];
+          this.gl.blendFuncSeparate(...this.blendState.func);
         } else if (typeof _data[0] === 'string'){
-          this.blendState.state = [this.dict[_data[0]], this.dict[_data[1]], this.dict[_data[2]], this.dict[_data[3]]];
-          this.gl.blendFuncSeparate(...this.blendState.state);
+          this.blendState.func = [this.dict[_data[0]], this.dict[_data[1]], this.dict[_data[2]], this.dict[_data[3]]];
+          this.gl.blendFuncSeparate(...this.blendState.func);
+        }
+      }
+      return this;
+    }
+    applyBlendState(options = {}){
+      // まとめて設定したい場合の処理。明示したものだけ書き換えられる。
+      // たとえばuseを明示しなければuseの状態は変化しない。
+      for(const name of Object.keys(options)) {
+        switch(name){
+          case "use":
+            if (use) { this.enable("blend"); } else { this.disable("blend"); } break;
+          case "func":
+            this.applyBlend(func); break;
+          case "color":
+            this.blendColor(color); break;
+          case "equation":
+            this.blendEquation(equation); break;
+        }
+      }
+      return this;
+    }
+    applyDepthState(options = {}){
+      // 明示したものだけ書き換えられる
+      for (const name of Object.keys(options)) {
+        switch(name) {
+          case "test":
+            if (test) { this.enable("depth_test"); } else { this.disable("depth_test"); } break;
+          case "write":
+            this.depthMask(write); break;
+        }
+      }
+      return this;
+    }
+    applyCullState(){
+      // 明示したものだけ書き換えられる
+      for (const name of Object.keys(options)) {
+        switch(name) {
+          case "test":
+            if (use) { this.enable("cull_face"); } else { this.disable("cull_face"); } break;
+          case "mode":
+            this.cullFace(mode); break;
         }
       }
       return this;
@@ -5091,6 +5144,35 @@ const p5wgex = (function(){
       // depthへの書き込みを禁止することができる。そのためにはfalseを指定する。
       this.gl.depthMask(flag);
       this.depthState.write = flag; // flagを記録する。
+      return this;
+    }
+    pushState(){
+      // cullのmodeが文字列なのは当面はこれでいいかなと。
+      const _state = {};
+      _state.blend = {
+        use:this.blendState.use,
+        func:this.blendState.func.slice(),
+        color:this.blendState.color.slice(),
+        equation:this.blendState.equation.slice(),
+      };
+      _state.depth = {
+        test:this.depthState.test,
+        write:this.depthState.write
+      };
+      _state.cull = {
+        use:this.cullState.use,
+        mode:this.cullState.mode
+      };
+      this.renderingPropertyStuck.push(_state);
+      return this;
+    }
+    popState(){
+      const _state = this.renderingPropertyStuck.pop();
+      // 8つ全部実行する必要があるわね
+      // 適用については関数内で実行されるのでここで当てはめなくてもいいことに気づいたよね
+      this.applyBlendState(_state.blend);
+      this.applyDepthState(_state.depth);
+      this.applyCullState(_state.cull);
       return this;
     }
     registPainter(name, vs, fs, outVaryings = []){
@@ -5314,26 +5396,13 @@ const p5wgex = (function(){
       this.currentPainter.setTexture(name, _texture);
       return this;
     }
-    setUniform(name, data){
+    setUniform(name, prop){
       // 有効になってるシェーダにuniformをセット（テクスチャ以外）
       // shaderProgramは設定されたuniform変数が内部で使われていないときにエラーを返すんですが
       // どれなのか判然とせず混乱するのでここはtry～catchを使いましょう。
+      // texture,framebufferTexture,colorの場合の特殊な処理をsetUniformにも用意しました（大丈夫？）
       try{
-        this.currentPainter.setUniform(name, data);
-      }catch(error){
-        myAlert("setUniform method error!. " + name);
-        console.log(error.message);
-        console.log(error.stack);
-        return null;
-      }
-      return this;
-    }
-    setUniforms(uniforms = {}){
-      // まとめてuniformをセットする関数。簡易版。
-      // tex,fbo,colorそれぞれについて用意するつもり。{'tex/uTex':myTexのように指定する。}
-      for (const uniformName of Object.keys(uniforms)) {
-        const prop = uniforms[uniformName]; // 値
-        const data = uniformName.split("/");
+        const data = name.split("/");
         const identifier = data[0];
         switch(identifier){
           case "tex":
@@ -5359,8 +5428,22 @@ const p5wgex = (function(){
             break;
           default:
             // "/"が使われていない場合。ユニフォーム名に"/"は使えない決まりなので問題ない。
-            this.setUniform(uniformName, prop);
+            this.currentPainter.setUniform(name, prop);
         }
+      }catch(error){
+        myAlert("setUniform method error!. " + name);
+        console.log(error.message);
+        console.log(error.stack);
+        return null;
+      }
+      return this;
+    }
+    setUniforms(uniforms = {}){
+      // まとめてuniformをセットする関数。簡易版。
+      // tex,fbo,colorそれぞれについて用意するつもり。{'tex/uTex':myTexのように指定する。}
+      for (const name of Object.keys(uniforms)) {
+        const prop = uniforms[name]; // 値
+        this.setUniform(name, prop); // setUniformに委譲
       }
       return this;
     }
@@ -5524,7 +5607,7 @@ const p5wgex = (function(){
       // 有効かどうか調べておく
       const blendEnabled = this.blendState.use;
       // 一時的に特別な指定をする場合は現在の状態を記録して保存しておく。
-      const curBlendMode = this.blendState.state.slice();
+      const curBlendMode = this.blendState.func.slice();
       // 直前のblendColorを保存しておく
       const curBlendColor = this.blendState.color.slice();
       // 直前のblendEquationを記録しておく
