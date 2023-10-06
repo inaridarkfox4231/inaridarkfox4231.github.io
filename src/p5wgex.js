@@ -5025,6 +5025,11 @@ const p5wgex = (function(){
       return this;
     }
     blendEquation(modeRGB, modeAlpha){
+      // 配列も許す
+      if (Array.isArray(modeRGB)) {
+        return this.blendEquation(...modeRGB);
+      }
+      // 第二引数が無いときは第一引数と同じとする。
       if (modeAlpha === undefined) {
         modeAlpha = modeRGB;
       }
@@ -5047,17 +5052,29 @@ const p5wgex = (function(){
         // なのでここでいじりましょ。で、後で戻せばいいか。
         switch(data) {
           case "default":
-            this.blendEquation(["func_add"]);
+            this.blendEquation("func_add");
             this.applyBlend(["one", "zero"]);
             break;
           case "blend":
-            this.blendEquation(["func_add"]);
+            this.blendEquation("func_add");
             this.applyBlend(["one", "one_minus_src_alpha"]);
             break;
           case "color":
-            this.blendEquation(["func_add"]);
+            this.blendEquation("func_add");
             this.applyBlend(["const_color", "one_minus_const_color"]);
             break;
+          case "colorMin":
+            this.blendEquation("func_min", "func_add");
+            this.applyBlend(["one", "one", "one", "one_minus_src_alpha"]);
+          case "colorMax":
+            this.blendEquation("func_max", "func_add");
+            this.applyBlend(["one", "one", "one", "one_minus_src_alpha"]);
+          default:
+            // 文字や数を直接入れるやり方でもいいようにしたいのです。
+            // たとえば["one", "one"]の代わりに"one","one"といった表記が使えます。
+            // もちろんプリセットとは被らないようにします...被るはずないけどね。
+            const arg = [...arguments];
+            this.applyBlend(arg);
         }
         return this;
       } else if (Array.isArray(data)) {
@@ -5100,7 +5117,7 @@ const p5wgex = (function(){
           case "color":
             this.blendColor(prop); break;
           case "equation":
-            this.blendEquation(prop); break;
+            this.blendEquation(...prop); break;
         }
       }
       return this;
@@ -5118,7 +5135,7 @@ const p5wgex = (function(){
       }
       return this;
     }
-    applyCullState(){
+    applyCullState(options = {}){
       // 明示したものだけ書き換えられる
       for (const name of Object.keys(options)) {
         const prop = options[name];
@@ -5166,6 +5183,11 @@ const p5wgex = (function(){
         use:this.cullState.use,
         mode:this.cullState.mode
       };
+      // 一応ね...際限なく呼び出してしまうようなバグは防ぎたいところ。
+      if (this.renderingPropertyStuck.length > 1000) {
+        myAlert("too much pushState() call!");
+        return null;
+      }
       this.renderingPropertyStuck.push(_state);
       return this;
     }
@@ -5773,9 +5795,10 @@ const p5wgex = (function(){
       _node.setUniforms({
         uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
       });
-      // depth関連はすべて切るのがデフォルト。blendも"blend"がデフォルト。変えるのは自由。
-      const {blend = "blend", depthMask = false, depthTest = false, cullFace = "disable"} = options;
-      options.blend = blend;
+      // depth関連はすべて切るのがデフォルト。blendはやめましょう。""でいいです。使いたいなら明示すること。
+      // これにより多少の影響があるかもしれないけどまあ仕方ないね
+      // 代わりにいくつかのオプションを増やす。colorMin, colorMax, add, multiply, screenあたり。
+      const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
       options.depthMask = depthMask;
       options.depthTest = depthTest;
       options.cullFace = cullFace;
