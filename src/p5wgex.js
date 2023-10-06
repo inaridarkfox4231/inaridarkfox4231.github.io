@@ -5091,15 +5091,16 @@ const p5wgex = (function(){
       // まとめて設定したい場合の処理。明示したものだけ書き換えられる。
       // たとえばuseを明示しなければuseの状態は変化しない。
       for(const name of Object.keys(options)) {
+        const prop = options[name];
         switch(name){
           case "use":
-            if (use) { this.enable("blend"); } else { this.disable("blend"); } break;
+            if (prop) { this.enable("blend"); } else { this.disable("blend"); } break;
           case "func":
-            this.applyBlend(func); break;
+            this.applyBlend(prop); break;
           case "color":
-            this.blendColor(color); break;
+            this.blendColor(prop); break;
           case "equation":
-            this.blendEquation(equation); break;
+            this.blendEquation(prop); break;
         }
       }
       return this;
@@ -5107,11 +5108,12 @@ const p5wgex = (function(){
     applyDepthState(options = {}){
       // 明示したものだけ書き換えられる
       for (const name of Object.keys(options)) {
+        const prop = options[name];
         switch(name) {
           case "test":
-            if (test) { this.enable("depth_test"); } else { this.disable("depth_test"); } break;
+            if (prop) { this.enable("depth_test"); } else { this.disable("depth_test"); } break;
           case "write":
-            this.depthMask(write); break;
+            this.depthMask(prop); break;
         }
       }
       return this;
@@ -5119,11 +5121,12 @@ const p5wgex = (function(){
     applyCullState(){
       // 明示したものだけ書き換えられる
       for (const name of Object.keys(options)) {
+        const prop = options[name];
         switch(name) {
           case "test":
-            if (use) { this.enable("cull_face"); } else { this.disable("cull_face"); } break;
+            if (prop) { this.enable("cull_face"); } else { this.disable("cull_face"); } break;
           case "mode":
-            this.cullFace(mode); break;
+            this.cullFace(prop); break;
         }
       }
       return this;
