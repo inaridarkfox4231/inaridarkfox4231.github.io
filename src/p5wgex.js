@@ -5032,7 +5032,7 @@ const p5wgex = (function(){
       if (typeof modeRGB === 'number') {
         this.blendState.equation = [modeRGB, modeAlpha]; // equationを記録する。
         this.gl.blendEquationSeparate(...this.blendState.equation);
-      } else if (typeof _data[0] === 'string'){
+      } else if (typeof modeRGB === 'string'){
         this.blendState.equation = [this.dict[modeRGB], this.dict[modeAlpha]]; // equationを記録する。
         this.gl.blendEquationSeparate(...this.blendState.equation);
       }
