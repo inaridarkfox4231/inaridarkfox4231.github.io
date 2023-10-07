@@ -5064,11 +5064,42 @@ const p5wgex = (function(){
             this.applyBlend(["const_color", "one_minus_const_color"]);
             break;
           case "colorMin":
+            // colorMinとcolorMaxは2DのLIGHTESTとDARKESTを真似たもの。あっちはalphaBlendとの比較をおこなっているが、
+            // webglでは実現できないので単純にMINとMAXを取っている。
             this.blendEquation("func_min", "func_add");
             this.applyBlend(["one", "one", "one", "one_minus_src_alpha"]);
+            break;
           case "colorMax":
+            // つまり2DのLIGHTEST,DARKESTでsrc_colorとdst_colorのmin,maxを取るようにしただけの形。
+            // ただしsrc_colorにはalphaが乗算されている。
             this.blendEquation("func_max", "func_add");
             this.applyBlend(["one", "one", "one", "one_minus_src_alpha"]);
+            break;
+          case "add":
+            // 2Dの方もalphaは単純加算ですね。従いましょう。
+            this.blendEquation("func_add");
+            this.applyBlend(["one", "one"]);
+            break;
+          case "multiply":
+          case "multiply_dst":
+            this.blendEquation("func_add");
+            // ソースの透明度が低い場合、dst_colorとのalpha補間を行なう。単純な掛け算ではない。2Dもそうなっている。
+            // p5のwebglはalphaも乗算にしたいようです。こっちは2Dにならって透明度はスクリーン乗算で行きます。
+            // 2DはRGBのブレンドにdstのalphaを用いているようです。ソースがalpha==0だとsrcが採用される仕様になっています。
+            this.applyBlend(["one_minus_dst_alpha", "src_color", "one", "one_minus_src_alpha"]);
+            break;
+          case "multiply_src":
+            // ソースのアルファで補間するモードも用意しましょ
+            // こっちはソースのアルファが低い場合、デストカラーが採用される。多分正解は無いので、どっちも用意しましょう。
+            this.blendEquation("func_add");
+            this.applyBlend(["dst_color", "one_minus_src_alpha", "one", "one_minus_src_alpha"]);
+            break;
+          case "screen":
+            // 色をスクリーン乗算、alphaもスクリーン乗算。2Dと同じ。
+            // src_colorでOKです。RGBAなので。
+            this.blendEquation("func_add");
+            this.applyBlend(["one", "one_minus_src_color"]);
+            break;
           default:
             // 文字や数を直接入れるやり方でもいいようにしたいのです。
             // たとえば["one", "one"]の代わりに"one","one"といった表記が使えます。
