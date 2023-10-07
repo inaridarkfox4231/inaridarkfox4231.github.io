@@ -2913,6 +2913,7 @@ const p5wgex = (function(){
       gl.bindTexture(target, _texture);
       gl.uniform1i(uniform.location, uniform.samplerIndex);
     }
+    /*
     unbindTexture2D(){
       // 非推奨。
       const gl = this.gl;
@@ -2926,6 +2927,7 @@ const p5wgex = (function(){
         gl.bindTexture(gl.TEXTURE_2D, null);
       }
     }
+    */
     unbindTexture(){
       // targetが異なってもやることは同じ。
       const gl = this.gl;
@@ -5100,6 +5102,16 @@ const p5wgex = (function(){
             this.blendEquation("func_add");
             this.applyBlend(["one", "one_minus_src_color"]);
             break;
+          case "sub":
+            // ソースからデストを減らす処理。たとえば白を使ってINVERTを実現できる。
+            this.blendEquation("func_sub", "func_add");
+            this.applyBlend("one", "one", "one", "one_minus_src_alpha");
+            break;
+          case "reduce":
+            // デストからソースを減らす（減算処理）
+            // たとえば赤みを減らすとかそういう感じ（かもしれない）
+            this.blendEquation("func_reverse_sub", "func_add");
+            this.applyBlend("one", "one", "one", "one_minus_src_alpha");
           default:
             // 文字や数を直接入れるやり方でもいいようにしたいのです。
             // たとえば["one", "one"]の代わりに"one","one"といった表記が使えます。
@@ -5479,7 +5491,7 @@ const p5wgex = (function(){
           case "color":
             // color/で始まるようにすると、coulour表記が使える。
             if (data.length > 1) {
-              this.setUniform(data[1], coulour(prop));
+              this.currentPainter.setUniform(data[1], coulour(prop));
             }
             break;
           default:
@@ -5501,6 +5513,12 @@ const p5wgex = (function(){
         const prop = uniforms[name]; // 値
         this.setUniform(name, prop); // setUniformに委譲
       }
+      return this;
+    }
+    setColor(name, prop){
+      // 色のユニフォームをcoulour表記で用意できるすごいやつ.
+      // 色ユニフォームしか要らない場合に便利。ただしvec4限定、vec3の場合はalphaは無視される感じです（登録自体は可能）
+      this.currentPainter.setUniform(name, coulour(prop));
       return this;
     }
     setViewport(x, y, w, h){
