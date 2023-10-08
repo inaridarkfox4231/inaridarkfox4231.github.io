@@ -809,6 +809,63 @@ const foxIA = (function(){
 // p5wgex.
 // glからRenderNodeを生成します。glです。(2022/10/02)
 const p5wgex = (function(){
+  // -------------------------------------- error system. ----------------------------- //
+  // エラーシステム
+  class ErrorSystem{
+    constructor(){
+      this.errors = [];
+    }
+    clearError(){
+      this.errors = [];
+    }
+    setError(errorString){
+      this.errors.push({content:errorString, count:1});
+    }
+    showErrorStats(){
+      let result = "";
+      for(const eachString of this.errors){
+        result += eachString.content + ": " + eachString.count.toString() + "\n";
+      }
+      console.log(result);
+    }
+    checkOverlap(errorString){
+      for(const eachString of this.errors){
+        if (eachString.content === errorString){
+          eachString.count++;
+          return true;
+        }
+      }
+      this.setError(errorString);
+      return false;
+    }
+    throwError(errorString, properErrorString = ""){
+      // 一工夫加える
+      // 第二引数に出力したいエラー文字列を設定する
+      // これをerrorStringと違うものにすることでチェック用の文字列と出力用の
+      // 文字列で違うものが使えるようになるわけ
+      // 例えばだけどerrorStringはただの数にしてproperの方で具体的な内容、
+      // っていう風にすれば同じ1番ならどれが実行されても1回だけ、とかできるわけ。
+      if (properErrorString === ""){
+        properErrorString = errorString;
+      }
+      if (this.checkOverlap(errorString)) return;
+      window.console.error(properErrorString);
+    }
+  }
+
+  // インスタンスを用意する。
+  const foxDriveErrorSystem = new ErrorSystem();
+
+  // window.alertがうっとうしいので1回しか呼ばないように
+  // noLoopで書き換えようと思います。
+  // 引数を増やすかどうかは応相談
+  function myAlert(_string, properErrorString = ""){
+    window.alert(_string);
+    //console.log("myAlert: " + _string);
+    //noLoop();
+    foxDriveErrorSystem.throwError(_string, properErrorString);
+  }
+
   // ---------------------------------------------------------------------------------------------- //
   // preset colors.
   const presetColors = {
@@ -1158,15 +1215,6 @@ const p5wgex = (function(){
     return result;
   }
 
-  // window.alertがうっとうしいので1回しか呼ばないように
-  // noLoopで書き換えようと思います。
-  // 引数を増やすかどうかは応相談
-  function myAlert(_string){
-    window.alert(_string);
-    console.log("myAlert: " + _string);
-    noLoop();
-  }
-
   // 簡単なclamp関数
   // 数と配列が対象
   function clamp(x, _min = 0, _max = 1){
@@ -1409,6 +1457,11 @@ const p5wgex = (function(){
       // 関数の実行だけ止めたい場合
       if (!this.validateName(name, "inActivate")) return;
       this.timers[name].active = false;
+    }
+    isActive(name){
+      if (!this.validateName(name, "isActive")) return;
+      // これが無いと発火アクションの重複回避が出来ないんですが...
+      return this.timers[name].active;
     }
     off(name){
       // タイマーをリセットしたうえで関数の実行も止める
@@ -6291,6 +6344,7 @@ const p5wgex = (function(){
       const {eye = [0, 0, h * 0.5 * Math.sqrt(3)]} = data;
       const {center = [0, 0, 0]} = data;
       const {top = [0, 1, 0]} = data;
+      top.normalize(); // 一応正規化しておく
       this.view.eye.set(eye);
       this.view.center.set(center);
       this.view.top.set(top);
@@ -8494,7 +8548,7 @@ const p5wgex = (function(){
   ex.hslArray_overlay = hslArray_overlay;
   ex.coulour = coulour; // 汎用色指定関数
   // そのうちやめたいnoLoop()
-  ex.myAlert = myAlert; // 警告メッセージの後でnoLoop()を実行する
+  ex.ErrorSystem = ErrorSystem; // エラーシステム
   ex.clamp = clamp; // clamp関数
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用。新しくしました。
 
