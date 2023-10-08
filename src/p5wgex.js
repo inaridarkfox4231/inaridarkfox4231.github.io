@@ -798,10 +798,69 @@ const foxIA = (function(){
     }
   }
 
+  // キーを押したとき(activate), キーを押しているとき(update), キーを離したとき(inActivate),
+  // それぞれに対してイベントを設定する。
+  class KeyAction extends Interaction{
+    constructor(canvas, options = {}){
+      // keydown,keyupは何も指定せずともlistenerが登録されるようにする
+      // こういう使い方もあるのだ（superの宣言箇所は任意！）
+      options.keydown = true;
+      options.keyup = true;
+      super(canvas, options);
+      this.keys = {};
+    }
+    registAction(code, actions = {}){
+      if (typeof code === 'object') {
+        // まとめて登録する場合
+        for(const name of Object.keys(code)) {
+          this.registKeyAction(name, code[name]);
+        }
+        return this;
+      } else if (typeof code === 'string') {
+        const result = {};
+        const {
+          activate = () => {}, update = () => {}, inActivate = () => {}
+        } = actions;
+        result.activate = activate;
+        result.update = update;
+        result.inActivate = inActivate;
+        result.active = false;
+        this.keys[code] = result;
+      }
+      return this;
+    }
+    isActive(code){
+      const agent = this.keys[code];
+      if (agent === undefined) return null;
+      return agent.active;
+    }
+    keyDownAction(e){
+      const agent = this.keys[e.code];
+      if (agent === undefined || agent.active) return;
+      agent.activate();
+      agent.active = true;
+    }
+    update(){
+      for(const name of Object.keys(this.keys)){
+        const agent = this.keys[name];
+        if (agent.active) {
+          agent.update();
+        }
+      }
+    }
+    keyUpAction(e){
+      const agent = this.keys[e.code];
+      if (agent === undefined || !agent.active) return;
+      agent.inActivate();
+      agent.active = false;
+    }
+  }
+
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
   fox.Inspector = Inspector;
   fox.Locater = Locater;
+  fox.KeyAction = KeyAction;
 
   return fox;
 })();
@@ -1241,18 +1300,21 @@ const p5wgex = (function(){
   // 初期化時のstumpによる指定ではelapsedStumpが設定されます。
   // stumpのスタック欲しい？欲しい...ですか？まあ、必要になったら、用意しましょ。
 
-  // stepFunctionとcompleteFunctionを用意
-  // stepFunctionはgetProgressを実行すると遂行されるがfalseを指定して実行しないようにもできる
-  // セットする関数はいずれもthisのデフォルトが（function(){~~~}表記の場合）インスタンスになるので
-  // durationをいじったりみたいなこともできるにはできます、やりたければどうぞ。
-  // isActiveを用意しました。progressが正かどうかを見るだけの簡単な関数。
-
   // 初期化時のstump指定を破棄しましょ。これ使ってないし。代わりにdelayを用意しよう。
   // elapsedStump = window.performance.now() + delay;
   // これで初期化する。たとえばdelayが500の場合、500ミリ秒経過するまではgetElapsedMillis()が負の数を返したり、
   // progressが0を返したりする（clampに修正しました）. そのあとactiveになると。checkを実行してもfalseしか返さないし。
   // ちゃんと最後は終わってくれるので問題なし
   // 寿命を表現したりできるといいね。
+
+  // ちょっとすっきりさせました
+  // stepFunctionは廃止
+  // completeFunctionはinitializeの時のみ登録可能にする
+  // active関連の記述を全消し
+  // 実行可否が問題ならそれについてはオブジェクトを紐付けて
+  // 内部で分岐処理すればいい
+  // timerに何でもやらせるな。
+  // 保守管理しづらくなる。デメリットしかない。
   class Timer{
     constructor(){
       this.timers = {};
@@ -1262,8 +1324,7 @@ const p5wgex = (function(){
         delay = 0,
         duration = Infinity,
         scale = 1000,
-        completeFunction = () => {},
-        stepFunction = (prg) => {}
+        completeFunction = () => {}
       } = params;
       const newTimer = {};
       // 先に登録を済ませる
@@ -1283,8 +1344,6 @@ const p5wgex = (function(){
       newTimer.pauseStump = 0;
       // checkがtrueの場合に実行される関数。
       newTimer.completeFunction = completeFunction;
-      newTimer.stepFunction = stepFunction;
-      newTimer.active = true; // 関数の実行可否
       return this;
     }
     validateName(name, methodName){
@@ -1337,20 +1396,14 @@ const p5wgex = (function(){
       }
       return n;
     }
-    getProgress(name, executeStepFunction = true){
+    getProgress(name){
       // stumpからの経過時間(elapsed)をdurationで割ることで進捗を調べるのに使う感じ
-      // executeStepFunctionをfalseにすると
-      // stepFunctionを実行させずにprogressを取得するだけという使い方ができる
       if (!this.validateName(name, "getProgress")) return null;
       const target = this.timers[name];
-      // getProgressの内部でstepFunction(prg)が実行される。
-      // const prg=~~~とかする手間が省ける。
       if (target.duration > 0) {
         const prg = Math.min(1, this.getElapsedMillis(name) / target.duration);
-        if (executeStepFunction && target.active) target.stepFunction(prg);
         return prg;
       }
-      if (executeStepFunction && target.active) target.stepFunction(1);
       return 1; // durationが0の場合...つまり無限大ということ。
     }
     check(name, nextDuration){
@@ -1375,7 +1428,7 @@ const p5wgex = (function(){
         // elapsedStumpを修正したうえでcompleteFunctionを実行する
         // こうしないとcompleteFunction内部でdurationをいじりたい場合に不具合が発生する（邪道だけど）
         // 具体的にはelapsedStumpの値が不自然になる
-        if (target.active) target.completeFunction();
+        target.completeFunction();
         // 引数でnextDurationをいじる場合はそっちが優先される
         // ほんとはdurationをいじる関数用意してもいいんですけど
         // 迂闊に用意するとバグの温床になりかねないので保留してる
@@ -1433,56 +1486,6 @@ const p5wgex = (function(){
     reStartAll(){
       for (const name of Object.keys(this.timers)) {
         this.reStart(name);
-      }
-    }
-    setCompleteFunction(name, func = () => {}){
-      // completeの時の関数を自由に変えたい場合
-      // funcのデフォルトは自明関数です
-      // たとえばcompleteFunction内でこれを実行すれば1回こっきりとかできますね
-      if (!this.validateName(name, "setCompleteFunction")) return;
-      this.timers[name].completeFunction = func;
-    }
-    setStepFunction(name, func = (prg) => {}){
-      // getProgressの際にprgを使って何かさせたい場合に用いる
-      // funcのデフォルトは自明関数
-      // 処理を破棄したい場合にどうぞ
-      if (!this.validateName(name, "setStepFunction")) return;
-      this.timers[name].stepFunction = func;
-    }
-    activate(name){
-      if (!this.validateName(name, "activate")) return;
-      this.timers[name].active = true;
-    }
-    inActivate(name){
-      // 関数の実行だけ止めたい場合
-      if (!this.validateName(name, "inActivate")) return;
-      this.timers[name].active = false;
-    }
-    isActive(name){
-      if (!this.validateName(name, "isActive")) return;
-      // これが無いと発火アクションの重複回避が出来ないんですが...
-      return this.timers[name].active;
-    }
-    off(name){
-      // タイマーをリセットしたうえで関数の実行も止める
-      if (!this.validateName(name, "off")) return;
-      this.timers[name].active = false;
-      this.setElapsed(name);
-      this.pause(name);
-    }
-    on(name){
-      // completeFunction内部でoffにすることでnon-looped-timerを実現する
-      if (!this.validateName(name, "on")) return;
-      this.timers[name].active = true;
-      this.reStart(name);
-    }
-    update(){
-      // activeなものだけgetProgressとcheckを実行する
-      for(const name of Object.keys(this.timers)){
-        const target = this.timers[name];
-        if(!target.active) continue;
-        this.getProgress(name);
-        this.check(name);
       }
     }
   }
@@ -2430,6 +2433,7 @@ const p5wgex = (function(){
 
   // 2DをCUBE_MAPや2D_ARRAYにしても大丈夫っていうのは...まあ、まだ無理ね...
   // ちょっと内容整理。デプス、色、関連付け。くっきりはっきり。この方が分かりやすい。
+  // いずれクラス化したい...
   function _createFBO(gl, info, dict){
     _validateForFramebuffer(gl, info, dict);
     const depthInfo = info.depth.info;
@@ -5690,6 +5694,18 @@ const p5wgex = (function(){
       //this.setTexture2D(uniformName, _texture);
       this.setTexture(uniformName, _texture);
       return this;
+    }
+    swapEachFBO(fboName0, fboName1){
+      // 暫定関数。doubleFBOの廃止が決まったので、移行措置。いずれこれがswapFBOになる。
+      // nullであるかどうかの意味不明な判定も廃止する。コードが古いのよね。
+      if (this.fbos[fboName0] === undefined || this.fbos[fboName1] === undefined) {
+        myAlert("corresponding fbo is not found.");
+        return null;
+      }
+      const tmpFBO = this.fbos[fboName0];
+      this.fbos[fboName0] = this.fbos[fboName1];
+      this.fbos[fboName1] = tmpFBO;
+      return true;
     }
     swapFBO(fboName){
       // ダブル前提。ダブルの場合にswapする
