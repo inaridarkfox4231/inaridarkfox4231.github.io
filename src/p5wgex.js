@@ -4997,50 +4997,13 @@ const p5wgex = (function(){
     sh.addUniform("int", "uGradType", "fs");
     sh.addUniform("int", "uMaterialFlag", "fs");
     sh.addUniform("bool", "uSmoothGrad", "fs");
+    sh.addCode(snipet.createMaterialColor, "routines", "fs");
     sh.addCode(`
-      vec4 linearGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in bool smoothGrad, in vec2 p){
-        vec2 n = normalize(toPos - fromPos);
-        float l = length(toPos - fromPos);
-        float ratio = clamp(dot(p - fromPos, n), 0.0, l)/l;
-        if (smoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
-        return (1.0 - ratio) * fromColor + ratio * toColor;
-      }
-      vec4 radialGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in bool smoothGrad, in vec2 p){
-        float l = length(toPos - fromPos);
-        float ratio = clamp(length(p - fromPos), 0.0, l)/l;
-        if (smoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
-        return (1.0 - ratio) * fromColor + ratio * toColor;
-      }
-      vec4 createMaterialColor(
-        in int materialFlag, in sampler2D tex, in vec4 monoColor, in vec4 fromColor, in vec4 toColor,
-        in int gradType, in vec4 gradStop, in bool smoothGrad, in vec2 p
-      ){
-        if (materialFlag == 0) {
-          return texture(tex, p);
-        }
-        if (materialFlag == 1) {
-          return monoColor;
-        }
-        if (materialFlag == 2) {
-          if (gradType == 0) {
-            return linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
-          }
-          if (gradType == 1) {
-            return radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
-          }
-        }
-        if (materialFlag == 3) {
-          vec4 texColor = texture(tex, p);
-          if (smoothGrad) {
-            texColor.rgb = texColor.rgb * texColor.rgb * (3.0 - 2.0 * texColor.rgb);
-          }
-          return (1.0 - texColor) * fromColor + texColor * toColor;
-        }
-        return vec4(1.0);
-      }
-    `, "routines", "fs");
-    sh.addCode(`
-      color = createMaterialColor(uMaterialFlag, uTex, uMonoColor, uFromColor, uToColor, uGradType, uGradStop, uSmoothGrad, uv);
+      color = createMaterialColor(
+        uMaterialFlag, uTex, uMonoColor,
+        uFromColor, uToColor, uGradType, uGradStop,
+        uSmoothGrad, uv
+      );
       color.rgb *= color.a;
     `, "preProcess", "fs");
     sh.registPainter("__foxTextureRenderer__");
@@ -5049,8 +5012,7 @@ const p5wgex = (function(){
   // 重複処理になってしまっているのでまとめてしまおう
   // ざっくりいうとMRTの場合はfbo/color/2とか指定するんだよ
   // ってだけの話。splitが重複してるのは無視してください。
-  function _setTextureUniform(node, type, name, options = {}){
-    const {flipName = "uFlip", textureName = "uTex", postFix = ""} = options;
+  function _setTextureUniform(node, type, name, postFix = ""){
     const data = type.split('/');
     const identifier = data[0];
     if (data[0] === 'tex') {
@@ -5066,26 +5028,24 @@ const p5wgex = (function(){
     }
   }
 
-  // renderTextureの内部処理を切り分けます
-  // RenderNodeから直接呼び出せるようにします
-  function _renderingTexture(node, materialType, target, options = {}){
-    node.use("__foxTextureRenderer__", "foxBoard");
-
+  // これを関数化しないと詰んでしまう
+  function _setMaterialUniforms(node, materialType, target, postFix = ""){
     const identifier = materialType.split('/')[0];
+    // そうだっけ。基本これにしないと上書きされてしまう。
+    // これがtrueになるのはfboが絡む場合だけ
+    node.setUniform("uFlip" + postFix, false);
 
     switch(identifier){
       case 'tex':
       case 'fbo':
-        node.setUniform("uMaterialFlag", 0);
+        node.setUniform("uMaterialFlag" + postFix, 0);
         _setTextureUniform(
-          node, materialType, target
+          node, materialType, target, postFix
         );
         break;
       case 'color':
-        node.setUniform({
-          uMaterialFlag:1,
-          'color/uMonoColor':target
-        });
+        node.setUniform("uMaterialFlag" + postFix, 1);
+        node.setColor("uMonoColor" + postFix, target);
         break;
       case 'grad':
         const {
@@ -5102,14 +5062,12 @@ const p5wgex = (function(){
           color:toColor = "black",
           x:toX = 1, y:toY = 1
         } = toGradationColor;
-        node.setUniform({
-          uMaterialFlag:2,
-          'color/uFromColor':fromColor,
-          'color/uToColor':toColor,
-          uGradStop:[fromX, fromY, toX, toY],
-          uGradType:(gradationType === "linear" ? 0 : 1),
-          uSmoothGrad:smoothGradation
-        });
+        node.setUniform("uMaterialFlag" + postFix, 2);
+        node.setColor("uFromColor" + postFix, fromColor);
+        node.setColor("uToColor" + postFix, toColor);
+        node.setUniform("uGradStop" + postFix, [fromX, fromY, toX, toY]);
+        node.setUniform("uGradType" + postFix, (gradationType === "linear" ? 0 : 1));
+        node.setUniform("uSmoothGrad" + postFix, smoothGradation);
         break;
       case 'texGrad':
         const {
@@ -5119,19 +5077,25 @@ const p5wgex = (function(){
           name:textureGradationTarget = "",
           smooth:smoothTextureGradation
         } = target;
-        node.setUniform({
-          uMaterialFlag:3,
-          'color/uFromColor':fromTextureGradationColor,
-          'color/uToColor':toTextureGradationColor
-        });
+
+        node.setUniform("uMaterialFlag" + postFix, 3);
+        node.setColor("uFromColor" + postFix, fromTextureGradationColor);
+        node.setColor("uToColor" + postFix, toTextureGradationColor);
         // 一応MRTを考慮する。たとえば'fbo/color/1'のように宣言する。
         // MRTの簡単なサンプルも作るかぁー：作ったよ
         _setTextureUniform(
-          node, textureGradationMaterialType, textureGradationTarget
+          node, textureGradationMaterialType, textureGradationTarget, postFix
         );
-        node.setUniform("uSmoothGrad", smoothTextureGradation);
+        node.setUniform("uSmoothGrad" + postFix, smoothTextureGradation);
         break;
     }
+  }
+
+  // もうほんとに正しいのかどうなのかわからん....
+  function _renderingTexture(node, materialType, target, options = {}){
+    node.use("__foxTextureRenderer__", "foxBoard");
+
+    _setMaterialUniforms(node, materialType, target);
 
     const {transform = {}} = options;
     const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
@@ -7810,6 +7774,50 @@ const p5wgex = (function(){
           if(src.b < 0.5){ result.b = 2.0*src.b*dst.b + dst.b*dst.b*(1.0-2.0*src.b); }
           else{ result.b = 2.0*dst.b*(1.0-src.b) + sqrt(dst.b)*(2.0*src.b-1.0); }
           return result;
+        }
+      `,
+    createMaterialColor:
+      `
+        vec4 linearGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in bool smoothGrad, in vec2 p){
+          vec2 n = normalize(toPos - fromPos);
+          float l = length(toPos - fromPos);
+          float ratio = clamp(dot(p - fromPos, n), 0.0, l)/l;
+          if (smoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
+          return (1.0 - ratio) * fromColor + ratio * toColor;
+        }
+        vec4 radialGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in bool smoothGrad, in vec2 p){
+          float l = length(toPos - fromPos);
+          float ratio = clamp(length(p - fromPos), 0.0, l)/l;
+          if (smoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
+          return (1.0 - ratio) * fromColor + ratio * toColor;
+        }
+        vec4 createMaterialColor(
+          in int materialFlag, in sampler2D tex, in vec4 monoColor,
+          in vec4 fromColor, in vec4 toColor, in int gradType, in vec4 gradStop,
+          in bool smoothGrad, in vec2 p
+        ){
+          if (materialFlag == 0) {
+            return texture(tex, p);
+          }
+          if (materialFlag == 1) {
+            return monoColor;
+          }
+          if (materialFlag == 2) {
+            if (gradType == 0) {
+              return linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+            }
+            if (gradType == 1) {
+              return radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+            }
+          }
+          if (materialFlag == 3) {
+            vec4 texColor = texture(tex, p);
+            if (smoothGrad) {
+              texColor.rgb = texColor.rgb * texColor.rgb * (3.0 - 2.0 * texColor.rgb);
+            }
+            return (1.0 - texColor) * fromColor + texColor * toColor;
+          }
+          return vec4(1.0);
         }
       `
   }
