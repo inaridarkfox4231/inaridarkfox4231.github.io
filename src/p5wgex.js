@@ -800,6 +800,7 @@ const foxIA = (function(){
 
   // キーを押したとき(activate), キーを押しているとき(update), キーを離したとき(inActivate),
   // それぞれに対してイベントを設定する。
+  // 改変でキーコードが分かるようにするわ。
   class KeyAction extends Interaction{
     constructor(canvas, options = {}){
       // keydown,keyupは何も指定せずともlistenerが登録されるようにする
@@ -808,24 +809,53 @@ const foxIA = (function(){
       options.keyup = true;
       super(canvas, options);
       this.keys = {};
+      this.options = {
+        showKeyCode:false, autoRegist:true
+      }
+      // showKeyCode: デフォルトはfalse. trueの場合、キーをたたくとコンソールにe.codeが表示される
+      // autoRegist: デフォルトはtrue. trueの場合、キーをたたくと自動的にkeyActionObjectがそれに対して生成される。
+    }
+    enable(...args){
+      // 各種オプションを有効化します。
+      const arg = [...arguments];
+      for (const name of arg) {
+        this.options[name] = true;
+      }
+      return this;
+    }
+    disable(...args){
+      // 各種オプションを無効化します。
+      const arg = [...arguments];
+      for (const name of arg) {
+        this.options[name] = false;
+      }
+      return this;
     }
     registAction(code, actions = {}){
-      if (typeof code === 'object') {
-        // まとめて登録する場合
-        for(const name of Object.keys(code)) {
-          this.registKeyAction(name, code[name]);
+      if (typeof code === 'string') {
+        const agent = this.keys[code];
+        if (agent === undefined) {
+          // 存在しない場合は、空っぽのアクションが生成される。指定がある場合はそれが設定される。
+          const result = {};
+          const {
+            activate = () => {}, update = () => {}, inActivate = () => {}
+          } = actions;
+          result.activate = activate;
+          result.update = update;
+          result.inActivate = inActivate;
+          result.active = false;
+          this.keys[code] = result;
+        } else {
+          // 存在する場合、actionsで指定されたものだけ上書きされる。
+          for (const actionType of Object.keys(actions)) {
+            agent[actionType] = actions[actionType];
+          }
         }
-        return this;
-      } else if (typeof code === 'string') {
-        const result = {};
-        const {
-          activate = () => {}, update = () => {}, inActivate = () => {}
-        } = actions;
-        result.activate = activate;
-        result.update = update;
-        result.inActivate = inActivate;
-        result.active = false;
-        this.keys[code] = result;
+      } else if (typeof code === 'object') {
+        // まとめて登録する場合。registActionsなんか要らんですよ。
+        for(const name of Object.keys(code)) {
+          this.registAction(name, code[name]);
+        }
       }
       return this;
     }
@@ -835,6 +865,15 @@ const foxIA = (function(){
       return agent.active;
     }
     keyDownAction(e){
+      if (this.options.showKeyCode) {
+        // showKeyCodeがonの場合、e.codeを教えてくれる。
+        console.log(e.code);
+      }
+      // 何らかのキーが押されると、その瞬間に空っぽのアクションからなる
+      // オブジェクトが生成される。それによりactive判定が可能になる。
+      if (this.options.autoRegist) {
+        this.registAction(e.code);
+      }
       const agent = this.keys[e.code];
       if (agent === undefined || agent.active) return;
       agent.activate();
@@ -903,12 +942,15 @@ const p5wgex = (function(){
       // これをerrorStringと違うものにすることでチェック用の文字列と出力用の
       // 文字列で違うものが使えるようになるわけ
       // 例えばだけどerrorStringはただの数にしてproperの方で具体的な内容、
-      // っていう風にすれば同じ1番ならどれが実行されても1回だけ、とかできるわけ。
+      // っていう風にすれば同じ1番ならどれが実行されても1回だけ、とかできる。
+      // 新規登録の場合のみtrueを返す
+      // これにより無限alert地獄を回避できる
       if (properErrorString === ""){
         properErrorString = errorString;
       }
-      if (this.checkOverlap(errorString)) return;
+      if (this.checkOverlap(errorString)) return false;
       window.console.error(properErrorString);
+      return true;
     }
   }
 
@@ -918,11 +960,11 @@ const p5wgex = (function(){
   // window.alertがうっとうしいので1回しか呼ばないように
   // noLoopで書き換えようと思います。
   // 引数を増やすかどうかは応相談
+  // 新規の場合のみSystemがtrueを返すのでalertが発生する。2回目以降の場合は何も起きない。
   function myAlert(_string, properErrorString = ""){
-    window.alert(_string);
-    //console.log("myAlert: " + _string);
-    //noLoop();
-    foxDriveErrorSystem.throwError(_string, properErrorString);
+    if (foxDriveErrorSystem.throwError(_string, properErrorString)) {
+      window.alert(_string);
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
@@ -5533,38 +5575,46 @@ const p5wgex = (function(){
       // どれなのか判然とせず混乱するのでここはtry～catchを使いましょう。
       // texture,framebufferTexture,colorの場合の特殊な処理をsetUniformにも用意しました（大丈夫？）
       try{
-        const data = name.split("/");
-        const identifier = data[0];
-        switch(identifier){
-          case "tex":
-            if (data.length > 1) {
-              this.setTexture(data[1], prop);
-            }
-            break;
-          case "fbo":
-            if (data.length > 2) {
-              // たとえばMRTの場合"color", 0 のように指定するので。
-              data[3] = Number(data[3]);
-              this.setFBOtexture2D(data[1], prop, data[2], data[3]);
-            } else if (data.length > 1) {
-              // もうこれでいいやめんどくさい
-              this.setFBOtexture2D(data[1], prop);
-            }
-            break;
-          case "color":
-            // color/で始まるようにすると、coulour表記が使える。
-            if (data.length > 1) {
-              this.currentPainter.setUniform(data[1], coulour(prop));
-            }
-            break;
-          default:
-            // "/"が使われていない場合。ユニフォーム名に"/"は使えない決まりなので問題ない。
-            this.currentPainter.setUniform(name, prop);
+        if (typeof name === 'string') {
+          const data = name.split("/");
+          const identifier = data[0];
+          switch(identifier){
+            case "tex":
+              if (data.length > 1) {
+                this.setTexture(data[1], prop);
+              }
+              break;
+            case "fbo":
+              if (data.length > 2) {
+                // たとえばMRTの場合"color", 0 のように指定するので。
+                data[3] = Number(data[3]);
+                this.setFBOtexture2D(data[1], prop, data[2], data[3]);
+              } else if (data.length > 1) {
+                // もうこれでいいやめんどくさい
+                this.setFBOtexture2D(data[1], prop);
+              }
+              break;
+            case "color":
+              // color/で始まるようにすると、coulour表記が使える。
+              if (data.length > 1) {
+                this.setColor(data[1], prop);
+                //this.currentPainter.setUniform(data[1], coulour(prop));
+              }
+              break;
+            default:
+              // "/"が使われていない場合。ユニフォーム名に"/"は使えない決まりなので問題ない。
+              this.currentPainter.setUniform(name, prop);
+          }
+        } else if (typeof name === 'object') {
+          // setUniformの引数がオブジェクトの場合にsetUniformsが実行されるようにする
+          // とはいえsetUniformsをなくしてしまうと可読性の問題があるのでsetUniformsはとりあえず残します。
+          // もう要らないけどね...
+          this.setUniforms(name);
         }
       }catch(error){
         myAlert("setUniform method error!. " + name);
-        console.log(error.message);
-        console.log(error.stack);
+        myAlert(error.message);
+        myAlert(error.stack);
         return null;
       }
       return this;
@@ -5580,7 +5630,8 @@ const p5wgex = (function(){
     }
     setColor(name, prop){
       // 色のユニフォームをcoulour表記で用意できるすごいやつ.
-      // 色ユニフォームしか要らない場合に便利。ただしvec4限定、vec3の場合はalphaは無視される感じです（登録自体は可能）
+      // 色ユニフォームしか要らない場合に便利。ただしvec4限定...
+      // 配列には対応できないんで工夫してください
       this.currentPainter.setUniform(name, coulour(prop));
       return this;
     }
@@ -6373,10 +6424,10 @@ const p5wgex = (function(){
       const {eye = [0, 0, h * 0.5 * Math.sqrt(3)]} = data;
       const {center = [0, 0, 0]} = data;
       const {top = [0, 1, 0]} = data;
-      top.normalize(); // 一応正規化しておく
       this.view.eye.set(eye);
       this.view.center.set(center);
       this.view.top.set(top);
+      this.view.top.normalize(); // 一応正規化しておく. そうですね。ベクトル用意しないとですね...
       this.calcViewMat();
     }
     updateView(data){
