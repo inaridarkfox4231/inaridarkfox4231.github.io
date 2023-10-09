@@ -602,7 +602,6 @@ const foxIA = (function(){
         mouseenter:[],
         mouseleave:[],
         dblclick:[],
-        dbltap:[],
         keydown:[],
         keyup:[],
         touchstart:[], // スマホだとclickが発動しないので代わりに。
@@ -729,7 +728,15 @@ const foxIA = (function(){
       }
     }
     setAction(name, func){
-      this.actions[name] = func;
+      // オブジェクト記法に対応
+      if (typeof name === 'string') {
+        this.actions[name] = func;
+      } else if (typeof name === 'object') {
+        for(const _name of Object.keys(name)){
+          const _func = name[_name];
+          this.actions[_name] = _func;
+        }
+      }
     }
     isActive(){
       return this.active;
