@@ -2491,7 +2491,7 @@ const p5wgex = (function(){
     if(stencilBuffer !== null){ result.stencil = stencilBuffer; }
     result.w = info.w;
     result.h = info.h;
-    result.double = false;
+    //result.double = false;
     return result;
   }
 
@@ -2499,6 +2499,8 @@ const p5wgex = (function(){
 
   // fboのダブル。TFFとは違うのよね。フレームの別の場所参照できるから。そこが異なるようです。
   // validateの重ね掛けは問題ないので、そのままぶちこめ。
+  // 廃止
+  /*
   function _createDoubleFBO(gl, info, dict){
     let fbo0 = _createFBO(gl, info, dict);
     let fbo1 = _createFBO(gl, info, dict);
@@ -2515,6 +2517,7 @@ const p5wgex = (function(){
     }
     // infoの役割終了
   }
+  */
 
   // あとはp5の2D,webgl画像からテクスチャを作るのとか用意したいね.
   // 登録しておいてそこから取り出して編集とか。そうね。それでもいいかも。bgManagerの後継機みたいな。さすがにクラスにしないと...
@@ -5351,6 +5354,8 @@ const p5wgex = (function(){
       this.fbos[name] = newFBO;
       return this;
     }
+    /*
+    // 廃止
     registDoubleFBO(name, info){
       // nameはここで付ける。wとhは必ず指定してください。doubleのtrue,falseはあとで指定します。
       info.name = name;
@@ -5362,6 +5367,7 @@ const p5wgex = (function(){
       }
       return this;
     }
+    */
     registTexture(name, info = {}){
       // infoに誤ってsrcをそのままぶちこまないようにしないといけない？
       // infoが次のタイプの場合は{src:info}で置き換えることとする。
@@ -5606,6 +5612,7 @@ const p5wgex = (function(){
           myAlert("bind failure: The corresponding framebuffer does not exist.");
           return null;
         }
+        /* doubleは廃止
         if(fbo.double){
           // doubleの場合はwriteをbind
           gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.write.f);
@@ -5613,6 +5620,7 @@ const p5wgex = (function(){
           this.currentFBO = target;
           return this;
         }
+        */
         // 通常時
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.f);
         gl.viewport(0, 0, fbo.w, fbo.h);
@@ -5680,6 +5688,7 @@ const p5wgex = (function(){
         myAlert("setFBOtexture2D failure: The corresponding framebuffer does not exist.");
         return null;
       }
+      /*
       if(fbo.double){
         // doubleの場合はreadをセットする
         // 配列の場合は...
@@ -5688,6 +5697,7 @@ const p5wgex = (function(){
         this.setTexture(uniformName, _texture_double);
         return this;
       }
+      */
       // 通常時
       // 配列の場合は...
       const _texture = (Array.isArray(fbo[kind]) ? fbo[kind][index] : fbo[kind]);
@@ -5707,7 +5717,9 @@ const p5wgex = (function(){
       this.fbos[fboName1] = tmpFBO;
       return this;
     }
+    /*
     swapFBO(fboName){
+      // ダブルの場合にしか機能しない中途半端な関数なんて要らないんだよ
       // ダブル前提。ダブルの場合にswapする
       if(fboName == null){ return this; }
       let fbo = this.fbos[fboName];
@@ -5719,6 +5731,7 @@ const p5wgex = (function(){
       if(fbo.read && fbo.write){ fbo.swap(); }
       return this;
     }
+    */
     swapAttribute(attrName0, attrName1){
       const fig = this.currentFigure;
       if (fig.useVAO) {
