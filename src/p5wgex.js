@@ -5705,7 +5705,7 @@ const p5wgex = (function(){
       const tmpFBO = this.fbos[fboName0];
       this.fbos[fboName0] = this.fbos[fboName1];
       this.fbos[fboName1] = tmpFBO;
-      return true;
+      return this;
     }
     swapFBO(fboName){
       // ダブル前提。ダブルの場合にswapする
