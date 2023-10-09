@@ -4969,7 +4969,7 @@ const p5wgex = (function(){
   // ---------------------------------------------------------------------------------------------- //
   // Default Painters.
 
-  // textureRenderer.
+  // createTextureRenderer.
   // 表示位置をいじれるようにするのとか色々付け加えたいところ。
   // ただめんどうなのでplaneのtransform作ったら終わりでいいです
   function _createTextureRenderer(node){
@@ -4998,40 +4998,154 @@ const p5wgex = (function(){
     sh.addUniform("int", "uMaterialFlag", "fs");
     sh.addUniform("bool", "uSmoothGrad", "fs");
     sh.addCode(`
-      vec4 linearGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in vec2 p){
+      vec4 linearGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in bool smoothGrad, in vec2 p){
         vec2 n = normalize(toPos - fromPos);
         float l = length(toPos - fromPos);
         float ratio = clamp(dot(p - fromPos, n), 0.0, l)/l;
-        if (uSmoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
+        if (smoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
         return (1.0 - ratio) * fromColor + ratio * toColor;
       }
-      vec4 radialGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in vec2 p){
+      vec4 radialGradient(in vec4 fromColor, in vec4 toColor, in vec2 fromPos, in vec2 toPos, in bool smoothGrad, in vec2 p){
         float l = length(toPos - fromPos);
         float ratio = clamp(length(p - fromPos), 0.0, l)/l;
-        if (uSmoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
+        if (smoothGrad) ratio = ratio * ratio * (3.0 - 2.0 * ratio);
         return (1.0 - ratio) * fromColor + ratio * toColor;
+      }
+      vec4 createMaterialColor(
+        in int materialFlag, in sampler2D tex, in vec4 monoColor, in vec4 fromColor, in vec4 toColor,
+        in int gradType, in vec4 gradStop, in bool smoothGrad, in vec2 p
+      ){
+        if (materialFlag == 0) {
+          return texture(tex, p);
+        }
+        if (materialFlag == 1) {
+          return monoColor;
+        }
+        if (materialFlag == 2) {
+          if (gradType == 0) {
+            return linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+          }
+          if (gradType == 1) {
+            return radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+          }
+        }
+        if (materialFlag == 3) {
+          vec4 texColor = texture(tex, p);
+          if (smoothGrad) {
+            texColor.rgb = texColor.rgb * texColor.rgb * (3.0 - 2.0 * texColor.rgb);
+          }
+          return (1.0 - texColor) * fromColor + texColor * toColor;
+        }
+        return vec4(1.0);
       }
     `, "routines", "fs");
     sh.addCode(`
-      if (uMaterialFlag == 0) {
-        color = texture(uTex, uv);
-        color.rgb *= color.a;
-      }
-      if (uMaterialFlag == 1) {
-        color = uMonoColor;
-        color.rgb *= color.a;
-      }
-      if (uMaterialFlag == 2) {
-        if (uGradType == 0) {
-          color = linearGradient(uFromColor, uToColor, uGradStop.xy, uGradStop.zw, uv);
-        }
-        if (uGradType == 1) {
-          color = radialGradient(uFromColor, uToColor, uGradStop.xy, uGradStop.zw, uv);
-        }
-        color.rgb *= color.a;
-      }
+      color = createMaterialColor(uMaterialFlag, uTex, uMonoColor, uFromColor, uToColor, uGradType, uGradStop, uSmoothGrad, uv);
+      color.rgb *= color.a;
     `, "preProcess", "fs");
     sh.registPainter("__foxTextureRenderer__");
+  }
+
+  // 重複処理になってしまっているのでまとめてしまおう
+  // ざっくりいうとMRTの場合はfbo/color/2とか指定するんだよ
+  // ってだけの話。splitが重複してるのは無視してください。
+  function _setTextureUniform(node, type, name, options = {}){
+    const {flipName = "uFlip", textureName = "uTex", postFix = ""} = options;
+    const data = type.split('/');
+    const identifier = data[0];
+    if (data[0] === 'tex') {
+      node.setUniform("uFlip" + postFix, false);
+      node.setTexture("uTex" + postFix, name);
+    } else if (data[0] === 'fbo') {
+      node.setUniform("uFlip" + postFix, true);
+      if (data.length === 1) {
+        node.setFBOtexture2D("uTex" + postFix, name);
+      } else {
+        node.setFBOtexture2D("uTex" + postFix, name, data[1], Number(data[2]));
+      }
+    }
+  }
+
+  // renderTextureの内部処理を切り分けます
+  // RenderNodeから直接呼び出せるようにします
+  function _renderingTexture(node, materialType, target, options = {}){
+    node.use("__foxTextureRenderer__", "foxBoard");
+
+    const identifier = materialType.split('/')[0];
+
+    switch(identifier){
+      case 'tex':
+      case 'fbo':
+        node.setUniform("uMaterialFlag", 0);
+        _setTextureUniform(
+          node, materialType, target
+        );
+        break;
+      case 'color':
+        node.setUniform({
+          uMaterialFlag:1,
+          'color/uMonoColor':target
+        });
+        break;
+      case 'grad':
+        const {
+          from:fromGradationColor = {},
+          to:toGradationColor = {},
+          type:gradationType = "linear",
+          smooth:smoothGradation = false
+        } = target;
+        const {
+          color:fromColor = "white",
+          x:fromX = 0, y:fromY = 0
+        } = fromGradationColor;
+        const {
+          color:toColor = "black",
+          x:toX = 1, y:toY = 1
+        } = toGradationColor;
+        node.setUniform({
+          uMaterialFlag:2,
+          'color/uFromColor':fromColor,
+          'color/uToColor':toColor,
+          uGradStop:[fromX, fromY, toX, toY],
+          uGradType:(gradationType === "linear" ? 0 : 1),
+          uSmoothGrad:smoothGradation
+        });
+        break;
+      case 'texGrad':
+        const {
+          from:fromTextureGradationColor = "white",
+          to:toTextureGradationColor = "black",
+          type:textureGradationMaterialType = 'tex',
+          name:textureGradationTarget = "",
+          smooth:smoothTextureGradation
+        } = target;
+        node.setUniform({
+          uMaterialFlag:3,
+          'color/uFromColor':fromTextureGradationColor,
+          'color/uToColor':toTextureGradationColor
+        });
+        // 一応MRTを考慮する。たとえば'fbo/color/1'のように宣言する。
+        // MRTの簡単なサンプルも作るかぁー：作ったよ
+        _setTextureUniform(
+          node, textureGradationMaterialType, textureGradationTarget
+        );
+        node.setUniform("uSmoothGrad", smoothTextureGradation);
+        break;
+    }
+
+    const {transform = {}} = options;
+    const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
+    node.setUniforms({
+      uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
+    });
+
+    const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
+    options.depthMask = depthMask;
+    options.depthTest = depthTest;
+    options.cullFace = cullFace;
+
+    node.drawArrays("triangle_strip", options);
+    node.unbind();
   }
 
   // ---------------------------------------------------------------------------------------------- //
@@ -5929,7 +6043,7 @@ const p5wgex = (function(){
       return this;
     }
     renderFoxBoard(painterName, options = {}){
-      // foxBoardは_nodeの管轄なのでこっちでやろう。グローバル増やしたくない。
+      // foxBoardはRenderNodeの管轄なのでこっちでやろう。グローバル増やしたくない。
       // optionsにいろいろ、blendとか、指定を書く。
       this.use(painterName, "foxBoard");
       const {uniforms = {}} = options;
@@ -5938,61 +6052,17 @@ const p5wgex = (function(){
       this.unbind();
     }
     renderTexture(materialType, target, options = {}){
-      // textureのレンダリング
-      _node.use("__foxTextureRenderer__", "foxBoard");
-      const materialTypeData = materialType.split('/');
-      const identifier = materialTypeData[0];
-      materialTypeData.shift(0);
-      if (identifier === 'fbo') {
-        // fboの場合はuvを縦にflipする
-        _node.setUniform("uFlip", true);
-      } else {
-        _node.setUniform("uFlip", false);
-      }
-      switch(identifier){
-        case 'tex':
-          _node.setUniform("uMaterialFlag", 0);
-          _node.setTexture("uTex", target);
-          break;
-        case 'fbo':
-          _node.setUniform("uMaterialFlag", 0);
-          if (materialTypeData.length > 0) {
-            _node.setFBOtexture2D("uTex", target, materialTypeData[0], Number(materialTypeData[1]));
-          } else {
-            _node.setFBOtexture2D("uTex", target);
-          }
-          break;
-        case 'color':
-          _node.setUniform("uMaterialFlag", 1);
-          _node.setUniform("uMonoColor", ex.coulour(target));
-          break;
-        case 'grad':
-          const {from = {}, to = {}, type = "linear", smooth = false} = target;
-          const {color:fromColor = "white", x:fromX = 0, y:fromY = 0} = from;
-          const {color:toColor = "black", x:toX = 1, y:toY = 1} = to;
-          _node.setUniform("uMaterialFlag", 2);
-          _node.setUniform("uFromColor", ex.coulour(fromColor));
-          _node.setUniform("uToColor", ex.coulour(toColor));
-          _node.setUniform("uGradStop", [fromX, fromY, toX, toY]);
-          _node.setUniform("uGradType", (type === "linear" ? 0 : 1));
-          _node.setUniform("uSmoothGrad", smooth);
-          break;
-      }
-      const {transform = {}} = options;
-      // 表示位置の変更。原点中心、正規化デバイス座標上での位置変更。
-      const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
-      _node.setUniforms({
-        uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
-      });
-      // depth関連はすべて切るのがデフォルト。blendはやめましょう。""でいいです。使いたいなら明示すること。
-      // これにより多少の影響があるかもしれないけどまあ仕方ないね
-      // 代わりにいくつかのオプションを増やす。colorMin, colorMax, add, multiply, screenあたり。
-      const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
-      options.depthMask = depthMask;
-      options.depthTest = depthTest;
-      options.cullFace = cullFace;
-      _node.drawArrays("triangle_strip", options);
-      _node.unbind();
+      // materialType: 'tex', 'fbo', 'color', 'grad', 'texGrad'の5種類（実質的には4種類）
+      _renderingTexture(this, materialType, target, options);
+      return this;
+    }
+    renderMixTexture(src, dst, mixMethod){
+      //_renderingMixTexture(this, src, dst, mixMethod);
+      return this;
+    }
+    renderingQuadTexture(texArray = []){
+      //_renderingQuadTexture(this, texArray);
+      return this;
     }
     unbind(){
       // 各種bind解除
