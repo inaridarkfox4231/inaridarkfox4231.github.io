@@ -5270,6 +5270,7 @@ const p5wgex = (function(){
       this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
       // デフォルトのペインターを作る
       _createTextureRenderer(this);
+      _createMixTextureRenderer(this)
     }
     enableExtensions(){
       // color_buffer_floatのEXT処理。pavelさんはこれ使ってwebgl2でもfloatへの書き込みが出来るようにしてた。
