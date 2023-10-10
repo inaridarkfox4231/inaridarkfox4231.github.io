@@ -5009,6 +5009,98 @@ const p5wgex = (function(){
     sh.registPainter("__foxTextureRenderer__");
   }
 
+  function _createMixTextureRenderer(node){
+    const sh = new ex.PlaneShader(node);
+    sh.initialize();
+    sh.addUniform("vec2", "uScale", "vs");
+    sh.addUniform("float", "uRotation", "vs");
+    sh.addUniform("vec2", "uTranslate", "vs");
+    // Flipがtrueになるのはfboが絡む場合のみで、これは基本的にfalseです。
+    sh.addUniform("bool", "uFlip_src", "vs");
+    sh.addUniform("bool", "uFlip_dst", "vs");
+    sh.clearVaryings();
+    sh.addVarying("vec2", "vUv_src");
+    sh.addVarying("vec2", "vUv_dst");
+    // フリップしないのにフリップするとかいう謎コード
+    // テクスチャの基本的な方向が上から下なので仕方ないです
+
+    // 以下、16個の変数を...めんどくさいですが。
+    sh.writeCode(`
+      vec2 position = aPosition;
+      vUv_src = aPosition * 0.5 + 0.5;
+      vUv_dst = aPosition * 0.5 + 0.5;
+      if (!uFlip_src) vUv_src.y = 1.0 - vUv_src.y;
+      if (!uFlip_dst) vUv_dst.y = 1.0 - vUv_dst.y;
+      position *= uScale;
+      position *= mat2(cos(uRotation), -sin(uRotation), sin(uRotation), cos(uRotation));
+      position += uTranslate;
+    `, "preProcess", "vs");
+
+    sh.addUniform("sampler2D", "uTex_src", "fs");
+    sh.addUniform("vec4", "uMonoColor_src", "fs");
+    sh.addUniform("vec4", "uFromColor_src", "fs");
+    sh.addUniform("vec4", "uToColor_src", "fs");
+    sh.addUniform("vec4", "uGradStop_src", "fs");
+    sh.addUniform("int", "uGradType_src", "fs");
+    sh.addUniform("int", "uMaterialFlag_src", "fs");
+    sh.addUniform("bool", "uSmoothGrad_src", "fs");
+
+    sh.addUniform("sampler2D", "uTex_dst", "fs");
+    sh.addUniform("vec4", "uMonoColor_dst", "fs");
+    sh.addUniform("vec4", "uFromColor_dst", "fs");
+    sh.addUniform("vec4", "uToColor_dst", "fs");
+    sh.addUniform("vec4", "uGradStop_dst", "fs");
+    sh.addUniform("int", "uGradType_dst", "fs");
+    sh.addUniform("int", "uMaterialFlag_dst", "fs");
+    sh.addUniform("bool", "uSmoothGrad_dst", "fs");
+
+    sh.addUniform("int", "uCompositeFlag", "fs");
+    sh.addUniform("vec4", "uMixColor", "fs");
+
+    sh.addCode(snipet_createMaterialColor, "routines", "fs");
+
+    sh.addCode(`
+      vec4 composite(in vec4 src, in vec4 dst, in int flag){
+        if (flag == 0) { // blend.
+          return vec4(
+            src.a * src.rgb + (1.0 - src.a) * dst.rgb,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+        if (flag == 1) { // add.
+          return vec4(
+            src.a * src.rgb + dst.rgb,
+            src.a + dst.a
+          );
+        }
+        if (flag == 11) { // color.
+          return vec4(
+            src.a * (1.0 - uMixColor.rgb) * src.rgb + uMixColor.rgb * dst.rgb,
+            (1.0 - uMixColor.a) * src.a + uMixColor.a * dst.a
+          );
+        }
+      }
+    `, "routines", "fs");
+
+    sh.writeCode(`
+      vec4 src = createMaterialColor(
+        uMaterialFlag_src, uTex_src, uMonoColor_src, uFromColor_src, uToColor_src,
+        uGradType_src, uGradStop_src, uSmoothGrad_src, vUv_src
+      );
+      vec4 dst = createMaterialColor(
+        uMaterialFlag_dst, uTex_dst, uMonoColor_dst, uFromColor_dst, uToColor_dst,
+        uGradType_dst, uGradStop_dst, uSmoothGrad_dst, vUv_dst
+      );
+      src = min(vec4(1.0), src);
+      dst = min(vec4(1.0), dst);
+      vec4 color = composite(src, dst, uCompositeFlag);
+      color = min(vec4(1.0), color);
+      color.rgb *= color.a;
+    `, "preProcess", "fs");
+
+    sh.registPainter("__foxMixTextureRenderer__");
+  }
+
   // 重複処理になってしまっているのでまとめてしまおう
   // ざっくりいうとMRTの場合はfbo/color/2とか指定するんだよ
   // ってだけの話。splitが重複してるのは無視してください。
@@ -5096,6 +5188,41 @@ const p5wgex = (function(){
     node.use("__foxTextureRenderer__", "foxBoard");
 
     _setMaterialUniforms(node, materialType, target);
+
+    const {transform = {}} = options;
+    const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
+    node.setUniforms({
+      uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
+    });
+
+    const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
+    options.depthMask = depthMask;
+    options.depthTest = depthTest;
+    options.cullFace = cullFace;
+
+    node.drawArrays("triangle_strip", options);
+    node.unbind();
+  }
+
+  function _renderingMixTexture(node, src, dst, options = {}){
+    node.use("__foxMixTextureRenderer__", "foxBoard");
+
+    const {type:materialType_src = 'color', target:target_src = 'black'} = src;
+    const {type:materialType_dst = 'color', target:target_dst = 'white'} = dst;
+
+    _setMaterialUniforms(node, materialType_src, target_src, "_src");
+    _setMaterialUniforms(node, materialType_dst, target_dst, "_dst");
+
+    const mixFlag = {
+      blend:0, add:1, screen:2, multiply:3, overlay:4, softLight:5, hardLight:6,
+      dodge:7, burn:8, exclusion:9, remove:10, color:11
+    }
+    // colorも追加して。mix:"color"の場合、mixColor(デフォは黒)の値で
+    // 1-mixColorとmixColor使ってsrcとdstを補間する。色指定はcoulourに従う。
+
+    const {mix = "blend", mixColor = "black"} = options;
+    node.setUniform("uCompositeFlag", mixFlag[mix]);
+    node.setColor("uMixColor", mixColor);
 
     const {transform = {}} = options;
     const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
@@ -6021,7 +6148,8 @@ const p5wgex = (function(){
       return this;
     }
     renderMixTexture(src, dst, mixMethod){
-      //_renderingMixTexture(this, src, dst, mixMethod);
+      // src, dstは上記の5種類、さらにblendの仕方などを指定する。
+      _renderingMixTexture(this, src, dst, options);
       return this;
     }
     renderingQuadTexture(texArray = []){
