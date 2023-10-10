@@ -4697,13 +4697,26 @@ const p5wgex = (function(){
       // 一片の長さがradius*2の立方体の中に落とす。
       // x,y,zのmaxとminを取って差を取って最大値を取って2で割ってそれがradiusに
       // なるように中心に対してあれしてあれする
+      const bb = this.getBoundingBox();
+      const xMid = (bb.xMax + bb.xMin) * 0.5;
+      const yMid = (bb.yMax + bb.yMin) * 0.5;
+      const zMid = (bb.zMax + bb.zMin) * 0.5;
+      const _size = Math.max((bb.xMax - bb.xMin)*0.5, (bb.yMax - bb.yMin)*0.5, (bb.zMax - bb.zMin)*0.5);
+      // ここプラスじゃなくてマイナスですよね...？
+      this.translate(-xMid, -yMid, -zMid);
+      this.scale(radius/_size, radius/_size, radius/_size);
+      return this;
+    }
+    getBoundingBox(){
+      // あった方がいいでしょう
+      // ベースを0にしたりできるし
       let xMin = Infinity;
       let xMax = -Infinity;
       let yMin = Infinity;
       let yMax = -Infinity;
       let zMin = Infinity;
       let zMax = -Infinity;
-      for(let i=0;i<this.v.length/3; i++){
+      for(let i = 0; i < this.v.length/3; i++){
         xMin = Math.min(this.v[3*i], xMin);
         xMax = Math.max(this.v[3*i], xMax);
         yMin = Math.min(this.v[3*i+1], yMin);
@@ -4711,13 +4724,7 @@ const p5wgex = (function(){
         zMin = Math.min(this.v[3*i+2], zMin);
         zMax = Math.max(this.v[3*i+2], zMax);
       }
-      const xMid = (xMax + xMin) * 0.5;
-      const yMid = (yMax + yMin) * 0.5;
-      const zMid = (zMax + zMin) * 0.5;
-      const _size = Math.max(Math.max((xMax-xMin)*0.5, (yMax-yMin)*0.5), (zMax-zMin)*0.5);
-      this.translate(xMid, yMid, zMid);
-      this.scale(radius/_size, radius/_size, radius/_size);
-      return this;
+      return {xMin, xMax, yMin, yMax, zMin, zMax};
     }
     composite(mesh){
       // 別のメッシュを結合する。UVもそのままドッキングさせる。
@@ -4792,8 +4799,8 @@ const p5wgex = (function(){
       const result = {};
       if (typeof x === 'number') {
         result.x = x;
-        result.y = (y === undefined ? x : y);
-        result.z = (z === undefined ? y : z);
+        result.y = (y === undefined ? result.x : y);
+        result.z = (z === undefined ? result.y : z);
       } else if (x instanceof Array || x instanceof Float32Array || x instanceof Uint8Array){
         result.x = x[0];
         result.y = x[1];
