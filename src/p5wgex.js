@@ -5143,7 +5143,9 @@ const p5wgex = (function(){
       if (id == 1) color = getTexture(1, uTextureNum, uTex1, uFlip1, uv);
       if (id == 2) color = getTexture(2, uTextureNum, uTex2, uFlip2, uv);
       if (id == 3) color = getTexture(3, uTextureNum, uTex3, uFlip3, uv);
-      color.rgb *= color.a;
+      // テクスチャの値をそのまま表示するだけですから、不要ですね。
+      // 間に処理が挟まる場合は、一旦rgbをaで割って、最後にこれを適用する必要があります。
+      //color.rgb *= color.a;
     `, "preProcess", "fs");
     sh.registPainter("__foxQuadTextureRenderer__");
   }
@@ -8002,7 +8004,9 @@ const p5wgex = (function(){
           in bool smoothGrad, in vec2 p
         ){
           if (materialFlag == 0) {
-            return texture(tex, p);
+            vec4 tex = texture(tex, p);
+            tex.rgb /= tex.a; // 加工するために本来のrgbに戻す
+            return tex;
           }
           if (materialFlag == 1) {
             return monoColor;
@@ -8017,8 +8021,11 @@ const p5wgex = (function(){
           }
           if (materialFlag == 3) {
             vec4 texColor = texture(tex, p);
+            // これもテクスチャ採取なので本来の値を使うなら一旦rgbをaで割る（運用上はalpha=1を想定してるけどね...）
+            texColor.rgb /= texColor.a;
             if (smoothGrad) {
-              texColor.rgb = texColor.rgb * texColor.rgb * (3.0 - 2.0 * texColor.rgb);
+              // rgbに限定する理由が不明確なので一旦これで...
+              texColor = texColor * texColor * (3.0 - 2.0 * texColor);
             }
             return (1.0 - texColor) * fromColor + texColor * toColor;
           }
