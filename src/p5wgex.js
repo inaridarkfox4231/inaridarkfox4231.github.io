@@ -5101,6 +5101,44 @@ const p5wgex = (function(){
     sh.registPainter("__foxMixTextureRenderer__");
   }
 
+  // 単純に最大4枚のテクスチャを表示するだけ。無い場所はvec4(0.0)となり、blend:"blend"なら背景色になる。
+  function _createQuadTextureRenderer(node){
+    const sh = new ex.PlaneShader(node);
+    sh.initialize();
+    // テクスチャを4枚読み込んで4隅に縮小して4つ並べるだけのきわめてシンプルな
+    // シェーダです。存在しない場合、そこは真っ黒になります。透明度0の。
+    // 今回はuvを分割するのではなくfsサイドでyを反転させる方向で行きます
+    sh.addUniform("sampler2D", "uTex0", "fs");
+    sh.addUniform("sampler2D", "uTex1", "fs");
+    sh.addUniform("sampler2D", "uTex2", "fs");
+    sh.addUniform("sampler2D", "uTex3", "fs");
+    sh.addUniform("bool", "uFlip0", "fs");
+    sh.addUniform("bool", "uFlip1", "fs");
+    sh.addUniform("bool", "uFlip2", "fs");
+    sh.addUniform("bool", "uFlip3", "fs");
+    sh.addUniform("int", "uTextureNum", "fs");
+    sh.addCode(`
+      vec4 getTexture(in int id, in int textureNum, in sampler2D tex, in bool flip, in vec2 p){
+        if (id >= textureNum) return vec4(0.0);
+        if (flip) p.y = 1.0 - p.y;
+        return texture(tex, p);
+      }
+    `, "routines", "fs");
+    sh.addCode(`
+      int id = 0;
+      if (uv.x < 0.5) { uv.x *= 2.0; }
+      else { id += 1; uv.x = (uv.x - 0.5) * 2.0; }
+      if (uv.y < 0.5) { uv.y *= 2.0; }
+      else { id += 2; uv.y = (uv.y - 0.5) * 2.0; }
+      if (id == 0) color = getTexture(0, uTextureNum, uTex0, uFlip0, uv);
+      if (id == 1) color = getTexture(1, uTextureNum, uTex1, uFlip1, uv);
+      if (id == 2) color = getTexture(2, uTextureNum, uTex2, uFlip2, uv);
+      if (id == 3) color = getTexture(3, uTextureNum, uTex3, uFlip3, uv);
+      color.rgb *= color.a;
+    `, "preProcess", "fs");
+    sh.registPainter("__foxQuadTextureRenderer__");
+  }
+
   // 重複処理になってしまっているのでまとめてしまおう
   // ざっくりいうとMRTの場合はfbo/color/2とか指定するんだよ
   // ってだけの話。splitが重複してるのは無視してください。
@@ -5239,6 +5277,26 @@ const p5wgex = (function(){
     node.unbind();
   }
 
+  // とにかくシンプルに。transformもしません。4枚表示するだけ。
+  function _renderingQuadTextures(node, textures = [], options = {}){
+    node.use("__foxQuadTextureRenderer__", "foxBoard");
+
+    for (let i=0; i<textures.length; i++) {
+      const tex = textures[i];
+      const {type, target} = tex;
+      _setTextureUniform(node, type, target, i.toString());
+    }
+    node.setUniform("uTextureNum", textures.length);
+
+    const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
+    options.depthMask = depthMask;
+    options.depthTest = depthTest;
+    options.cullFace = cullFace;
+
+    node.drawArrays("triangle_strip", options);
+    node.unbind();
+  }
+
   // ---------------------------------------------------------------------------------------------- //
   // RenderNode.
 
@@ -5270,7 +5328,9 @@ const p5wgex = (function(){
       this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
       // デフォルトのペインターを作る
       _createTextureRenderer(this);
-      _createMixTextureRenderer(this)
+      _createMixTextureRenderer(this);
+      _createQuadTextureRenderer(this);
+
     }
     enableExtensions(){
       // color_buffer_floatのEXT処理。pavelさんはこれ使ってwebgl2でもfloatへの書き込みが出来るようにしてた。
@@ -6153,8 +6213,8 @@ const p5wgex = (function(){
       _renderingMixTexture(this, src, dst, options);
       return this;
     }
-    renderingQuadTexture(texArray = []){
-      //_renderingQuadTexture(this, texArray);
+    renderQuadTexture(textures = [], options = {}){
+      _renderingQuadTextures(this, textures, options);
       return this;
     }
     unbind(){
