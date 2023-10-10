@@ -4997,6 +4997,7 @@ const p5wgex = (function(){
     sh.addUniform("int", "uGradType", "fs");
     sh.addUniform("int", "uMaterialFlag", "fs");
     sh.addUniform("bool", "uSmoothGrad", "fs");
+    sh.addUniform("vec4", "uTint", "fs");
     sh.addCode(snipet.createMaterialColor, "routines", "fs");
     sh.addCode(`
       color = createMaterialColor(
@@ -5004,6 +5005,7 @@ const p5wgex = (function(){
         uFromColor, uToColor, uGradType, uGradStop,
         uSmoothGrad, uv
       );
+      color *= uTint; // たとえば[1,1,1,0.3]とかで透明にしたり。1より大きい値も設定できたらいいかな...
       color.rgb *= color.a;
     `, "preProcess", "fs");
     sh.registPainter("__foxTextureRenderer__");
@@ -5091,10 +5093,10 @@ const p5wgex = (function(){
         uMaterialFlag_dst, uTex_dst, uMonoColor_dst, uFromColor_dst, uToColor_dst,
         uGradType_dst, uGradStop_dst, uSmoothGrad_dst, vUv_dst
       );
-      src = min(vec4(1.0), src);
-      dst = min(vec4(1.0), dst);
+      // それぞれを色として扱うために切り詰めを実行する
+      src = clamp(src, vec4(0.0), vec4(1.0));
+      dst = clamp(dst, vec4(0.0), vec4(1.0));
       vec4 color = composite(src, dst, uCompositeFlag);
-      color = min(vec4(1.0), color);
       color.rgb *= color.a;
     `, "preProcess", "fs");
 
@@ -5221,7 +5223,7 @@ const p5wgex = (function(){
     }
   }
 
-  // もうほんとに正しいのかどうなのかわからん....
+  // 進んでる方向は正しいので自信を持とうね
   function _renderingTexture(node, materialType, target, options = {}){
     node.use("__foxTextureRenderer__", "foxBoard");
 
@@ -5232,6 +5234,13 @@ const p5wgex = (function(){
     node.setUniforms({
       uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
     });
+    // renderTextureのみuTintを用意する。
+    // これがあるとテクスチャ画像の透明度だけいじるような使い方ができる（デフォルトは[1,1,1,1]）
+    // これsetColorだと色としてしか扱えないんですが、赤だけ2倍にするとか、そういうことができないので、
+    // 敢えてcoulourは使わずにこの形式で行こうと思います。はい。あくまで柔軟性のためにね。
+    // 大体、色がいいならex.coulour("teal")とかすればいいので、何の問題もないです。tintは色とは限らない、それでいこう。
+    const {tint = [1, 1, 1, 1]} = options;
+    node.setUniform("uTint", tint);
 
     const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
     options.depthMask = depthMask;
