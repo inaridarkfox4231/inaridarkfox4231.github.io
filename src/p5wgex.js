@@ -5057,7 +5057,7 @@ const p5wgex = (function(){
     sh.addUniform("int", "uCompositeFlag", "fs");
     sh.addUniform("vec4", "uMixColor", "fs");
 
-    sh.addCode(snipet_createMaterialColor, "routines", "fs");
+    sh.addCode(snipet.createMaterialColor, "routines", "fs");
 
     sh.addCode(`
       vec4 composite(in vec4 src, in vec4 dst, in int flag){
