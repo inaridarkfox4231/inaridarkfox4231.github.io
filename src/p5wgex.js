@@ -6147,7 +6147,7 @@ const p5wgex = (function(){
       _renderingTexture(this, materialType, target, options);
       return this;
     }
-    renderMixTexture(src, dst, mixMethod){
+    renderMixTexture(src, dst, options = {}){
       // src, dstは上記の5種類、さらにblendの仕方などを指定する。
       _renderingMixTexture(this, src, dst, options);
       return this;
