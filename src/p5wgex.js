@@ -4914,8 +4914,10 @@ const p5wgex = (function(){
         uFromColor, uToColor, uGradType, uGradStop,
         uSmoothGrad, uv
       );
-      color *= uTint; // たとえば[1,1,1,0.3]とかで透明にしたり。1より大きい値も設定できたらいいかな...
-      color.rgb *= color.a;
+      // uTintを掛ける場合、掛ける前に乗算前に戻し、掛けてから、alphaをrgbに掛ける。結果的に、uTint.rgb *= uTint.aを
+      // したあとでそれを掛ける形になる。
+      color *= (uTint * vec4(vec3(uTint.a), 1.0));
+      //color.rgb *= color.a; // これは不要。
     `, "preProcess", "fs");
     sh.registPainter("__foxTextureRenderer__");
   }
@@ -4974,19 +4976,19 @@ const p5wgex = (function(){
       vec4 composite(in vec4 src, in vec4 dst, in int flag){
         if (flag == 0) { // blend.
           return vec4(
-            src.a * src.rgb + (1.0 - src.a) * dst.rgb,
+            src.rgb + (1.0 - src.a) * dst.rgb,
             src.a + dst.a - src.a * dst.a
           );
         }
         if (flag == 1) { // add.
           return vec4(
-            src.a * src.rgb + dst.rgb,
+            src.rgb + dst.rgb,
             src.a + dst.a
           );
         }
         if (flag == 11) { // color.
           return vec4(
-            src.a * (1.0 - uMixColor.rgb) * src.rgb + uMixColor.rgb * dst.rgb,
+            (1.0 - uMixColor.rgb) * src.rgb + uMixColor.rgb * dst.rgb,
             (1.0 - uMixColor.a) * src.a + uMixColor.a * dst.a
           );
         }
@@ -4994,6 +4996,7 @@ const p5wgex = (function(){
     `, "routines", "fs");
 
     sh.writeCode(`
+      // 得られる値はいずれも乗算後のものである。
       vec4 src = createMaterialColor(
         uMaterialFlag_src, uTex_src, uMonoColor_src, uFromColor_src, uToColor_src,
         uGradType_src, uGradStop_src, uSmoothGrad_src, vUv_src
@@ -5005,8 +5008,9 @@ const p5wgex = (function(){
       // それぞれを色として扱うために切り詰めを実行する
       src = clamp(src, vec4(0.0), vec4(1.0));
       dst = clamp(dst, vec4(0.0), vec4(1.0));
+      // blend処理は乗算済みの値同士で実行される。
       vec4 color = composite(src, dst, uCompositeFlag);
-      color.rgb *= color.a;
+      // color.rgb *= color.a; // もはやこれは不要。また、結果の色は自動的にclampされる。
     `, "preProcess", "fs");
 
     sh.registPainter("__foxMixTextureRenderer__");
@@ -7906,34 +7910,44 @@ const p5wgex = (function(){
           in bool smoothGrad, in vec2 p
         ){
           if (materialFlag == 0) {
-            vec4 tex = texture(tex, p);
-            tex.rgb /= tex.a; // 加工するために本来のrgbに戻す
+            vec4 tex = texture(tex, p); // もう乗算済みなので処理は不要
             return tex;
           }
           if (materialFlag == 1) {
-            return monoColor;
+            return monoColor * vec4(vec3(monoColor.a), 1.0); // 乗算する必要がある
           }
           if (materialFlag == 2) {
+            vec4 gd = vec4(0.0);
             if (gradType == 0) {
-              return linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+              gd = linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
             }
             if (gradType == 1) {
-              return radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+              gd = radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
             }
+            // alphaを乗算する。
+            return gd * vec4(vec3(gd.a), 1.0);
           }
           if (materialFlag == 3) {
             vec4 texColor = texture(tex, p);
-            // これもテクスチャ採取なので本来の値を使うなら一旦rgbをaで割る（運用上はalpha=1を想定してるけどね...）
+            // 運用上はalpha=1を想定しているが、そうでない場合、乗算前の値を使いたいので、alphaで割る。
             texColor.rgb /= texColor.a;
             if (smoothGrad) {
               // rgbに限定する理由が不明確なので一旦これで...
               texColor = texColor * texColor * (3.0 - 2.0 * texColor);
             }
-            return (1.0 - texColor) * fromColor + texColor * toColor;
+            vec4 texGd = (1.0 - texColor) * fromColor + texColor * toColor;
+            // alphaを乗算する。
+            return texGd * vec4(vec3(texGd.a), 1.0);
           }
           return vec4(1.0);
         }
-      `
+      `,
+    blend:{
+      // blend一覧
+    },
+    filter:{
+      // filter一覧
+    }
   }
 
   // ---------------------------------------------------------------------------------------------- //
