@@ -5936,16 +5936,6 @@ const p5wgex = (function(){
         myAlert("setFBOtexture2D failure: The corresponding framebuffer does not exist.");
         return null;
       }
-      /*
-      if(fbo.double){
-        // doubleの場合はreadをセットする
-        // 配列の場合は...
-        const _texture_double = (Array.isArray(fbo.read[kind]) ? fbo.read[kind][index] : fbo.read[kind]);
-        //this.setTexture2D(uniformName, _texture_double);
-        this.setTexture(uniformName, _texture_double);
-        return this;
-      }
-      */
       // 通常時
       // 配列の場合は...
       const _texture = (Array.isArray(fbo[kind]) ? fbo[kind][index] : fbo[kind]);
