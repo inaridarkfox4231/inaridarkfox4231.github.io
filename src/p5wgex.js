@@ -4914,9 +4914,15 @@ const p5wgex = (function(){
         uFromColor, uToColor, uGradType, uGradStop,
         uSmoothGrad, uv
       );
-      // uTintはそのまま乗算してよい。最後にrgbにaを掛ける。
-      color *= uTint;
-      color.rgb *= color.a;
+      if (uMaterialFlag == 0) {
+        // テクスチャの場合は乗算済みなので、uTintのrgbにaを掛けたものを掛ける
+        // やはり割ってから掛けるのは不自然でしょう
+        color *= (uTint * vec4(vec3(uTint.a), 1.0));
+      } else {
+        // それ以外の場合は、普通にuTintを掛け、次いでrgbにaを掛ける。
+        color *= uTint;
+        color.rgb *= color.a;
+      }
     `, "preProcess", "fs");
     sh.registPainter("__foxTextureRenderer__");
   }
@@ -4930,9 +4936,11 @@ const p5wgex = (function(){
     // Flipがtrueになるのはfboが絡む場合のみで、これは基本的にfalseです。
     sh.addUniform("bool", "uFlip_src", "vs");
     sh.addUniform("bool", "uFlip_dst", "vs");
+    sh.addUniform("bool", "uFlip_mix", "vs");
     sh.clearVaryings();
     sh.addVarying("vec2", "vUv_src");
     sh.addVarying("vec2", "vUv_dst");
+    sh.addVarying("vec2", "vUv_mix");
     // フリップしないのにフリップするとかいう謎コード
     // テクスチャの基本的な方向が上から下なので仕方ないです
 
@@ -4941,8 +4949,10 @@ const p5wgex = (function(){
       vec2 position = aPosition;
       vUv_src = aPosition * 0.5 + 0.5;
       vUv_dst = aPosition * 0.5 + 0.5;
+      vUv_mix = aPosition * 0.5 + 0.5;
       if (!uFlip_src) vUv_src.y = 1.0 - vUv_src.y;
       if (!uFlip_dst) vUv_dst.y = 1.0 - vUv_dst.y;
+      if (!uFlip_mix) vUv_mix.y = 1.0 - vUv_mix.y;
       position *= uScale;
       position *= mat2(cos(uRotation), -sin(uRotation), sin(uRotation), cos(uRotation));
       position += uTranslate;
@@ -4968,6 +4978,7 @@ const p5wgex = (function(){
 
     sh.addUniform("int", "uCompositeFlag", "fs");
     sh.addUniform("float", "uMixConstant", "fs");
+    sh.addUniform("sampler2D", "uTex_mix", "fs");
 
     sh.addCode(snipet.createMaterialColor, "routines", "fs");
 
@@ -4985,18 +4996,21 @@ const p5wgex = (function(){
             min(1.0, src.a + dst.a)
           );
         }
-        if (flag == 11) { // constant.
+        if (flag == 30) { // constant.
           // 単純に定数補間
           return (1.0 - uMixConstant) * src + uMixConstant * dst;
+        }
+        if (flag == 31) {
+          // textureのr値で補間する
+          float ratio = texture(uTex_mix, vUv_mix).r;
+          return (1.0 - ratio) * src + ratio * dst;
         }
       }
     `, "routines", "fs");
 
     sh.writeCode(`
-      // 得られる値は乗算前の値になりました。
-      // 乗算前でないとたとえば透明度0の赤などが扱えず不便だからです
-      // 合理的な理由に基づいています
-      // 補間すれば透明度は0でなくなるので難しいのです。黒になってしまう。
+      // 得られる値はtextureの場合は乗算済み、それ以外は乗算無しになりました。
+      // blendingは乗算前を前提として行うので、textureの場合はaで割り算します。
       vec4 src = createMaterialColor(
         uMaterialFlag_src, uTex_src, uMonoColor_src, uFromColor_src, uToColor_src,
         uGradType_src, uGradStop_src, uSmoothGrad_src, vUv_src
@@ -5005,6 +5019,13 @@ const p5wgex = (function(){
         uMaterialFlag_dst, uTex_dst, uMonoColor_dst, uFromColor_dst, uToColor_dst,
         uGradType_dst, uGradStop_dst, uSmoothGrad_dst, vUv_dst
       );
+      // textureの場合、rgbをaで割る
+      if (uMaterialFlag_src == 0 && src.a > 0.0) {
+        src.rgb /= src.a;
+      }
+      if (uMaterialFlag_dst == 0 && dst.a > 0.0) {
+        dst.rgb /= dst.a;
+      }
       // それぞれを色として扱うために切り詰めを実行する
       src = clamp(src, vec4(0.0), vec4(1.0));
       dst = clamp(dst, vec4(0.0), vec4(1.0));
@@ -5180,14 +5201,17 @@ const p5wgex = (function(){
 
     const mixFlag = {
       blend:0, add:1, screen:2, multiply:3, overlay:4, softLight:5, hardLight:6,
-      dodge:7, burn:8, exclusion:9, erase:10, constant:11
+      dodge:7, burn:8, exclusion:9, erase:10, constant:30, texture:31
     }
     // colorも追加して。mix:"color"の場合、mixColor(デフォは黒)の値で
     // 1-mixColorとmixColor使ってsrcとdstを補間する。色指定はcoulourに従う。
 
-    const {mix = "blend", mixConstant = 0.5} = options;
+    const {
+      mix = "blend", mixConstant = 0.5, mixTextureType = "", mixTextureName = ""
+    } = options;
     node.setUniform("uCompositeFlag", mixFlag[mix]);
     node.setUniform("uMixConstant", mixConstant);
+    _setTextureUniform(node, mixTextureType, mixTextureName, "_mix");
 
     const {transform = {}} = options;
     const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
@@ -7904,14 +7928,15 @@ const p5wgex = (function(){
         ){
           if (materialFlag == 0) {
             vec4 tex = texture(tex, p);
-            // 乗算前の値を取り出す。
-            if (tex.a > 0.0) tex.rgb /= tex.a;
+            // textureの場合はそのまま出力
             return tex;
           }
           if (materialFlag == 1) {
-            return monoColor; // そのまま出力
+            // 色の場合はそのまま出力
+            return monoColor;
           }
           if (materialFlag == 2) {
+            // グラデーションの場合もそのまま出力
             if (gradType == 0) {
               return linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
             }
@@ -8274,19 +8299,26 @@ const p5wgex = (function(){
           color.rgb = result;
         }
       `;
+      // 先に用意する
+      const {useColor = false} = options;
+      const {useTexCoord = false} = options;
+
       // おそらくpostProcessにfragColorの計算を持ってきているのは、あれですね。
       // mainProcessで取得したcolorに何か加工をすることが出来るようにするためですね。
-      this.fs.postProcess =
+      // useTexCoordがtrueの場合にはcolor.rgb *= color.aを実行しないようにする
+      // そのようなシェーダを併用する場合にはmainProcessにaddCodeを実行して
+      // ポストプロセスの前にcolor.rgbにcolor.aを乗算する必要がある
+      // それは別のテクスチャかもしれないし頂点色かもしれない、わからないので、コーダーがカスタマイズして決める。
+      this.fs.postProcess = (useTexCoord ? `` : `color.rgb *= color.a; `);
+      this.fs.postProcess +=
       `
-        fragColor = color * vec4(vec3(color.a), 1.0);
+        fragColor = color;
       `;
 
       // たとえばvsPreProcessでvec4 color = aColor;とかして
       // colorをいじって
       // vsPostProcessでvColor = color;みたいにできる。
       // texCoordでも同じことができる
-      const {useColor = false} = options;
-      const {useTexCoord = false} = options;
       // colorを使う場合はaColorを追加.
       if (useColor) {
         // TODO
