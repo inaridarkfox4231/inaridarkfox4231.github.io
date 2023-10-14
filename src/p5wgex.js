@@ -4914,10 +4914,9 @@ const p5wgex = (function(){
         uFromColor, uToColor, uGradType, uGradStop,
         uSmoothGrad, uv
       );
-      // uTintを掛ける場合、掛ける前に乗算前に戻し、掛けてから、alphaをrgbに掛ける。結果的に、uTint.rgb *= uTint.aを
-      // したあとでそれを掛ける形になる。
-      color *= (uTint * vec4(vec3(uTint.a), 1.0));
-      //color.rgb *= color.a; // これは不要。
+      // uTintはそのまま乗算してよい。最後にrgbにaを掛ける。
+      color *= uTint;
+      color.rgb *= color.a;
     `, "preProcess", "fs");
     sh.registPainter("__foxTextureRenderer__");
   }
@@ -4968,35 +4967,36 @@ const p5wgex = (function(){
     sh.addUniform("bool", "uSmoothGrad_dst", "fs");
 
     sh.addUniform("int", "uCompositeFlag", "fs");
-    sh.addUniform("vec4", "uMixColor", "fs");
+    sh.addUniform("float", "uMixConstant", "fs");
 
     sh.addCode(snipet.createMaterialColor, "routines", "fs");
 
     sh.addCode(`
       vec4 composite(in vec4 src, in vec4 dst, in int flag){
-        if (flag == 0) { // blend.
+        if (flag == 0) { // blend. (source-over)
           return vec4(
-            src.rgb + (1.0 - src.a) * dst.rgb,
+            src.a * src.rgb + (1.0 - src.a) * dst.rgb,
             src.a + dst.a - src.a * dst.a
           );
         }
-        if (flag == 1) { // add.
+        if (flag == 1) { // add. (lighter)
           return vec4(
-            src.rgb + dst.rgb,
-            src.a + dst.a
+            src.a * src.rgb + dst.a * dst.rgb,
+            min(1.0, src.a + dst.a)
           );
         }
-        if (flag == 11) { // color.
-          return vec4(
-            (1.0 - uMixColor.rgb) * src.rgb + uMixColor.rgb * dst.rgb,
-            (1.0 - uMixColor.a) * src.a + uMixColor.a * dst.a
-          );
+        if (flag == 11) { // constant.
+          // 単純に定数補間
+          return (1.0 - uMixConstant) * src + uMixConstant * dst;
         }
       }
     `, "routines", "fs");
 
     sh.writeCode(`
-      // 得られる値はいずれも乗算後のものである。
+      // 得られる値は乗算前の値になりました。
+      // 乗算前でないとたとえば透明度0の赤などが扱えず不便だからです
+      // 合理的な理由に基づいています
+      // 補間すれば透明度は0でなくなるので難しいのです。黒になってしまう。
       vec4 src = createMaterialColor(
         uMaterialFlag_src, uTex_src, uMonoColor_src, uFromColor_src, uToColor_src,
         uGradType_src, uGradStop_src, uSmoothGrad_src, vUv_src
@@ -5008,9 +5008,12 @@ const p5wgex = (function(){
       // それぞれを色として扱うために切り詰めを実行する
       src = clamp(src, vec4(0.0), vec4(1.0));
       dst = clamp(dst, vec4(0.0), vec4(1.0));
-      // blend処理は乗算済みの値同士で実行される。
+      // blend処理は乗算前のrgbaにより計算される。
       vec4 color = composite(src, dst, uCompositeFlag);
-      // color.rgb *= color.a; // もはやこれは不要。また、結果の色は自動的にclampされる。
+      // この処理は不要。なぜなら算出される値は乗算後のものだから。
+      // 2DのglobalCompositeOperationに基づいて計算すると乗算後の値が得られる
+      // ので、ここで殊更にalphaを掛ける必要がありません（二度手間になってしまう）
+      // color.rgb *= color.a;
     `, "preProcess", "fs");
 
     sh.registPainter("__foxMixTextureRenderer__");
@@ -5177,14 +5180,14 @@ const p5wgex = (function(){
 
     const mixFlag = {
       blend:0, add:1, screen:2, multiply:3, overlay:4, softLight:5, hardLight:6,
-      dodge:7, burn:8, exclusion:9, remove:10, color:11
+      dodge:7, burn:8, exclusion:9, erase:10, constant:11
     }
     // colorも追加して。mix:"color"の場合、mixColor(デフォは黒)の値で
     // 1-mixColorとmixColor使ってsrcとdstを補間する。色指定はcoulourに従う。
 
-    const {mix = "blend", mixColor = "black"} = options;
+    const {mix = "blend", mixConstant = 0.5} = options;
     node.setUniform("uCompositeFlag", mixFlag[mix]);
-    node.setColor("uMixColor", mixColor);
+    node.setUniform("uMixConstant", mixConstant);
 
     const {transform = {}} = options;
     const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
@@ -7900,34 +7903,32 @@ const p5wgex = (function(){
           in bool smoothGrad, in vec2 p
         ){
           if (materialFlag == 0) {
-            vec4 tex = texture(tex, p); // もう乗算済みなので処理は不要
+            vec4 tex = texture(tex, p);
+            // 乗算前の値を取り出す。
+            if (tex.a > 0.0) tex.rgb /= tex.a;
             return tex;
           }
           if (materialFlag == 1) {
-            return monoColor * vec4(vec3(monoColor.a), 1.0); // 乗算する必要がある
+            return monoColor; // そのまま出力
           }
           if (materialFlag == 2) {
-            vec4 gd = vec4(0.0);
             if (gradType == 0) {
-              gd = linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+              return linearGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
             }
             if (gradType == 1) {
-              gd = radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
+              return radialGradient(fromColor, toColor, gradStop.xy, gradStop.zw, smoothGrad, p);
             }
-            // alphaを乗算する。
-            return gd * vec4(vec3(gd.a), 1.0);
           }
           if (materialFlag == 3) {
-            vec4 texColor = texture(tex, p);
-            // 運用上はalpha=1を想定しているが、そうでない場合、乗算前の値を使いたいので、alphaで割る。
-            texColor.rgb /= texColor.a;
+            // r値のみを使うことになりました。g,b,aは不要。今後どうなるかは不明。
+            // 現行のユースケースがr値のみを使うものがほとんどであるのと、
+            // 上記2種類との整合性を考えた時にこちらの方が自然と判断したまでです。
+            float ratio = texture(tex, p).r;
             if (smoothGrad) {
-              // rgbに限定する理由が不明確なので一旦これで...
-              texColor = texColor * texColor * (3.0 - 2.0 * texColor);
+              ratio = ratio * ratio * (3.0 - 2.0 * ratio);
             }
-            vec4 texGd = (1.0 - texColor) * fromColor + texColor * toColor;
-            // alphaを乗算する。
-            return texGd * vec4(vec3(texGd.a), 1.0);
+            // 単純補間
+            return (1.0 - ratio) * fromColor + ratio * toColor;
           }
           return vec4(1.0);
         }
