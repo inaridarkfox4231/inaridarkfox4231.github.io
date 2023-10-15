@@ -143,7 +143,8 @@ Interaction:
 
 /*
 e.codeを用いる場合のキー内容一覧（https://developer.mozilla.org/ja/docs/Web/API/KeyboardEvent/code を参照）
-アルファベット：keyA,keyB,...,keyZ.
+アルファベット：KeyA,KeyB,...,KeyZ.
+Kは大文字ですよ！！！！！！
 ShiftRight, ShiftLeft.
 Enter, CapsLock, Space, ControlLeft, ControlRight, ArrowUp, ArrowDown, ArrowLeft, ArrowRight.
 Numpad0,Numpad1,Numpad2,...,Numpad9.
@@ -152,7 +153,6 @@ NumpadDecimal,NumpadEnter,NumpadAdd.
 BackSpace,まあ、後は調べてください...
 あんま難しいこと考えても仕方ないですね。
 */
-
 /*
 もちろん
 p5のようにイベントごとにリスナーを用意する道もあるんですけど

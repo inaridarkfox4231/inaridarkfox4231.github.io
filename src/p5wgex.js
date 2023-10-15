@@ -146,7 +146,8 @@ Interaction:
 
 /*
 e.codeを用いる場合のキー内容一覧（https://developer.mozilla.org/ja/docs/Web/API/KeyboardEvent/code を参照）
-アルファベット：keyA,keyB,...,keyZ.
+アルファベット：KeyA,KeyB,...,KeyZ.
+Kは大文字ですよ！！！！！！
 ShiftRight, ShiftLeft.
 Enter, CapsLock, Space, ControlLeft, ControlRight, ArrowUp, ArrowDown, ArrowLeft, ArrowRight.
 Numpad0,Numpad1,Numpad2,...,Numpad9.
@@ -4981,20 +4982,93 @@ const p5wgex = (function(){
     sh.addUniform("sampler2D", "uTex_mix", "fs");
 
     sh.addCode(snipet.createMaterialColor, "routines", "fs");
+    sh.addCode(snipet.blend.blend, "routines", "fs");
+    sh.addCode(snipet.blend.clip_on, "routines", "fs");
+    sh.addCode(snipet.blend.clip_off, "routines", "fs");
+    sh.addCode(snipet.blend.xor, "routines", "fs");
+    sh.addCode(snipet.blend.erase, "routines", "fs");
+    sh.addCode(snipet.blend.add, "routines", "fs");
+    sh.addCode(snipet.blend.multiply, "routines", "fs");
+    sh.addCode(snipet.blend.screen, "routines", "fs");
+    sh.addCode(snipet.blend.hard_light, "routines", "fs");
+    sh.addCode(snipet.blend.overlay, "routines", "fs");
+    sh.addCode(snipet.blend.darken, "routines", "fs");
+    sh.addCode(snipet.blend.lighten, "routines", "fs");
+    sh.addCode(snipet.blend.dodge, "routines", "fs");
+    sh.addCode(snipet.blend.burn, "routines", "fs");
+    sh.addCode(snipet.blend.difference, "routines", "fs");
+    sh.addCode(snipet.blend.soft_light, "routines", "fs");
+    sh.addCode(snipet.blend.exclusion, "routines", "fs");
+    sh.addCode(snipet.blend.blendUtils, "routines", "fs");
+    sh.addCode(snipet.blend.hue, "routines", "fs");
+    sh.addCode(snipet.blend.saturation, "routines", "fs");
+    sh.addCode(snipet.blend.color_tone, "routines", "fs");
+    sh.addCode(snipet.blend.luminosity, "routines", "fs");
 
     sh.addCode(`
       vec4 composite(in vec4 src, in vec4 dst, in int flag){
         if (flag == 0) { // blend. (source-over)
-          return vec4(
-            src.a * src.rgb + (1.0 - src.a) * dst.rgb,
-            src.a + dst.a - src.a * dst.a
-          );
+          return blend(src, dst);
         }
-        if (flag == 1) { // add. (lighter)
-          return vec4(
-            src.a * src.rgb + dst.a * dst.rgb,
-            min(1.0, src.a + dst.a)
-          );
+        if (flag == 1) { //
+          return clip_on(src, dst);
+        }
+        if (flag == 2) { //
+          return clip_off(src, dst);
+        }
+        if (flag == 3) { //
+          return xor(src, dst);
+        }
+        if (flag == 4) { //
+          return erase(src, dst);
+        }
+        if (flag == 5) { // add. (lighter)
+          return add(src, dst);
+        }
+        if (flag == 6) { //
+          return multiply(src, dst);
+        }
+        if (flag == 7) { //
+          return screen(src, dst);
+        }
+        if (flag == 8) {
+          return hard_light(src, dst);
+        }
+        if (flag == 9) {
+          return overlay(src, dst);
+        }
+        if (flag == 10) {
+          return darken(src, dst);
+        }
+        if (flag == 11) {
+          return lighten(src, dst);
+        }
+        if (flag == 12) {
+          return dodge(src, dst);
+        }
+        if (flag == 13) {
+          return burn(src, dst);
+        }
+        if (flag == 14) {
+          return difference(src, dst);
+        }
+        if (flag == 15) {
+          return soft_light(src, dst);
+        }
+        if (flag == 16) {
+          return exclusion(src, dst);
+        }
+        if (flag == 17) {
+          return hue(src, dst);
+        }
+        if (flag == 18) {
+          return saturation(src, dst);
+        }
+        if (flag == 19) {
+          return color_tone(src, dst);
+        }
+        if (flag == 20) {
+          return luminosity(src, dst);
         }
         if (flag == 30) { // constant.
           // 単純に定数補間
@@ -5199,12 +5273,12 @@ const p5wgex = (function(){
     _setMaterialUniforms(node, materialType_src, target_src, "_src");
     _setMaterialUniforms(node, materialType_dst, target_dst, "_dst");
 
+    // 各種2DのglobalCompositeOperationの他、定数による単純補間、テクスチャのR値による単純補間。
     const mixFlag = {
-      blend:0, add:1, screen:2, multiply:3, overlay:4, softLight:5, hardLight:6,
-      dodge:7, burn:8, exclusion:9, erase:10, constant:30, texture:31
+      blend:0, clip_on:1, clip_off:2, xor:3, erase:4, add:5, multiply:6, screen:7, hard_light:8,
+      overlay:9, darken:10, lighten:11, dodge:12, burn:13, difference:14, soft_light:15,
+      exclusion:16, hue:17, saturation:18, color_tone:19, luminosity:20, constant:30, texture:31
     }
-    // colorも追加して。mix:"color"の場合、mixColor(デフォは黒)の値で
-    // 1-mixColorとmixColor使ってsrcとdstを補間する。色指定はcoulourに従う。
 
     const {
       mix = "blend", mixConstant = 0.5, mixTextureType = "", mixTextureName = ""
@@ -7959,7 +8033,285 @@ const p5wgex = (function(){
         }
       `,
     blend:{
-      // blend一覧
+      blend: // 通常ブレンド(source-over)
+      `
+        vec4 blend(in vec4 src, in vec4 dst){
+          return vec4(
+            src.a * src.rgb + (1.0 - src.a) * dst.a * dst.rgb,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      clip_on: // クリッピング(source-atop), dstの画像も表示される
+      `
+        vec4 clip_on(in vec4 src, in vec4 dst){
+          return vec4(
+            src.a * src.rgb * dst.a + dst.a * dst.rgb * (1.0 - src.a),
+            dst.a
+          );
+        }
+      `,
+      clip_off: // クリッピング(source-in), ただしdstの画像は表示されない
+      `
+        vec4 clip_off(in vec4 src, in vec4 dst){
+          return vec4(
+            src.a * src.rgb * dst.a,
+            src.a * dst.a
+          );
+        }
+      `,
+      xor: // 排他描画(xor)。重なるところが消える。
+      `
+        vec4 xor(in vec4 src, in vec4 dst){
+          return vec4(
+            src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a),
+            src.a + dst.a - 2.0*src.a*dst.a
+          );
+        }
+      `,
+      erase: // 消しゴム(destination-out), 半透明の場合はソフ消し
+      `
+        vec4 erase(in vec4 src, in vec4 dst){
+          return vec4(
+            dst.a * dst.rgb * (1.0 - src.a),
+            dst.a * (1.0 - src.a)
+          );
+        }
+      `,
+      add: // 加算合成(lighter)
+      `
+        vec4 add(in vec4 src, in vec4 dst){
+          return vec4(
+            src.a* src.rgb + dst.a * dst.rgb,
+            min(1.0, src.a + dst.a)
+          );
+        }
+      `,
+      multiply: // 乗算(multiply) ここからは例の...あれに従う。
+      `
+        vec4 multiply(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = src.rgb * dst.rgb;
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      screen:
+      `
+        vec4 screen(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = src.rgb + dst.rgb - src.rgb * dst.rgb;
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      hard_light:
+      `
+        vec4 hard_light(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color;
+          blend_color.r = (src.r < 0.5 ? 2.0 * src.r * dst.r : 2.0 * (src.r + dst.r - src.r * dst.r) - 1.0);
+          blend_color.g = (src.g < 0.5 ? 2.0 * src.g * dst.g : 2.0 * (src.g + dst.g - src.g * dst.g) - 1.0);
+          blend_color.b = (src.b < 0.5 ? 2.0 * src.b * dst.b : 2.0 * (src.b + dst.b - src.b * dst.b) - 1.0);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      overlay:
+      `
+        vec4 overlay(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color;
+          blend_color.r = (dst.r < 0.5 ? 2.0 * src.r * dst.r : 2.0 * (src.r + dst.r - src.r * dst.r) - 1.0);
+          blend_color.g = (dst.g < 0.5 ? 2.0 * src.g * dst.g : 2.0 * (src.g + dst.g - src.g * dst.g) - 1.0);
+          blend_color.b = (dst.b < 0.5 ? 2.0 * src.b * dst.b : 2.0 * (src.b + dst.b - src.b * dst.b) - 1.0);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      darken:
+      `
+        vec4 darken(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = min(src.rgb, dst.rgb);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      lighten:
+      `
+        vec4 lighten(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = max(src.rgb, dst.rgb);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      dodge:
+      `
+        vec4 dodge(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color;
+          blend_color.r = (src.r < 1.0 ? min(1.0, dst.r / (1.0 - src.r)) : 1.0);
+          blend_color.g = (src.g < 1.0 ? min(1.0, dst.g / (1.0 - src.g)) : 1.0);
+          blend_color.b = (src.b < 1.0 ? min(1.0, dst.b / (1.0 - src.b)) : 1.0);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      burn:
+      `
+        vec4 burn(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color;
+          blend_color.r = (src.r > 0.0 ? 1.0 - min(1.0, (1.0 - dst.r) / src.r) : 0.0);
+          blend_color.g = (src.g > 0.0 ? 1.0 - min(1.0, (1.0 - dst.g) / src.g) : 0.0);
+          blend_color.b = (src.b > 0.0 ? 1.0 - min(1.0, (1.0 - dst.b) / src.b) : 0.0);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      difference:
+      `
+        vec4 difference(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = abs(src.rgb - dst.rgb);
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      soft_light:
+      `
+        vec4 soft_light(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 sub_blend_color;
+          sub_blend_color.r = (dst.r < 0.25 ? ((16.0 * dst.r - 12.0) * dst.r + 4.0) * dst.r : sqrt(dst.r));
+          sub_blend_color.g = (dst.g < 0.25 ? ((16.0 * dst.g - 12.0) * dst.g + 4.0) * dst.g : sqrt(dst.g));
+          sub_blend_color.b = (dst.b < 0.25 ? ((16.0 * dst.b - 12.0) * dst.b + 4.0) * dst.b : sqrt(dst.b));
+          vec3 blend_color;
+          blend_color.r = (src.r < 0.5 ? dst.r - (1.0 - 2.0 * src.r) * dst.r * (1.0 - dst.r) : dst.r + (2.0 * src.r - 1.0) * (sub_blend_color.r - dst.r));
+          blend_color.g = (src.g < 0.5 ? dst.g - (1.0 - 2.0 * src.g) * dst.g * (1.0 - dst.g) : dst.g + (2.0 * src.g - 1.0) * (sub_blend_color.g - dst.g));
+          blend_color.b = (src.b < 0.5 ? dst.b - (1.0 - 2.0 * src.b) * dst.b * (1.0 - dst.b) : dst.b + (2.0 * src.b - 1.0) * (sub_blend_color.b - dst.b));
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      exclusion:
+      `
+        vec4 exclusion(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = src.rgb + dst.rgb - 2.0 * src.rgb * dst.rgb;
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      blendUtils:
+      `
+        float b_max(in vec3 c) { return max(max(c.r, c.g), c.b); }
+        float b_min(in vec3 c) { return min(min(c.r, c.g), c.b); }
+        float b_lum(in vec3 c) { return c.r * 0.3 + c.g * 0.59 + c.b * 0.11; }
+        float b_sat(in vec3 c) { return b_max(c) - b_min(c); }
+        vec3 b_clipColor(in vec3 c) {
+          float l = b_lum(c);
+          vec2 uv = vec2(b_min(c), b_max(c));
+          if (uv.x < 0.0) {
+            c = vec3(l) + vec3(l) * vec3(c - l) / (l - uv.x);
+          }
+          if (uv.y > 1.0) {
+            c = vec3(l) + vec3(1.0 - l) * vec3(c - l) / (uv.y - l);
+          }
+          return c;
+        }
+        vec3 b_setLum(in vec3 c, in float l){
+          float d = l - b_lum(c);
+          return b_clipColor(c + vec3(d));
+        }
+        vec3 b_setSat(in vec3 c, in float s) {
+          float cMax = b_max(c);
+          float cMin = b_min(c);
+          float cMid = c.r + c.g + c.b - cMax - cMin;
+          if (cMax > cMin) {
+            float mid = ((cMid - cMin) / (cMax - cMin)) * s;
+            if (c.r >= max(c.g, c.b)) {
+              if (c.g >= c.b) { return vec3(s, mid, 0.0); }
+              else { return vec3(s, 0.0, mid); }
+            } else if (c.g >= max(c.b, c.r)) {
+              if (c.b >= c.r) { return vec3(0.0, s, mid); }
+              else { return vec3(mid, s, 0.0); }
+            } else {
+              if (c.r >= c.g) { return vec3(mid, 0.0, s); }
+              else { return vec3(0.0, mid, s); }
+            }
+          }
+          return vec3(0.0);
+        }
+      `,
+      hue:
+      `
+        vec4 hue(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = b_setLum(b_setSat(src.rgb, b_sat(dst.rgb)), b_lum(dst.rgb));
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      saturation:
+      `
+        vec4 saturation(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = b_setLum(b_setSat(dst.rgb, b_sat(src.rgb)), b_lum(dst.rgb));
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      color_tone:
+      `
+        vec4 color_tone(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = b_setLum(src.rgb, b_lum(dst.rgb));
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
+      luminosity:
+      `
+        vec4 luminosity(in vec4 src, in vec4 dst){
+          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+          vec3 blend_color = b_setLum(dst.rgb, b_lum(src.rgb));
+          return vec4(
+            xor_rgb + src.a * dst.a * blend_color,
+            src.a + dst.a - src.a * dst.a
+          );
+        }
+      `,
     },
     filter:{
       // filter一覧
