@@ -1812,6 +1812,38 @@ const p5wgex = (function(){
     return d;
   }
 
+  // 意地でも被らせない
+  const foxMixBlendingDictionary = {
+    blend:0,
+    clip_on:1,
+    clip_off:2,
+    xor:3,
+    erase:4,
+    add:5,
+    multiply:6,
+    screen:7,
+    hard_light:8,
+    overlay:9,
+    darken:10,
+    lighten:11,
+    dodge:12,
+    burn:13,
+    difference:14,
+    soft_light:15,
+    exclusion:16,
+    hue:17,
+    saturation:18,
+    color_tone:19,
+    luminosity:20,
+    constant:30,
+    texture:31
+  };
+
+  // まあ、いずれね...
+  const foxFilteringDictionary = {
+    gray:0
+  };
+
   // ---------------------------------------------------------------------------------------------- //
   // utility for RenderNode.
 
@@ -4980,6 +5012,7 @@ const p5wgex = (function(){
     sh.addUniform("int", "uCompositeFlag", "fs");
     sh.addUniform("float", "uMixConstant", "fs");
     sh.addUniform("sampler2D", "uTex_mix", "fs");
+    sh.addUniform("int", "uBlendType", "fs"); // multiply以降のブレンド方法指定
 
     sh.addCode(snipet.createMaterialColor, "routines", "fs");
     sh.addCode(snipet.blend.blend, "routines", "fs");
@@ -4988,6 +5021,7 @@ const p5wgex = (function(){
     sh.addCode(snipet.blend.xor, "routines", "fs");
     sh.addCode(snipet.blend.erase, "routines", "fs");
     sh.addCode(snipet.blend.add, "routines", "fs");
+    sh.addCode(snipet.blend.createBlendColor, "routines", "fs");
     sh.addCode(snipet.blend.multiply, "routines", "fs");
     sh.addCode(snipet.blend.screen, "routines", "fs");
     sh.addCode(snipet.blend.hard_light, "routines", "fs");
@@ -5026,49 +5060,49 @@ const p5wgex = (function(){
           return add(src, dst);
         }
         if (flag == 6) { //
-          return multiply(src, dst);
+          return multiply(src, dst, uBlendType);
         }
         if (flag == 7) { //
-          return screen(src, dst);
+          return screen(src, dst, uBlendType);
         }
         if (flag == 8) {
-          return hard_light(src, dst);
+          return hard_light(src, dst, uBlendType);
         }
         if (flag == 9) {
-          return overlay(src, dst);
+          return overlay(src, dst, uBlendType);
         }
         if (flag == 10) {
-          return darken(src, dst);
+          return darken(src, dst, uBlendType);
         }
         if (flag == 11) {
-          return lighten(src, dst);
+          return lighten(src, dst, uBlendType);
         }
         if (flag == 12) {
-          return dodge(src, dst);
+          return dodge(src, dst, uBlendType);
         }
         if (flag == 13) {
-          return burn(src, dst);
+          return burn(src, dst, uBlendType);
         }
         if (flag == 14) {
-          return difference(src, dst);
+          return difference(src, dst, uBlendType);
         }
         if (flag == 15) {
-          return soft_light(src, dst);
+          return soft_light(src, dst, uBlendType);
         }
         if (flag == 16) {
-          return exclusion(src, dst);
+          return exclusion(src, dst, uBlendType);
         }
         if (flag == 17) {
-          return hue(src, dst);
+          return hue(src, dst, uBlendType);
         }
         if (flag == 18) {
-          return saturation(src, dst);
+          return saturation(src, dst, uBlendType);
         }
         if (flag == 19) {
-          return color_tone(src, dst);
+          return color_tone(src, dst, uBlendType);
         }
         if (flag == 20) {
-          return luminosity(src, dst);
+          return luminosity(src, dst, uBlendType);
         }
         if (flag == 30) { // constant.
           // 単純に定数補間
@@ -5079,6 +5113,7 @@ const p5wgex = (function(){
           float ratio = texture(uTex_mix, vUv_mix).r;
           return (1.0 - ratio) * src + ratio * dst;
         }
+        return vec4(1.0);
       }
     `, "routines", "fs");
 
@@ -5236,6 +5271,43 @@ const p5wgex = (function(){
     }
   }
 
+  function _setMixtureUniform(node, mix){
+    // mixStringを/でsplitしてそれぞれで分岐処理する
+
+    // mixIdの設定がバグってた...ああああ...
+    const data = mix.split('/');
+    const mixId = foxMixBlendingDictionary[data[0]];
+    node.setUniform("uCompositeFlag", mixId);
+
+    // 6～20の場合はdata.length>1のケースで分ける
+    if (mixId >= 6 && mixId <= 20) {
+      if (data.length > 1) {
+        if (data[1] === "clip_on"){ node.setUniform("uBlendType", 1); }
+        else if (data[1] === "clip_off"){ node.setUniform("uBlendType", 2); }
+      } else {
+        node.setUniform("uBlendType", 0);
+      }
+    }
+    if (mixId === 30) {
+      // constantの場合は数字かどうか見る
+      if (data.length > 1 && !isNaN(Number(data[1]))) {
+        node.setUniform("uMixConstant", Number(data[1]));
+      } else {
+        node.setUniform("uMixConstant", 0.5);
+      }
+    }
+    if (mixId === 31) {
+      // textureの場合は1つ目でtexかfboか判断しそれ以降で以下略
+      // texture/fbo/color/2/myFBOみたいにする（末尾が名前）
+      const textureName = data.pop();
+      // 最初はtextureなのでそこも切らないといけない。
+      data.shift(0);
+      // 切ったら残りを/でつないで復元する
+      const textureType = data.reduce((s, t) => s + '/' + t);
+      _setTextureUniform(node, textureType, textureName, "_mix");
+    }
+  }
+
   // 進んでる方向は正しいので自信を持とうね
   function _renderingTexture(node, materialType, target, options = {}){
     node.use("__foxTextureRenderer__", "foxBoard");
@@ -5273,19 +5345,16 @@ const p5wgex = (function(){
     _setMaterialUniforms(node, materialType_src, target_src, "_src");
     _setMaterialUniforms(node, materialType_dst, target_dst, "_dst");
 
-    // 各種2DのglobalCompositeOperationの他、定数による単純補間、テクスチャのR値による単純補間。
-    const mixFlag = {
-      blend:0, clip_on:1, clip_off:2, xor:3, erase:4, add:5, multiply:6, screen:7, hard_light:8,
-      overlay:9, darken:10, lighten:11, dodge:12, burn:13, difference:14, soft_light:15,
-      exclusion:16, hue:17, saturation:18, color_tone:19, luminosity:20, constant:30, texture:31
-    }
+    // colorも追加して。mix:"color"の場合、mixColor(デフォは黒)の値で
+    // 1-mixColorとmixColor使ってsrcとdstを補間する。色指定はcoulourに従う。
 
-    const {
-      mix = "blend", mixConstant = 0.5, mixTextureType = "", mixTextureName = ""
-    } = options;
-    node.setUniform("uCompositeFlag", mixFlag[mix]);
-    node.setUniform("uMixConstant", mixConstant);
-    _setTextureUniform(node, mixTextureType, mixTextureName, "_mix");
+    const {mix = "blend"} = options;
+    // ここでmixの/指定を分解し、6～20についてはclip_onとclip_offの指定があるか
+    // 見ます。constantの場合は1番にNumberをかましてNaNでなければその値とし0～1に
+    // clampしてuniformに送ります。textureの場合はtexかfboか見てfboならそのあとの
+    // colorとかいろいろ見ますね。ほぼ一緒。
+
+    _setMixtureUniform(node, mix); // これでまとめましょ
 
     const {transform = {}} = options;
     const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
@@ -8087,121 +8156,112 @@ const p5wgex = (function(){
           );
         }
       `,
+      createBlendColor:
+      `
+        vec4 createBlendColor(in vec3 blend_color, in vec4 src, in vec4 dst, in int type){
+          vec3 src_color = dst.a * blend_color + (1.0 - dst.a) * src.rgb;
+          if (type == 0) {
+            // 通常のblend(source-over)
+            return vec4(
+              src.a * src_color + (1.0 - src.a) * dst.a * dst.rgb,
+              src.a + dst.a - src.a * dst.a
+            );
+          }
+          if (type == 1) {
+            // clip_onバージョン(source-atop)
+            return vec4(
+              src.a * src_color * dst.a + (1.0 - src.a) * dst.a * dst.rgb,
+              dst.a
+            );
+          }
+          if (type == 2) {
+            // clip_offバージョン(source-in)
+            return vec4(
+              src.a * src_color * dst.a,
+              src.a * dst.a
+            );
+          }
+          return vec4(1.0);
+        }
+      `,
       multiply: // 乗算(multiply) ここからは例の...あれに従う。
       `
-        vec4 multiply(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 multiply(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = src.rgb * dst.rgb;
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       screen:
       `
-        vec4 screen(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 screen(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = src.rgb + dst.rgb - src.rgb * dst.rgb;
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       hard_light:
       `
-        vec4 hard_light(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 hard_light(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color;
           blend_color.r = (src.r < 0.5 ? 2.0 * src.r * dst.r : 2.0 * (src.r + dst.r - src.r * dst.r) - 1.0);
           blend_color.g = (src.g < 0.5 ? 2.0 * src.g * dst.g : 2.0 * (src.g + dst.g - src.g * dst.g) - 1.0);
           blend_color.b = (src.b < 0.5 ? 2.0 * src.b * dst.b : 2.0 * (src.b + dst.b - src.b * dst.b) - 1.0);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       overlay:
       `
-        vec4 overlay(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 overlay(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color;
           blend_color.r = (dst.r < 0.5 ? 2.0 * src.r * dst.r : 2.0 * (src.r + dst.r - src.r * dst.r) - 1.0);
           blend_color.g = (dst.g < 0.5 ? 2.0 * src.g * dst.g : 2.0 * (src.g + dst.g - src.g * dst.g) - 1.0);
           blend_color.b = (dst.b < 0.5 ? 2.0 * src.b * dst.b : 2.0 * (src.b + dst.b - src.b * dst.b) - 1.0);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       darken:
       `
-        vec4 darken(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 darken(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = min(src.rgb, dst.rgb);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       lighten:
       `
-        vec4 lighten(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 lighten(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = max(src.rgb, dst.rgb);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       dodge:
       `
-        vec4 dodge(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 dodge(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color;
           blend_color.r = (src.r < 1.0 ? min(1.0, dst.r / (1.0 - src.r)) : 1.0);
           blend_color.g = (src.g < 1.0 ? min(1.0, dst.g / (1.0 - src.g)) : 1.0);
           blend_color.b = (src.b < 1.0 ? min(1.0, dst.b / (1.0 - src.b)) : 1.0);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       burn:
       `
-        vec4 burn(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 burn(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color;
           blend_color.r = (src.r > 0.0 ? 1.0 - min(1.0, (1.0 - dst.r) / src.r) : 0.0);
           blend_color.g = (src.g > 0.0 ? 1.0 - min(1.0, (1.0 - dst.g) / src.g) : 0.0);
           blend_color.b = (src.b > 0.0 ? 1.0 - min(1.0, (1.0 - dst.b) / src.b) : 0.0);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       difference:
       `
-        vec4 difference(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 difference(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = abs(src.rgb - dst.rgb);
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       soft_light:
       `
-        vec4 soft_light(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 soft_light(in vec4 src, in vec4 dst, in int type){
           vec3 sub_blend_color;
           sub_blend_color.r = (dst.r < 0.25 ? ((16.0 * dst.r - 12.0) * dst.r + 4.0) * dst.r : sqrt(dst.r));
           sub_blend_color.g = (dst.g < 0.25 ? ((16.0 * dst.g - 12.0) * dst.g + 4.0) * dst.g : sqrt(dst.g));
@@ -8210,21 +8270,14 @@ const p5wgex = (function(){
           blend_color.r = (src.r < 0.5 ? dst.r - (1.0 - 2.0 * src.r) * dst.r * (1.0 - dst.r) : dst.r + (2.0 * src.r - 1.0) * (sub_blend_color.r - dst.r));
           blend_color.g = (src.g < 0.5 ? dst.g - (1.0 - 2.0 * src.g) * dst.g * (1.0 - dst.g) : dst.g + (2.0 * src.g - 1.0) * (sub_blend_color.g - dst.g));
           blend_color.b = (src.b < 0.5 ? dst.b - (1.0 - 2.0 * src.b) * dst.b * (1.0 - dst.b) : dst.b + (2.0 * src.b - 1.0) * (sub_blend_color.b - dst.b));
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       exclusion:
       `
-        vec4 exclusion(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 exclusion(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = src.rgb + dst.rgb - 2.0 * src.rgb * dst.rgb;
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       blendUtils:
@@ -8270,46 +8323,30 @@ const p5wgex = (function(){
       `,
       hue:
       `
-        vec4 hue(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 hue(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = b_setLum(b_setSat(src.rgb, b_sat(dst.rgb)), b_lum(dst.rgb));
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       saturation:
       `
-        vec4 saturation(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 saturation(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = b_setLum(b_setSat(dst.rgb, b_sat(src.rgb)), b_lum(dst.rgb));
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       color_tone:
       `
-        vec4 color_tone(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 color_tone(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = b_setLum(src.rgb, b_lum(dst.rgb));
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
       luminosity:
       `
-        vec4 luminosity(in vec4 src, in vec4 dst){
-          vec3 xor_rgb = src.a * src.rgb * (1.0 - dst.a) + dst.a * dst.rgb * (1.0 - src.a);
+        vec4 luminosity(in vec4 src, in vec4 dst, in int type){
           vec3 blend_color = b_setLum(dst.rgb, b_lum(src.rgb));
-          return vec4(
-            xor_rgb + src.a * dst.a * blend_color,
-            src.a + dst.a - src.a * dst.a
-          );
+          return createBlendColor(blend_color, src, dst, type);
         }
       `,
     },
