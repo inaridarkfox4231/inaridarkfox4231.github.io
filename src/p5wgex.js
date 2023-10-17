@@ -5437,6 +5437,62 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
+  // Utility for save texture
+
+  function _getSaveTargetInfo(target){
+    const data = target.split('/');
+    const targetType = data[0];
+    const targetName = data.pop();
+    // textureの場合
+    if (targetType === "tex") {
+      return {type:"tex", typeDetail:"tex", name:targetName};
+    }
+    if (targetType === "fbo") {
+      // reduceはdata自身を変更しないのでこの書き方になる
+      return {type:"fbo", typeDetail:data.reduce((s, t) => s + '/' + t), name:targetName};
+    }
+    // デフォルトフレームバッファを保存する場合
+    return {type:null};
+  }
+
+  // デフォルトフレームバッファは上下が逆になっているので力業で上下反転させます
+  function _swapTextureArray(textureArray, w, h){
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h/2; y++) {
+        // (x,y*h)と(x,(h-1-y)*h)を入れ替える
+        for (let k = 0; k < 4; k++) {
+          const tmp = textureArray[4*(x + h*y) + k];
+          textureArray[4*(x + h*y) + k] = textureArray[4*(x + h*(h-1-y)) + k];
+          textureArray[4*(x + h*(h-1-y)) + k] = tmp;
+        }
+      }
+    }
+  }
+
+  function _textureToCanvas(result, w, h){
+    // 即席のキャンバス要素を生成してそこに落とす
+    const captureCanvas = document.createElement('canvas');
+    const ctx = captureCanvas.getContext('2d');
+    captureCanvas.width = w;
+    captureCanvas.height = h;
+
+    const imageData = ctx.createImageData(w, h);
+    imageData.data.set(result);
+    ctx.putImageData(imageData, 0, 0);
+
+    return captureCanvas;
+  }
+
+  function _downloadURI(fileName, uri){
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = uri;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
   // RenderNode.
 
   class RenderNode{
@@ -6438,6 +6494,67 @@ const p5wgex = (function(){
       }
       this.gl.drawBuffers(commandArray);
       return this;
+    }
+    save(options = {}){
+      // options詳細
+      // target: どれを保存するか的な。無い場合はデフォルトフレームバッファ
+      // fileName: ファイル名。無い場合は「savedImage」
+      // wとh: targetがテクスチャであればそれのwとhがデフォルトになる。
+      // target:nullの場合のデフォルトはnodeから求められるdrawingBufferのサイズ
+      // mime: デフォルトは'png'であそこにimage/pngが入る。jpegも指定できる。
+      // jpgとjpegの場合の拡張子は共にjpgだがjpegの方が圧縮率が高いようです。
+      // 詳細不明
+      // pngの場合はpngが拡張子となります
+      let saveTarget;
+
+      const {target = "", fileName = "savedImage", mime = "jpeg"} = options;
+
+      const targetInfo = _getSaveTargetInfo(target);
+      const targetType = targetInfo.type;
+      switch(targetType){
+        case 'tex':
+          saveTarget = this.textures[targetInfo.name]; break;
+        case 'fbo': // MRT対応はまた今度
+          saveTarget = this.fbos[targetInfo.name]; break;
+      }
+      const bufferSize = this.getDrawingBufferSize(null);
+      const saveImageWidth = (targetType === null ? bufferSize.w : saveTarget.w);
+      const saveImageHeight = (targetType === null ? bufferSize.h : saveTarget.h);
+      const {w = saveImageWidth, h = saveImageHeight} = options;
+
+      // さてnullの場合、pushもpopも必要ない。readPixelsの対象が「あれ」だから。
+      // しかし逆になってしまうのよね...困ったね。逆にする処理だけ実行するか。
+      if (targetType !== null) {
+        this.registFBO("__foxFramebufferForSave__", {w:w, h:h});
+        this.pushFBO();
+        this.bindFBO("__foxFramebufferForSave__");
+        this.clear();
+        // transformのoptionで上下を逆にしてレンダリングすれば済む話でしょ
+        this.renderTexture(targetInfo.typeDetail, targetInfo.name, {
+          blend:"disable", transform:{sy:-1}
+        });
+      }
+      // ここでreadPixelsを実行するとnullの場合はデフォルトフレームバッファの内容に
+      // なるのでこのsave関数の置き場所が重要になってくる
+      const textureLength = w * h * 4;
+      const textureArray = new Uint8Array(textureLength);
+      this.readPixels(0, 0, w, h, "rgba", "ubyte", textureArray);
+
+      if (targetType !== null){
+        this.popFBO();
+      } else {
+        _swapTextureArray(textureArray, w, h);
+      }
+      const mimeType = "image/" + mime;
+      const postFix = (mime === "png" ? ".png" : ".jpg");
+
+      // 保存用のキャンバスを一時的に生成する
+      const cvs = _textureToCanvas(textureArray, w, h);
+      const datauri = cvs.toDataURL(mimeType);
+      _downloadURI(fileName + postFix, datauri);
+      URL.revokeObjectURL(datauri);
+      // 使ったキャンバスを破棄する
+      cvs.remove();
     }
   }
 
