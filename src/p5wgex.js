@@ -5455,20 +5455,6 @@ const p5wgex = (function(){
     return {type:null};
   }
 
-  // デフォルトフレームバッファは上下が逆になっているので力業で上下反転させます
-  function _swapTextureArray(textureArray, w, h){
-    for (let x = 0; x < w; x++) {
-      for (let y = 0; y < h/2; y++) {
-        // (x,y*h)と(x,(h-1-y)*h)を入れ替える
-        for (let k = 0; k < 4; k++) {
-          const tmp = textureArray[4*(x + h*y) + k];
-          textureArray[4*(x + h*y) + k] = textureArray[4*(x + h*(h-1-y)) + k];
-          textureArray[4*(x + h*(h-1-y)) + k] = tmp;
-        }
-      }
-    }
-  }
-
   function _textureToCanvas(result, w, h){
     // 即席のキャンバス要素を生成してそこに落とす
     const captureCanvas = document.createElement('canvas');
@@ -5490,6 +5476,13 @@ const p5wgex = (function(){
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // 最終的なセーブ用の関数
+  function _saveCanvasImage(saveTargetCanvas, mimeType, fileName, postFix){
+    const datauri = saveTargetCanvas.toDataURL(mimeType);
+    _downloadURI(fileName + postFix, datauri);
+    URL.revokeObjectURL(datauri);
   }
 
   // ---------------------------------------------------------------------------------------------- //
@@ -6503,55 +6496,58 @@ const p5wgex = (function(){
       // jpgとjpegの場合の拡張子は共にjpgだがjpegの方が圧縮率が高いようです。
       // 詳細不明
       // wとhは廃止
+      // nullの場合はnode.gl.canvasを使って直接キャンバスの内容を保存する方式に変更
       // pngの場合はpngが拡張子となります
       let saveTarget;
 
-      const {target = "", fileName = "savedImage", mime = "jpeg"} = options;
+      const {target = "", fileName = "savedImage", mime = "png"} = options;
 
       const targetInfo = _getSaveTargetInfo(target);
       const targetType = targetInfo.type;
+
+      const mimeType = "image/" + mime;
+      const postFix = (mime === "png" ? ".png" : ".jpg");
+
+      // もしtargetTypeがnullの場合は、node.gl.canvasで直接セーブして終了する。
+      // それ以降の処理は行わない。
+      if (targetType === null) {
+        _saveCanvasImage(this.gl.canvas, mimeType, fileName, postFix);
+        return;
+      }
+
       switch(targetType){
         case 'tex':
           saveTarget = this.textures[targetInfo.name]; break;
         case 'fbo': // MRT対応はまた今度
           saveTarget = this.fbos[targetInfo.name]; break;
       }
-      const bufferSize = this.getDrawingBufferSize(null);
-      const saveImageWidth = (targetType === null ? bufferSize.w : saveTarget.w);
-      const saveImageHeight = (targetType === null ? bufferSize.h : saveTarget.h);
 
-      // さてnullの場合、pushもpopも必要ない。readPixelsの対象が「あれ」だから。
-      // しかし逆になってしまうのよね...困ったね。逆にする処理だけ実行するか。
-      if (targetType !== null) {
-        this.registFBO("__foxFramebufferForSave__", {w:saveImageWidth, h:saveImageHeight});
-        this.pushFBO();
-        this.bindFBO("__foxFramebufferForSave__");
-        this.clear();
-        // transformのoptionで上下を逆にしてレンダリングすれば済む話でしょ
-        this.renderTexture(targetInfo.typeDetail, targetInfo.name, {
-          blend:"disable", transform:{sy:-1}
-        });
-      }
-      // ここでreadPixelsを実行するとnullの場合はデフォルトフレームバッファの内容に
-      // なるのでこのsave関数の置き場所が重要になってくる
+      const saveImageWidth = saveTarget.w;
+      const saveImageHeight = saveTarget.h;
+
+      // 保存用のfboを生成する。
+      this.registFBO("__foxFramebufferForSave__", {w:saveImageWidth, h:saveImageHeight});
+      this.pushFBO();
+      this.bindFBO("__foxFramebufferForSave__");
+      this.clear();
+      // transformのoptionで上下を逆にしてレンダリングすれば済む話でしょ
+      this.renderTexture(targetInfo.typeDetail, targetInfo.name, {
+        blend:"disable", transform:{sy:-1}
+      });
+
+      // nullでないゆえ、readPixelsの対象は上記のfboである。
       const textureLength = saveImageWidth * saveImageHeight * 4;
       const textureArray = new Uint8Array(textureLength);
       this.readPixels(0, 0, saveImageWidth, saveImageHeight, "rgba", "ubyte", textureArray);
 
-      if (targetType !== null){
-        this.popFBO();
-      } else {
-        _swapTextureArray(textureArray, saveImageWidth, saveImageHeight);
-      }
-      const mimeType = "image/" + mime;
-      const postFix = (mime === "png" ? ".png" : ".jpg");
+      this.popFBO();
 
       // 保存用のキャンバスを一時的に生成する
       const cvs = _textureToCanvas(textureArray, saveImageWidth, saveImageHeight);
-      const datauri = cvs.toDataURL(mimeType);
-      _downloadURI(fileName + postFix, datauri);
-      URL.revokeObjectURL(datauri);
-      // 使ったキャンバスを破棄する
+
+      _saveCanvasImage(cvs, mimeType, fileName, postFix);
+
+      // 即席で作ったキャンバスを破棄する
       cvs.remove();
     }
   }
