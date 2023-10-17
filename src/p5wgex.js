@@ -6499,11 +6499,10 @@ const p5wgex = (function(){
       // options詳細
       // target: どれを保存するか的な。無い場合はデフォルトフレームバッファ
       // fileName: ファイル名。無い場合は「savedImage」
-      // wとh: targetがテクスチャであればそれのwとhがデフォルトになる。
-      // target:nullの場合のデフォルトはnodeから求められるdrawingBufferのサイズ
       // mime: デフォルトは'png'であそこにimage/pngが入る。jpegも指定できる。
       // jpgとjpegの場合の拡張子は共にjpgだがjpegの方が圧縮率が高いようです。
       // 詳細不明
+      // wとhは廃止
       // pngの場合はpngが拡張子となります
       let saveTarget;
 
@@ -6520,12 +6519,11 @@ const p5wgex = (function(){
       const bufferSize = this.getDrawingBufferSize(null);
       const saveImageWidth = (targetType === null ? bufferSize.w : saveTarget.w);
       const saveImageHeight = (targetType === null ? bufferSize.h : saveTarget.h);
-      const {w = saveImageWidth, h = saveImageHeight} = options;
 
       // さてnullの場合、pushもpopも必要ない。readPixelsの対象が「あれ」だから。
       // しかし逆になってしまうのよね...困ったね。逆にする処理だけ実行するか。
       if (targetType !== null) {
-        this.registFBO("__foxFramebufferForSave__", {w:w, h:h});
+        this.registFBO("__foxFramebufferForSave__", {w:saveImageWidth, h:saveImageHeight});
         this.pushFBO();
         this.bindFBO("__foxFramebufferForSave__");
         this.clear();
@@ -6536,20 +6534,20 @@ const p5wgex = (function(){
       }
       // ここでreadPixelsを実行するとnullの場合はデフォルトフレームバッファの内容に
       // なるのでこのsave関数の置き場所が重要になってくる
-      const textureLength = w * h * 4;
+      const textureLength = saveImageWidth * saveImageHeight * 4;
       const textureArray = new Uint8Array(textureLength);
-      this.readPixels(0, 0, w, h, "rgba", "ubyte", textureArray);
+      this.readPixels(0, 0, saveImageWidth, saveImageHeight, "rgba", "ubyte", textureArray);
 
       if (targetType !== null){
         this.popFBO();
       } else {
-        _swapTextureArray(textureArray, w, h);
+        _swapTextureArray(textureArray, saveImageWidth, saveImageHeight);
       }
       const mimeType = "image/" + mime;
       const postFix = (mime === "png" ? ".png" : ".jpg");
 
       // 保存用のキャンバスを一時的に生成する
-      const cvs = _textureToCanvas(textureArray, w, h);
+      const cvs = _textureToCanvas(textureArray, saveImageWidth, saveImageHeight);
       const datauri = cvs.toDataURL(mimeType);
       _downloadURI(fileName + postFix, datauri);
       URL.revokeObjectURL(datauri);
