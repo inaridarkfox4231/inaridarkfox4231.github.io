@@ -4729,6 +4729,51 @@ const p5wgex = (function(){
       }
       return this;
     }
+    getVerticePositions(){
+      // マージしたうえで頂点集合を返す（マンハッタン判定）
+      const result = [];
+      for (let i = 0; i < this.v.length / 3; i++) {
+        result.push(
+          new Vec3(this.v.slice(3*i, 3*i+3))
+        );
+      }
+
+      // 閾値で判定しましょ。icoSphereで失敗してた(28個くらいミスってた)
+      // 総当たりですがマンハッタンなので負荷は小さいはずです
+      // 毎フレームやるような処理でもないし特に問題ないでしょ
+      for (let k = 0; k < result.length; k++) {
+        for (let i = result.length-1; i > k; i--) {
+          const l = result[k];
+          const r = result[i];
+          if (Math.abs(l.x - r.x) + Math.abs(l.y - r.y) + Math.abs(l.z - r.z) < 0.000001) {
+            result.splice(i,1);
+          }
+        }
+      }
+
+      return result;
+    }
+    getFacePositions(){
+      // 面の重心を返す
+      // これと上記のgetVerticePositionsを組み合わせると割とバラバラに取れる感じですね
+      // icoSphereと相性が良いかと
+      const result = [];
+      const v0 = new Vec3();
+      const v1 = new Vec3();
+      const v2 = new Vec3();
+      for (let i = 0; i < this.f.length / 3; i++) {
+        const a = this.f[3*i];
+        const b = this.f[3*i+1];
+        const c = this.f[3*i+2];
+
+        v0.set(this.v.slice(3*a, 3*a+3));
+        v1.set(this.v.slice(3*b, 3*b+3));
+        v2.set(this.v.slice(3*c, 3*c+3));
+
+        result.push(Vec3.add(v0, v1).add(v2).mult(1/3));
+      }
+      return result;
+    }
     static validateParameter(x, y, z, _default = 0){
       if (x === undefined) { x = _default; }
       const result = {};
