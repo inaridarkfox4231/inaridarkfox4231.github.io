@@ -5485,6 +5485,28 @@ const p5wgex = (function(){
     URL.revokeObjectURL(datauri);
   }
 
+  // 指定方法
+  // ベースをそのまま保存するだけなら...mimeも指定するか
+  // .のうしろがmimeになるようにしよう。これで完成！
+  // もちろん文字列に全部ぶち込まない方がいい場合もあるのであくまで選択肢として。
+  function _getSaveOptionsFromString(s){
+    const data = s.split('.');
+    if (data.length === 1){
+      return {fileName:data[0]};
+    }
+    // .のうしろはmime
+    const mime = data.pop();
+    // mimeとファイル名だけの場合
+    if (data.length === 1){
+      return {fileName:data[0], mime};
+    }
+    // これ以降はtexやfboのケースとなる
+    const subData = data[0].split('/');
+    const fileName = subData.pop();
+    const target = subData.reduce((s, t) => s + '/' + t);
+    return {target, fileName, mime};
+  }
+
   // ---------------------------------------------------------------------------------------------- //
   // RenderNode.
 
@@ -6500,12 +6522,19 @@ const p5wgex = (function(){
       // pngの場合はpngが拡張子となります
       let saveTarget;
 
-      // 文字列引数の場合、fileNameだけ設定する。この場合は自動的にキャンバスの保存となる。
-      // p5のような保存が可能となる。
-      if (typeof options === 'string') {
-        options = {fileName: options};
-      }
+      // たとえばoptionsのところで"fileName"ってやるとfileName:"fileName"となるように
+      // するのはいいんだけどたとえばさ
+      // "tex/texName/myTexture.png"
+      // とかしてみるのはどう？
+      // .でsplitすればmimeTypeが出る(jpegとかいろいろ)
+      // さらに/でsplitすれば末尾がfileNameになり
+      // 残りを/で再結合すればtargetの出来上がり
+      // どう？fbo/color/2/MRT/MRT.pngみたいにする。
+      // ファイル名のみでも、fileName.jpegとかでmimeも指定できるようにする。
 
+      if (typeof options === 'string') {
+        options = _getSaveOptionsFromString(options);
+      }
       const {target = "", fileName = "savedImage", mime = "png"} = options;
 
       const targetInfo = _getSaveTargetInfo(target);
