@@ -6500,6 +6500,12 @@ const p5wgex = (function(){
       // pngの場合はpngが拡張子となります
       let saveTarget;
 
+      // 文字列引数の場合、fileNameだけ設定する。この場合は自動的にキャンバスの保存となる。
+      // p5のような保存が可能となる。
+      if (typeof options === 'string') {
+        options = {fileName: options};
+      }
+
       const {target = "", fileName = "savedImage", mime = "png"} = options;
 
       const targetInfo = _getSaveTargetInfo(target);
