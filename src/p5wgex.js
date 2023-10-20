@@ -6229,9 +6229,11 @@ const p5wgex = (function(){
       this.setTexture(uniformName, _texture);
       return this;
     }
-    swapEachFBO(fboName0, fboName1){
+    swapFBO(fboName0, fboName1){
       // 暫定関数。doubleFBOの廃止が決まったので、移行措置。いずれこれがswapFBOになる。
       // nullであるかどうかの意味不明な判定も廃止する。コードが古いのよね。
+      // swapFBOに改名しました。もう戻れない。いずれlayerSystemを作るつもり。
+      // doubleFBOの仕組み自体は否定してない。通常のFBOとごっちゃにして扱うのが不満なだけ。
       if (this.fbos[fboName0] === undefined || this.fbos[fboName1] === undefined) {
         myAlert("corresponding fbo is not found.");
         return null;
