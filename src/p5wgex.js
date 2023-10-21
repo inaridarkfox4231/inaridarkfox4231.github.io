@@ -4149,7 +4149,7 @@ const p5wgex = (function(){
     const diffNext = next.copy().sub(cur).normalize();
     const diffPrev = cur.copy().sub(prev).normalize();
     const pnorm = diffNext.copy().sub(diffPrev).normalize();
-    const tang = diffNext.copy().normalize();
+    const tang = diffNext;
     const bnorm = tang.copy().cross(pnorm);
     return {cur, pnorm, bnorm, tang};
   }
@@ -4173,6 +4173,7 @@ const p5wgex = (function(){
     const startSystem = {};
     const stopSystem = {};
 
+    const lastPoint = new Vec3();
     for(let k=0; k<=dty; k++){
       const t = a + (b-a) * k/dty;
       const delta = (b-a)/dty;
@@ -4188,10 +4189,27 @@ const p5wgex = (function(){
         stopSystem.ay = fs.bnorm.copy();
         stopSystem.az = fs.tang.copy();
       }
+      // ここで先にdtx個の点を作ってしまう
+      // んでlastPointに最も近い点を使えばいい
+      // k===0の場合はどの点でもよい
+      const surfacePoints = [];
       for(let i=0; i<=dtx; i++){
         const phi = Math.PI*2*i/dtx;
         const n = fs.pnorm.copy().mult(Math.cos(phi)).addScalar(fs.bnorm, Math.sin(phi));
         const p = fs.cur.copy().addScalar(n, r);
+        surfacePoints.push({n:n, p:p, index:i, d:p.dist(lastPoint)});
+      }
+      // dでsortする
+      const candidates = surfacePoints.slice();
+      candidates.sort((p1, p2) => (p1.d > p2.d ? 1 : (p1.d < p2.d ? -1 : 0)));
+      //console.log(candidates[0].d, candidates[0].index, candidates[dtx].d);
+      const nearestIndex = candidates[0].index;
+      const nearestPoint = candidates[0].p;
+      // 最後の起点にもっとも近い点を採用することでくびれを回避する
+      lastPoint.set(nearestPoint);
+
+      for(let i=0; i<=dtx; i++){
+        const {n, p} = surfacePoints[(i + nearestIndex) % dtx];
         mesh.v.push(p.x, p.y, p.z);
         mesh.n.push(n.x, n.y, n.z);
         // xが長さ方向の方が都合がいい場合もあるのでオプションで。
