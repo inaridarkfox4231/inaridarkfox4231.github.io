@@ -5545,7 +5545,7 @@ const p5wgex = (function(){
       this.enableExtensions(); // 拡張機能
       this.dict = getDict(this.gl); // 辞書を生成
       this.inTransformFeedback = false; // TFしてるかどうかのフラグ
-      this.clearColor = [0, 0, 0, 0];
+      this.colorForClear = [0, 0, 0, 0];
       // useはデフォルトでfalse, funcはデフォルトで1,0,1,0です。単純に上書き。colorはblendColorに使うやつ。
       // equationのデフォはADD/ADDです。funcもequationも保持するのはgl定数、数です。文字列だと不便なので。
       this.blendState = {use:false, func:[1,0,1,0], color:[0,0,0,0], equation:[gl.FUNC_ADD, gl.FUNC_ADD]};
@@ -5572,14 +5572,14 @@ const p5wgex = (function(){
       // clearに使う色を決めるところ
       // 従来のr,g,b,aも含め、coulour表記でもOKとする
       const newClearColor = coulour(...args);
-      this.clearColor = newClearColor; // 記録する
+      this.colorForClear = newClearColor; // 記録する
       this.gl.clearColor(...newClearColor); // clearColorを設定
       return this;
     }
     clear(...args){
       // 通常のクリア。対象はスクリーンバッファ、もしくはその時のフレームバッファ
       // やはり不便なので、引数がある場合はその時のみ適用される様にしましょ
-      const curClearColor = this.clearColor.slice();
+      const curClearColor = this.colorForClear.slice();
       if (arguments.length > 0) {
         // 引数をclearColorに設定
         this.clearColor(...args);
