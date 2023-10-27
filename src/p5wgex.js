@@ -3483,7 +3483,7 @@ const p5wgex = (function(){
       return this.vao;
     }
   }
-  *?
+  */
 
   // TransformFeedback用のFigureは要らないかも。
 
@@ -4984,7 +4984,7 @@ const p5wgex = (function(){
   // ただめんどうなのでplaneのtransform作ったら終わりでいいです
   function _createTextureRenderer(node){
     // デフォルトの"leftUp"とする。
-    const sh = new ex.PlaneShader(node);
+    const sh = new PlaneShader(node);
     sh.initialize();
     sh.addUniform("bool", "uFlip", "vs");
     sh.addUniform("vec2", "uScale", "vs");
@@ -5029,7 +5029,7 @@ const p5wgex = (function(){
   }
 
   function _createMixTextureRenderer(node){
-    const sh = new ex.PlaneShader(node);
+    const sh = new PlaneShader(node);
     sh.initialize();
     sh.addUniform("vec2", "uScale", "vs");
     sh.addUniform("float", "uRotation", "vs");
@@ -5219,7 +5219,7 @@ const p5wgex = (function(){
 
   // 単純に最大4枚のテクスチャを表示するだけ。無い場所はvec4(0.0)となり、blend:"blend"なら背景色になる。
   function _createQuadTextureRenderer(node){
-    const sh = new ex.PlaneShader(node);
+    const sh = new PlaneShader(node);
     sh.initialize();
     // テクスチャを4枚読み込んで4隅に縮小して4つ並べるだけのきわめてシンプルな
     // シェーダです。存在しない場合、そこは真っ黒になります。透明度0の。
