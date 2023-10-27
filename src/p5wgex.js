@@ -2127,6 +2127,8 @@ const p5wgex = (function(){
   // だからstatic指定の場合にvao使うように誘導する方がいいかもしれない。とはいえどうせ隠蔽されるのであんま意味ないけどね...
   // vboの情報があった方がいい場合もあるかもしれないけどね。
   // iboの梱包はやめました。
+  // VAOはやめましょ。廃止。廃止する方向で。どうせwebglも終わるんだし。webgpuの時代が来ちゃったので。
+  /*
   function _createVAO(gl, attrs, dict){
     const vao = gl.createVertexArray();
     const vbos = {};
@@ -2159,6 +2161,7 @@ const p5wgex = (function(){
       attrCount: attrCount, // drawArrays用。
     };
   }
+  */
 
   // attrsはattrの配列
   function _createVBOs(gl, attrs, dict){
@@ -3440,7 +3443,7 @@ const p5wgex = (function(){
     constructor(gl, name, attrs, dict){
       this.gl = gl;
       this.name = name;
-      this.useVAO = false; // VAOFigureと区別する。
+      //this.useVAO = false;
       this.vbos = _createVBOs(gl, attrs, dict);
       // countはもう計算してしまおう（面倒）
       const attrName = Object.keys(this.vbos)[0];
@@ -3450,8 +3453,7 @@ const p5wgex = (function(){
       return this.vbos;
     }
     swapAttribute(attrName0, attrName1){
-      // この機能はVAOではサポートされません。
-      // TFのための機能であり、TFはVAOと共存できないためです。
+      // TFF用の属性swap関数
       const vbos = this.getVBOs();
       if (vbos[attrName0] === undefined || vbos[attrName1] === undefined) {
         myAlert("invalid attribute name (Figure_swapAttribute)");
@@ -3465,6 +3467,8 @@ const p5wgex = (function(){
 
   // VAOです
   // IBOは扱いません。別にします。
+  // VAO廃止
+  /*
   class VAOFigure{
     constructor(gl, name, attrs, dict){
       this.gl = gl;
@@ -3479,6 +3483,7 @@ const p5wgex = (function(){
       return this.vao;
     }
   }
+  *?
 
   // TransformFeedback用のFigureは要らないかも。
 
@@ -5874,6 +5879,7 @@ const p5wgex = (function(){
       this.figures[name] = newFigure;
       return this;
     }
+    /*
     registVAOFigure(name, attrs){
       // vao版。作るのはVAOFigureです。どうしようね。figuresには入れよう。で、useVAOがあるかどうかで分ける。
       // Figureの方でuseVAO=falseってやる。もしかしたら継承使った方がいいのかも。
@@ -5882,6 +5888,7 @@ const p5wgex = (function(){
       this.figures[name] = newFigure;
       return this;
     }
+    */
     registIBO(name, info){
       info.name = name; // infoは{data:[0,1,2,2,1,3]}みたいなので問題ないです。配列渡すのでもいいんだけど...柔軟性考えるとね...
       const newIBO = _createIBO(this.gl, info, this.dict);
@@ -5958,8 +5965,7 @@ const p5wgex = (function(){
     drawFigure(name, tfDrawCall = undefined){
       // 異なるポリゴンを同じシェーダでレンダリングする際に重宝する。
       this.currentFigure = this.figures[name];
-      // 属性の有効化（ここをvaoかそうでないかで分ける可能性があるわね）
-      // vaoの場合はshaderの方のattribLocationを使わないからです。
+      // 属性の有効化
       this.enableAttributes(tfDrawCall);
       return this;
     }
@@ -5972,7 +5978,7 @@ const p5wgex = (function(){
       return this;
     }
     enableAttributes(tfDrawCall = undefined){
-      // tfDrawCallがある場合にはoutIndexを持つattrに対して特別な処理を実行する。VAOは出てこない。TFと共存しないので。
+      // tfDrawCallがある場合にはoutIndexを持つattrに対して特別な処理を実行する。
       const isTF = (tfDrawCall !== undefined);
       // 設定できるthDrawCallはpoints, lines, triangles,の3種類だけのようです
       // 一応myAlertを出しておきます
@@ -5981,10 +5987,10 @@ const p5wgex = (function(){
         return null;
       }
       // useVAO === trueの場合、vaoをbindするだけ。
-      if (this.currentFigure.useVAO) {
+    //  if (this.currentFigure.useVAO) {
         // こんだけ！！！！
-        this.gl.bindVertexArray(this.currentFigure.getVAO().buf);
-      } else {
+    //    this.gl.bindVertexArray(this.currentFigure.getVAO().buf);
+    //  } else {
         // 属性の有効化
         const attributes = this.currentPainter.getAttributes();
         const vbos = this.currentFigure.getVBOs();
@@ -6033,7 +6039,7 @@ const p5wgex = (function(){
             this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
           }
         }
-      }
+    //  }
       if (isTF) {
         this.gl.beginTransformFeedback(this.dict[tfDrawCall]);
         this.inTransformFeedback = true;
@@ -6052,18 +6058,23 @@ const p5wgex = (function(){
       if (bufName === "ibo") {
         buf = this.currentIBO.buf;
       } else {
-        buf = (this.currentFigure.useVAO ?
-          this.currentFigure.getVAO().vbos[bufName] :
-          this.currentFigure.getVBOs()[bufName].buf
-        );
+        buf = this.currentFigure.getVBOs()[bufName].buf;
+        //buf = (this.currentFigure.useVAO ?
+      //    this.currentFigure.getVAO().vbos[bufName] :
+        //  this.currentFigure.getVBOs()[bufName].buf
+        //);
       }
       // この関数はこの時点でFigureもしくはIBOがbindされていることが前提なので
       // ここは要らないかもしれないって思ったけどVAOだと必須みたいです
-      if (bufName !== "ibo" && this.currentFigure.useVAO) {
-        // VAOの場合だけこれを実行する（個別にbufferを操作しないといけないわけ）
+      if (bufName !== "ibo") {
+        // iboでない場合は常にこれ要るわよ。だってそうしないとenableAttribで最後にbindされたbufferしか
+        // 更新されないでしょ？？？？？？ばかか。
+        // あのコードでバグが出なかったのは色しか更新してなかったからだ。
+        // これを機にVAO廃止するかな...やっぱこれ要らんわ。100害あって一利なしだわ。うざい。やめよ。
         this.gl.bindBuffer(this.dict[targetName], buf);
       }
       this.gl.bufferSubData(this.dict[targetName], dstByteOffset, srcData, srcOffset); // srcDataはFloat32Arrayの何か
+      // ここで戻した方がいいと思うけれどどうだろうね
       return this;
     }
     setTexture(name, _texture){
@@ -6285,10 +6296,10 @@ const p5wgex = (function(){
     */
     swapAttribute(attrName0, attrName1){
       const fig = this.currentFigure;
-      if (fig.useVAO) {
-        myAlert("this function doesn't support VAO.");
-        return null;
-      }
+    //  if (fig.useVAO) {
+    //    myAlert("this function doesn't support VAO.");
+    //    return null;
+    //  }
       fig.swapAttribute(attrName0, attrName1);
       return this;
     }
@@ -6448,9 +6459,9 @@ const p5wgex = (function(){
       // 各種bind解除
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
       this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
-      if (this.currentFigure.useVAO) {
-        this.gl.bindVertexArray(null);
-      } else if (this.inTransformFeedback) {
+    //  if (this.currentFigure.useVAO) {
+    //    this.gl.bindVertexArray(null);
+      if (this.inTransformFeedback) {
         // TFはVAO関係ないのでここに処理を書く
         // transformFeedback状態を解除（設定側）
         this.gl.endTransformFeedback();
