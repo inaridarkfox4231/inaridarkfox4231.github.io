@@ -8791,6 +8791,13 @@ const p5wgex = (function(){
     }
   }
 
+  // filter作成用shaderPrototype
+  class FilterShader extends ShaderPrototype{
+    constructor(node){
+      super(node);
+    }
+  }
+
   class ForwardLightingShader extends ShaderPrototype{
     constructor(node){
       super(node);
@@ -8912,10 +8919,11 @@ const p5wgex = (function(){
           color = uMonoColor;  // uMonoColor単色
         }
       `;
+      // normalは渡す際に正規化した方がいいでしょうね
       this.fs.mainProcess =
       `
         if (uUseLight) {
-          vec3 result = totalLight(position, normal, color.rgb);
+          vec3 result = totalLight(position, normalize(normal), color.rgb);
           color.rgb = result;
         }
       `;
@@ -8973,7 +8981,128 @@ const p5wgex = (function(){
     }
     initialize(options = {}){
       super.initialize();
-      // TODO
+      this.attrs = [
+        {type:"vec3", name:"aPosition"},
+        {type:"vec3", name:"aNormal"}
+      ];
+      this.varyings = [
+        {type:"vec3", name:"vLocalPosition"},
+        {type:"vec3", name:"vGlobalPosition"},
+        {type:"vec3", name:"vViewPosition"},
+        {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
+        {type:"vec3", name:"vViewNormal"}, // ビュー法線。ライティングで使う。
+        {type:"vec3", name:"vNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
+        {type:"vec4", name:"vNormalDeviceCoord"} // いわゆるNDC.
+      ];
+
+      this.vs.precisions = ``;
+      this.vs.constants = ``;
+      this.vs.uniforms =
+      `
+        uniform mat4 uModelMatrix;
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjMatrix;
+        uniform mat3 uNormalMatrix;
+        uniform mat3 uModelNormalMatrix;
+      `;
+
+      this.vs.routines = ``;
+      this.vs.preProcess =
+      `
+        vec3 position = aPosition;
+        vec3 normal = aNormal;
+      `;
+
+      this.vs.mainProcess =
+      `
+        // 位置と法線の計算
+        vLocalPosition = position;
+        vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
+        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
+        vViewPosition = viewModelPosition.xyz;
+        vViewNormal = normalize(uNormalMatrix * normal);
+        vGlobalNormal = normalize(uModelNormalMatrix * normal);
+        vNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
+
+        vec4 ndc = uProjMatrix * viewModelPosition;
+        gl_Position = ndc;
+        vNormalDeviceCoord = ndc;
+      `;
+      this.vs.postProcess = ``;
+
+      // 次にfs
+      this.fs.precisions =
+      `
+        precision highp float;
+      `;
+      // 名前はとりあえず固定で。変える必要が生じたら、変えます。
+      // 渡すのはviewNormalです。計算に使うので。
+      this.fs.outputs =
+      `
+        layout (location = 0) out vec4 materialColor;
+        layout (location = 1) out vec4 viewPosition;
+        layout (location = 2) out vec4 viewNormal;
+      `;
+      // uMonoColorとuMaterialFlag以外は不要かと。
+      this.fs.uniforms =
+      `
+        uniform vec4 uMonoColor; // monoColorの場合
+        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
+      `;
+      // 1以降はお好みで。
+      // 計算に使うのはviewNormalです。他のnormalは彩色などで使われます。
+      // いつものようにフラグを増やすだけ
+      this.fs.preProcess =
+      `
+        vec3 position = vViewPosition;
+        vec3 normal = vViewNormal;
+        vec4 color = vec4(1.0);
+        if(uMaterialFlag == 0) {
+          color = uMonoColor;  // uMonoColor単色
+        }
+      `;
+      // useColorとuseTexCoordも用意しましょ
+      const {useColor = false} = options;
+      const {useTexCoord = false} = options;
+      // rgbにaを掛ける処理はやめときましょ
+      // 個別にやればいい
+      // 送る際のalpha乗算をやめる
+      // つまりblend:"disable"で落とす...っていうかその、
+      // データをおくるだけだからblendする必要がないわけで
+      // 深度とともにデータを格納していくだけでいいと思うんよ
+
+      // depthがこれでいいかどうかは謎だけど...
+      this.fs.postProcess +=
+      `
+        materialColor = color;
+        viewPosition = vec4(position, 1.0);
+        float depth = 0.5 * (vNormalDeviceCoord.z / vNormalDeviceCoord.w) + 0.5;
+        viewNormal = vec4(normal, depth);
+      `;
+      // useColor, useTexCoord
+      if (useColor) {
+        // TODO
+        this.addAttr("vec4", "aColor");
+        this.addVarying("vec4", "vColor");
+        this.addCode(`
+          vec4 color = aColor;
+        `, "preProcess", "vs");
+        this.addCode(`
+          vColor = color;
+        `, "postProcess", "vs");
+      }
+      if (useTexCoord) {
+        // TODO
+        this.addAttr("vec2", "aTexCoord");
+        this.addVarying("vec2", "vTexCoord");
+        this.addCode(`
+          vec2 texCoord = aTexCoord;
+        `, "preProcess", "vs");
+        this.addCode(`
+          vTexCoord = texCoord;
+        `, "postProcess", "vs");
+      }
+      return this;
     }
   }
   // こっちはディファードをライティングするためのシェーダ
@@ -8983,7 +9112,113 @@ const p5wgex = (function(){
     }
     initialize(options = {}){
       super.initialize();
-      // TODO
+      // 板ポリ。
+      this.attrs = [
+        {name:"aPosition", type:"vec2"}
+      ];
+      this.varyings = [
+        {name:"vUv", type:"vec2"}
+      ];
+      this.vs.preProcess =
+      `
+        vUv = 0.5 * aPosition + 0.5;
+      `;
+      this.vs.mainProcess =
+      `
+        gl_Position = vec4(aPosition, 0.0, 1.0);
+      `;
+      // ここまで。次にfs.
+      this.fs.precisions =
+      `
+        precision highp float;
+      `;
+      this.fs.constants =
+      `
+        const float diffuseCoefficient = 0.73;
+        const float specularCoefficient = 2.0;
+      `;
+      // optionで増やせるようにする
+      const {directionalLightCountMax = 5} = options;
+      const {pointLightCountMax = 5} = options;
+      const {spotLightCountMax = 5} = options;
+      // uniformsはuMonoColorとuMaterialFlagだけ排除して
+      // 入力としては先ほどのmaterialColor, viewPosition, viewNormalを
+      // textureとして用意する
+      this.fs.uniforms =
+      `
+        uniform mat4 uViewMatrix;
+
+        // 各種テクスチャ
+        uniform sampler2D uMaterialColor;  // ubyteの4
+        uniform sampler2D uViewPosition;   // floatの4
+        uniform sampler2D uViewNormal;     // floatの4
+
+        // 汎用色
+        uniform vec3 uAmbientColor;
+        uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
+        uniform vec3 uAttenuation; // デフォルトは1,0,0. pointLightで使う
+
+        // directionalLight関連
+        uniform int uDirectionalLightCount; // デフォ0なのでフラグ不要
+      ` +
+      `uniform vec3 uLightingDirection[` + directionalLightCountMax +`];` +
+      `uniform vec3 uDirectionalDiffuseColor[5];` +
+      `uniform vec3 uDirectionalSpecularColor[5];` +
+      `
+      // pointLight関連
+      uniform int uPointLightCount; // これがデフォルトゼロであることによりフラグが不要となる。
+      ` +
+      `uniform vec3 uPointLightLocation[` + pointLightCountMax +`];` +
+      `uniform vec3 uPointLightDiffuseColor[` + pointLightCountMax +`];` +
+      `uniform vec3 uPointLightSpecularColor[` + pointLightCountMax +`];` +
+      `
+        // spotLight関連
+        uniform int uSpotLightCount; // 0～5
+      ` +
+      `uniform vec3 uSpotLightDirection[` + spotLightCountMax +`];` +
+      `uniform vec3 uSpotLightLocation[` + spotLightCountMax +`];` +
+      `uniform float uSpotLightAngle[` + spotLightCountMax +`];` +
+      `uniform float uSpotLightConc[` + spotLightCountMax +`];` +
+      `uniform vec3 uSpotLightDiffuseColor[` + spotLightCountMax +`];` +
+      `uniform vec3 uSpotLightSpecularColor[` + spotLightCountMax +`];` +
+      `
+        // light flag.
+        uniform bool uUseLight;
+        uniform bool uUseSpecular; // デフォルトはfalse;
+      `;
+      // 出力は普通にfragColorですね
+      this.fs.outputs =
+      `
+        out vec4 fragColor;
+      `
+      // ライティングルーチン
+      this.fs.routines = snipet.lightingRoutines;
+      // よくわからんけどalpha乗算はtotalLight出した後でいいと思う
+      this.fs.preProcess =
+      `
+        vec4 color = texture(uMaterialColor, vUv);
+        vec4 viewPositionTex = texture(uViewPosition, vUv);
+        vec4 viewNormalTex = texture(uViewNormal, vUv);
+        vec3 viewPosition = viewPositionTex.rgb;
+        vec3 viewNormal = viewNormalTex.rgb;
+        float depth = viewNormalTex.a;
+      `;
+      // このあとでdepthをいじってなんか作りたいとかあれば
+      // ご自由にどうぞ
+      // vPositionTex.aを取り出すことでもなんかできるかも
+      this.fs.mainProcess =
+      `
+        if (uUseLight) {
+          vec3 result = totalLight(viewPosition, normalize(viewNormal), color.rgb);
+          color.rgb = result;
+        }
+      `;
+      // 必要ならこのあとrgbにaを掛けるなりdepthでalphaを決めるなりすればよい
+        this.fs.postProcess =
+        `
+          fragColor = color;
+        `;
+      return this;
     }
   }
 
@@ -9382,9 +9617,9 @@ const p5wgex = (function(){
                .setUniform("uModelNormalMatrix", modelNormalMat);
       return this;
     }
-    output(){
-      // deferred用。そのうち準備する。
-    }
+    //output(){
+      // deferred用。そのうち準備する。...？必要性が分かるまで保留。lightの方は板ポリ芸です。
+    //}
   }
 
   // ---------------------------------------------------------------------------------------------- //
