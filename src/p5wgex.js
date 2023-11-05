@@ -9587,6 +9587,12 @@ const p5wgex = (function(){
         this.node.setUniform("uSpotLightDiffuseColor", this.spotLightParams.diffuseColor);
         this.node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
       }
+      // deferredの場合、こっちでuViewMatrixを設定する。
+      if (this.renderingType === "deferred") {
+        const cam = this.curCam.cam;
+        const viewMat = cam.getViewMat();
+        this.node.setUniform("uViewMatrix", viewMat.m);
+      }
       return this;
     }
     setMatrixUniforms(){
