@@ -4044,11 +4044,13 @@ const p5wgex = (function(){
         const r = upperRadius * (1-k/dty) + lowerRadius * k/dty;
         const theta = Math.atan2(lowerRadius - upperRadius, top - bottom);
         mesh.v.push(r*Math.cos(angle), r*Math.sin(angle), h);
+        // cosとsinが逆でした。
         mesh.n.push(
-          Math.cos(angle) * Math.sin(theta),
-          Math.sin(angle) * Math.sin(theta),
-          Math.cos(theta)
+          Math.cos(angle) * Math.cos(theta),
+          Math.sin(angle) * Math.cos(theta),
+          Math.sin(theta)
         );
+        //console.log(theta);
         mesh.uv.push(i/dtx, k/dty); // 基本的には全体
         // つまり側面のない円柱の場合UVは正方形全体
       }
