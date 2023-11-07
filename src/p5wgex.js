@@ -2284,8 +2284,16 @@ const p5wgex = (function(){
       let td = _getTextureData(info.target, info.src);
       if (info.target === "texture_cube_map") { td = td.xp; } // どれか。どれでもOK.
       // テクスチャデータから設定されるようにする。理由：めんどくさいから！！
-      if(info.w === undefined){ info.w = td.width; }
-      if(info.h === undefined){ info.h = td.height; }
+      if (info.w === undefined || info.h === undefined) {
+        // videoElementのケースとそれ以外で分ける
+        if (info.src instanceof HTMLVideoElement) {
+          info.w = td.videoWidth;
+          info.h = td.videoHeight;
+        } else {
+          info.w = td.width;
+          info.h = td.height;
+        }
+      }
     }
   }
 
