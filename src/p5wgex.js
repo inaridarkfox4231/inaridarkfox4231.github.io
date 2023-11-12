@@ -1735,6 +1735,7 @@ const p5wgex = (function(){
     d.int = gl.INT;
     d.alpha = gl.ALPHA;
     d.red_integer = gl.RED_INTEGER;
+    d.depth_component = gl.DEPTH_COMPONENT;
     // -------usage-------//
     d.static_draw = gl.STATIC_DRAW;
     d.dynamic_draw = gl.DYNAMIC_DRAW;
@@ -2429,6 +2430,37 @@ const p5wgex = (function(){
     const depthInfo = info.depth.info;
     const colorInfo = info.color.info;
     const stencilInfo = info.stencil.info;
+
+    // info.color.attachTypeがtextureなのはデフォルトなんだけどここでデフォルトを決めてしまいましょう
+    if (info.color.attachType === "texture") {
+      // colorの場合、typeをfloatやhalf_floatに設定し、あとは未定義にすることが想定されるユースケースである。
+      if (colorInfo.type === undefined) colorInfo.type = "ubyte";
+      if (colorInfo.format === undefined) colorInfo.format = "rgba";
+      if (colorInfo.internalFormat === undefined) {
+        if (colorInfo.type === "float") {
+          colorInfo.internalFormat = "rgba32f";
+        } else if (colorInfo.type === "half_float") {
+          colorInfo.internalFormat = "rgba16f";
+        } else {
+          colorInfo.internalFormat = "rgba"; // 規定値。ubyteの場合など、一般的な使用法のケース。
+        }
+      }
+    }
+
+    // info.depth.attachTypeがtextureの場合のデフォルトを設定する
+    if (info.depth.attachType === "texture") {
+      // depthの場合、internalFormatをdepth32fにしたりdepth16にしたり、といったユースケースが想定されるので、こうする。
+      // 未定義の場合はdepth32fが採用され、然るべく設定される。
+      if (depthInfo.format === undefined) depthInfo.format = "depth_component";
+      if (depthInfo.internalFormat === undefined) depthInfo.internalFormat = "depth32f";
+      if (depthInfo.type === undefined) {
+        if (depthInfo.internalFormat === "depth16") {
+          depthInfo.type = "ushort";
+        } else {
+          depthInfo.type = "float"; // 規定値。depth32fの場合はこれ。
+        }
+      }
+    }
 
     // wとhはここで付与してしまおう。なお全体のinfoにnameはもう付与済み（のはず）
     // 全部一緒じゃないとエラーになるのです。
@@ -3624,7 +3656,6 @@ const p5wgex = (function(){
           Math.sin(angle) * Math.cos(theta),
           Math.sin(theta)
         );
-        //console.log(theta);
         mesh.uv.push(i/dtx, k/dty); // 基本的には全体
         // つまり側面のない円柱の場合UVは正方形全体
       }
@@ -3783,7 +3814,6 @@ const p5wgex = (function(){
       // dでsortする
       const candidates = surfacePoints.slice();
       candidates.sort((p1, p2) => (p1.d > p2.d ? 1 : (p1.d < p2.d ? -1 : 0)));
-      //console.log(candidates[0].d, candidates[0].index, candidates[dtx].d);
       const nearestIndex = candidates[0].index;
       const nearestPoint = candidates[0].p;
       // 最後の起点にもっとも近い点を採用することでくびれを回避する
