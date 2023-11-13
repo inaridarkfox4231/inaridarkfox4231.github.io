@@ -78,6 +78,19 @@
 // 今後はconstructorで初期化するのでそこら辺変更点が多いです
 // Locater大幅更新、pointersを使ってタッチの場合は末尾ベースで更新することにしました
 
+// 20231113
+// StandardLightingSystemに大幅な変更
+// setLightingUniformsのoptionsとしてrenderType,deferredの場合はこれをdeferredにしてね
+// renderingTypeは廃止しました（意味が無いので）
+// setMatrixUniformsを射影テクスチャに対応させるために法線関連の行列をセットしないようにするとか色々
+// renderTypeをotherに
+// またlinesを追加しました、initializeの際にtype:"lines"でラインシェーダが生成されます
+// aColorに対応してるので一応線に色を付けられます
+// またRenderingSystemにcameraのhelperの生成関数を追加
+// createHelper(helperName, cameraName)でOKです
+// 基本的には動的更新を想定しています。いわゆるイミディエイトですが、こんなののためにRetainedを持ち出すのは
+// 仰々しいので却下しました。変化させる場合は毎フレーム同じ名前で呼び出してね。所詮ヘルパーなので。
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
@@ -8877,6 +8890,93 @@ const p5wgex = (function(){
     }
   }
 
+  // lineShader. 線描画用。3Dです。カメラが必要です。
+  class LineShader extends ShaderPrototype{
+    constructor(node){
+      super(node);
+    }
+    initialize(options = {}){
+      super.initialize();
+      this.attrs = [
+        {type:"vec3", name:"aPosition"}
+      ];
+      this.varyings = [
+        {type:"vec3", name:"vLocalPosition"},
+        {type:"vec3", name:"vGlobalPosition"},
+        {type:"vec3", name:"vViewPosition"}
+      ];
+
+      this.vs.uniforms =
+      `
+        uniform mat4 uModelMatrix;
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjMatrix;
+      `;
+
+      this.vs.preProcess =
+      `
+        vec3 position = aPosition;
+      `;
+      this.vs.mainProcess =
+      `
+        // 位置と法線の計算
+        vLocalPosition = position;
+        vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
+        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
+        vViewPosition = viewModelPosition.xyz;
+
+        gl_Position = uProjMatrix * viewModelPosition;
+      `;
+
+      this.fs.precisions =
+      `
+        precision highp float;
+      `;
+
+      this.fs.uniforms =
+      `
+        uniform vec4 uMonoColor; // monoColorの場合
+        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
+      `;
+
+      this.fs.outputs =
+      `
+        out vec4 fragColor;
+      `
+
+      this.fs.preProcess =
+      `
+        vec3 position = vViewPosition;
+        vec4 color = vec4(1.0);
+        if(uMaterialFlag == 0) {
+          color = uMonoColor;  // uMonoColor単色
+        }
+      `;
+
+      this.fs.mainProcess =
+      `
+        color.rgb *= color.a;
+        fragColor = color;
+      `;
+
+      const {useColor = false} = options;
+
+      // colorを使う場合はaColorを追加.
+      if (useColor) {
+        // TODO
+        this.addAttr("vec4", "aColor");
+        this.addVarying("vec4", "vColor");
+        this.addCode(`
+          vec4 color = aColor;
+        `, "preProcess", "vs");
+        this.addCode(`
+          vColor = color;
+        `, "postProcess", "vs");
+      }
+      return this;
+    }
+  }
+
   // ---------------------------------------------------------------------------------------------- //
   // RenderingSystem.
 
@@ -9052,6 +9152,97 @@ const p5wgex = (function(){
       this.currentShader.registPainter(name, options);
       return this;
     }
+    createHelper(helperName, cameraName){
+      // カメラの名前で取得、カメラタイプで場合分け。
+      // 動的な場合はイミディエイトという扱いになるわね。
+      const cam = this.getCamera(cameraName);
+      switch(cam.cameraType){
+        case "perspective":
+          this.createPersHelper(helperName, cam);
+          break;
+        case "orthographic":
+          this.createOrthoHelper(helperName, cam);
+          break;
+      }
+      return this;
+    }
+    createPersHelper(helperName, cam){
+      // persのHelper. retainedという扱いも可能。その場合はsetupで1回だけ呼び出してね。
+      const {eye, center, up, side} = cam.getView();
+      const {fov, aspect, near} = cam.getProj();
+      const distToCenter = eye.dist(center);
+      const lineVertices = [];
+      const halfH = distToCenter*Math.tan(fov*0.5);
+      const halfW = halfH * aspect;
+      const up0 = Vec3.mult(up, halfH);
+      const side0 = Vec3.mult(side, halfW);
+      const up1 = Vec3.mult(up, -halfH);
+      const side1 = Vec3.mult(side, -halfW);
+      lineVertices.push(
+        ...eye.toArray(),
+        ...Vec3.add(center, up0).add(side0).toArray(),
+        ...Vec3.add(center, up0).add(side1).toArray(),
+        ...Vec3.add(center, up1).add(side0).toArray(),
+        ...Vec3.add(center, up1).add(side1).toArray()
+      );
+
+      const nearRatio = near / distToCenter;
+      const nearCenter = Vec3.lerp(eye, center, nearRatio);
+      up0.mult(nearRatio);
+      side0.mult(nearRatio);
+      up1.mult(nearRatio);
+      side1.mult(nearRatio);
+
+      lineVertices.push(
+        ...Vec3.add(nearCenter, up0).add(side0).toArray(),
+        ...Vec3.add(nearCenter, up0).add(side1).toArray(),
+        ...Vec3.add(nearCenter, up1).add(side0).toArray(),
+        ...Vec3.add(nearCenter, up1).add(side1).toArray()
+      );
+      this.node.registFigure(helperName, [
+        {name:"aPosition", size:3, data:lineVertices}
+      ]);
+      this.node.registIBO(helperName + "IBO", {data:[0,1,0,2,0,3,0,4,5,6,6,8,8,7,7,5]});
+      return this;
+    }
+    createOrthoHelper(helperName, cam){
+      // orthoの（以下略）
+      const {eye, center, up, side} = cam.getView();
+      const {cw, ch, near} = cam.getProj();
+      const distToCenter = eye.dist(center);
+      const lineVertices = [];
+      const halfH = ch/2;
+      const halfW = cw/2;
+      const up0 = Vec3.mult(up, halfH);
+      const side0 = Vec3.mult(side, halfW);
+      const up1 = Vec3.mult(up, -halfH);
+      const side1 = Vec3.mult(side, -halfW);
+      lineVertices.push(
+        ...Vec3.add(eye, up0).add(side0).toArray(),
+        ...Vec3.add(eye, up0).add(side1).toArray(),
+        ...Vec3.add(eye, up1).add(side0).toArray(),
+        ...Vec3.add(eye, up1).add(side1).toArray(),
+        ...Vec3.add(center, up0).add(side0).toArray(),
+        ...Vec3.add(center, up0).add(side1).toArray(),
+        ...Vec3.add(center, up1).add(side0).toArray(),
+        ...Vec3.add(center, up1).add(side1).toArray()
+      );
+
+      const nearRatio = near / distToCenter;
+      const nearCenter = Vec3.lerp(eye, center, nearRatio);
+      lineVertices.push(
+        ...Vec3.add(nearCenter, up0).add(side0).toArray(),
+        ...Vec3.add(nearCenter, up0).add(side1).toArray(),
+        ...Vec3.add(nearCenter, up1).add(side0).toArray(),
+        ...Vec3.add(nearCenter, up1).add(side1).toArray()
+      );
+
+      this.node.registFigure(helperName, [
+        {name:"aPosition", size:3, data:lineVertices}
+      ]);
+      this.node.registIBO(helperName + "IBO", {data:[0,4,1,5,2,6,3,7,8,9,9,11,11,10,10,8]});
+      return this;
+    }
   }
 
   // StandardLightingSystemです。はい。
@@ -9061,27 +9252,34 @@ const p5wgex = (function(){
       this.registShader("forwardLight", new ForwardLightingShader(node));
       this.registShader("deferredPrepare", new DeferredPrepareShader(node));
       this.registShader("deferredLight", new DeferredLightingShader(node));
+      this.registShader("lines", new LineShader(node));
       this.prepareLightingParameters();
-      this.renderingType = "forward";
+      //this.renderingType = "forward";
     }
     initialize(options = {}){
       const {
         type = "forward", // forward/deferred
         forwardLight = {},
         deferredPrepare = {},
-        deferredLight = {}
+        deferredLight = {},
+        lines = {}
       } = options;
       switch(type) {
         case "forward":
           this.shaders.forwardLight.initialize(forwardLight);
-          this.renderingType = "forward";
+          //this.renderingType = "forward";
           this.bindShader("forwardLight");
           break;
         case "deferred":
           this.shaders.deferredPrepare.initialize(deferredPrepare);
           this.shaders.deferredLight.initialize(deferredLight);
-          this.renderingType = "deferred";
+          //this.renderingType = "deferred";
           this.bindShader("deferredPrepare");
+          break;
+        case "lines":
+          this.shaders.lines.initialize(lines);
+          //this.renderingType = "lines";
+          this.bindShader("lines");
           break;
       }
       this.initializeTransform();
@@ -9159,7 +9357,17 @@ const p5wgex = (function(){
       this.node.setUniform("uMaterialFlag", flag);
       return this;
     }
-    setLightingUniforms(){
+    setColor(prop){
+      // uMonoColor限定の色セット関数。
+      // uMonoColorにしか使えません。あしからず。
+      this.node.setUniform("uMonoColor", coulour(prop));
+      return this;
+    }
+    setLightingUniforms(options = {}){
+      // renderTypeで処理を分ける。deferredの場合はここをrenderType:"deferred"にする。
+      // これは破壊的な変更だが、変えるスケッチは多くないので問題ない。どうせdeferredはあんま使わないだろうし...
+      const {renderType = "forward"} = options;
+
       // forwardの場合は事前にやるんだけど
       // deferredの場合は後回し
       this.node.setUniform("uUseLight", this.lightingParams.use);
@@ -9194,44 +9402,55 @@ const p5wgex = (function(){
         this.node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
       }
       // deferredの場合、こっちでuViewMatrixを設定する。
-      if (this.renderingType === "deferred") {
+      if (renderType === "deferred") {
         const cam = this.curCam.cam;
         const viewMat = cam.getViewMat();
         this.node.setUniform("uViewMatrix", viewMat.m);
       }
       return this;
     }
-    setMatrixUniforms(){
+    setMatrixUniforms(options = {}){
       // transformの操作はsetTransformで実行する。
       // それとは別にMatrixUniformsを設定する。
       // そのうちドローコールもメソッドで出来るようにしてその中でこれを実行する形になるかも？
-      const tf = this.transform;
-      const cam = this.curCam.cam;
+      // optionsについて... useNormalは要らないと思う。renderingTypeがforwardかdeferredでない場合に実行されなければいい。
+      // name: uの次に配置する6種類のuniform名のコードネーム、デフォルトは""です。つまり備え付けのshader用の。
+      // renderingTypeは廃止でいいですね...使われない。optionsにおいてrenderTypeで指定すればいい。
+      // linesやpointsで他の描画する場合もあるし。基本forwardでしか使われないからね。
 
-      // deferredの場合はuViewMatrixを使わないので送らない
-      // もちろん用意することは可能でその場合はカスタマイズで何とかする
+      // tfは共通で使う。
+      // renderTypeはforwardだったりdeferredだったりlinesだったりpointsだったりする。
+      // uniformの名前と、登録したカメラの名前がオプション。cameraがundefined（デフォルト）の場合は現在のカメラが使われる。
+      // useModel, useModelView, useProjはすべてデフォルトtrueで、falseにすれば登録されない。
+      const {
+        renderType = "forward", name = "", camera,
+        useModel = true, useModelView = true, useProj = true,
+        useView = true, useNormal = true, useModelNormal = true
+      } = options;
+      const tf = this.transform;
+      const cam = this.getCamera(camera);
+
+      // 共通の行列処理
       const modelMat = tf.getModelMat();
       const viewMat = cam.getViewMat();
       const projMat = cam.getProjMat();
       const modelViewMat = new Mat4(getMult4x4(modelMat.m, viewMat.m));
-      const normalMat = getInverseTranspose3x3(modelViewMat.getMat3());
-      const modelNormalMat = getInverseTranspose3x3(modelMat.getMat3());
-      // forwardの場合は使うけどdeferredの場合は後でやる
-      // deferredの方、内部で法線計算とかしてて若干内容が古いので
-      // そのうち何とかします
-      if (this.renderingType === "forward") {
-        this.node.setUniform("uViewMatrix", viewMat.m);
+      if (useModel) this.node.setUniform("u" + name + "ModelMatrix", modelMat.m)
+      if (useModelView) this.node.setUniform("u" + name + "ModelViewMatrix", modelViewMat.m)
+      if (useProj) this.node.setUniform("u" + name + "ProjMatrix", projMat.m);
+      // forwardの場合はトランスフォームとライティングが一体化してるのでここで登録する必要がある。
+      if ((renderType === "forward") && useView) {
+        this.node.setUniform("u" + name + "ViewMatrix", viewMat.m);
       }
-      this.node.setUniform("uModelMatrix", modelMat.m)
-               .setUniform("uModelViewMatrix", modelViewMat.m)
-               .setUniform("uProjMatrix", projMat.m)
-               .setUniform("uNormalMatrix", normalMat)
-               .setUniform("uModelNormalMatrix", modelNormalMat);
+      // forwardとdeferredの場合にのみ法線情報を登録する
+      if ((renderType === "forward" || renderType === "deferred") && (useNormal || useModelNormal)) {
+        const normalMat = getInverseTranspose3x3(modelViewMat.getMat3());
+        const modelNormalMat = getInverseTranspose3x3(modelMat.getMat3());
+        if (useNormal) this.node.setUniform("u" + name + "NormalMatrix", normalMat)
+        if (useModelNormal) this.node.setUniform("u" + name + "ModelNormalMatrix", modelNormalMat);
+      }
       return this;
     }
-    //output(){
-      // deferred用。そのうち準備する。...？必要性が分かるまで保留。lightの方は板ポリ芸です。
-    //}
   }
 
   // ---------------------------------------------------------------------------------------------- //
