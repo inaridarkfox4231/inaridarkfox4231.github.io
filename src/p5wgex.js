@@ -2255,8 +2255,8 @@ const p5wgex = (function(){
     // mipmapはデフォルトfalseで。一応後から作れるようにしといた（null引数だと作られ無さそだし、実際作れないだろ。）
     if(info.mipmap === undefined){ info.mipmap = false; }
     // srcがnullでない場合に限りwとhは未定義でもOK
+    // fboの場合wとhは「必須」なのでここははっきり言ってどうでもいいけどsrcは{}でないとまずいですねすみませんすみません
     if(info.src !== undefined){
-      //let td;
       let td = _getTextureData(info.target, info.src);
       if (info.target === "texture_cube_map") { td = td.xp; } // どれか。どれでもOK.
       // テクスチャデータから設定されるようにする。理由：めんどくさいから！！
@@ -2269,6 +2269,10 @@ const p5wgex = (function(){
           info.w = td.width;
           info.h = td.height;
         }
+      }
+    } else {
+      if (info.target === "texture_cube_map") {
+        info.src = {};
       }
     }
   }
@@ -2412,7 +2416,7 @@ const p5wgex = (function(){
         // レンダーバッファの関連付け
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, attachment, gl.RENDERBUFFER, buffer); break;
       case "texture":
-        // テクスチャの関連付け
+        // テクスチャの関連付け（ここでキューブしちゃう？）
         gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, gl.TEXTURE_2D, buffer, 0); break;
     }
   }
@@ -2546,6 +2550,7 @@ const p5wgex = (function(){
 
     depthBuffer = _createEachBuffer(gl, info.depth.attachType, depthInfo, dict);
     if(!info.MRT){
+      // もしtarget:cube_mapが指定されていれば、これはcube_mapのテクスチャとなる。
       colorBuffer = _createEachBuffer(gl, info.color.attachType, colorInfo, dict);
     }else{
       for(let i=0, N=colorInfo.length; i<N; i++){
@@ -2562,7 +2567,12 @@ const p5wgex = (function(){
     // 関連付け
     _connectWithFramebuffer(gl, gl.DEPTH_ATTACHMENT, info.depth.attachType, depthBuffer);
     if(!info.MRT){
-      _connectWithFramebuffer(gl, gl.COLOR_ATTACHMENT0, info.color.attachType, colorBuffer);
+      // colorInfo.targetがtexture_cube_mapの場合、ここでアタッチメントする必要はない。描画時にそれぞれのターゲットに描画する
+      // 流れになるので、そうする。というか、これ2dにしか対応してないからそもそも使えない。
+      if (colorInfo.target === "texture_2d") {
+        _connectWithFramebuffer(gl, gl.COLOR_ATTACHMENT0, info.color.attachType, colorBuffer);
+      }
+      // なお、cube_mapとMRTは両立しないし、その必要もない。
     }else{
       // 複数の場合はあそこをインクリメントする
       let enums = [];
@@ -5605,60 +5615,54 @@ const p5wgex = (function(){
         myAlert("There are only 3 types of draw calls for transformFeedback: points, lines and triangles.");
         return null;
       }
-      // useVAO === trueの場合、vaoをbindするだけ。
-    //  if (this.currentFigure.useVAO) {
-        // こんだけ！！！！
-    //    this.gl.bindVertexArray(this.currentFigure.getVAO().buf);
-    //  } else {
-        // 属性の有効化
-        const attributes = this.currentPainter.getAttributes();
-        const vbos = this.currentFigure.getVBOs();
-        // どっちかっていうとvbosの方に従うべきかな...
-        // 使わないattributeがあってもいいので
-        for(let attrName of Object.keys(vbos)){
-          const vbo = vbos[attrName];
-          const attr = attributes[attrName];
-          // 処理系によってはattrが取得できない（処理系がvbosサイドのattributeの一部を不要と判断するケースがある）ので、
-          // その場合は処理をスキップするようにしましょう。ただ、なるべく過不足のない記述をしたいですね。
-          if(vbo === undefined){ continue; }
-          // TFの場合、outIndex>=0であるようなattributeは書き込み用で、
-          // inで宣言されてないためshaderが捕捉できないので、
-          // outIndexだけ見て個別に対処する。やっかいですね。
-          // TFでない場合ここは完全に無視されて従来の挙動です。
-          if (isTF && vbo.outIndex >= 0 && attr === undefined) {
-            // isTFでなおかつoutIndexが0以上の場合はこのようにbindBufferBaseを用いる
-            this.gl.bindBufferBase(this.gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, vbo.buf);
-            // そしてこの処理が実行される場合、TFにおいてoutIndexが0以上の
-            // attributeはshaderがattrとして認識していないので次の処理で
-            // 自動的にcontinueされますが、念のため以降の処理が必要ないことを
-            // 明示するためにここでcontinueします。
-            // まずかったですね
-            // 「attrがundefined」という条件を追加しました
-            // これがないと描画と同時に更新することができないんですよね
-            // attributeの入れ替えの際に入れ替えたattributeがoutIndexをもって
-            // いない、また入れ替えでinされるattributeがoutIndexを持っている
-            // ことにより不具合が生じるわけ
-            // 同じIndexを指定しておくことで、これを回避できる。
-            continue;
-          }
-          if(attr === undefined){ continue; }
-          // isTFでないかisTFでもoutIndexが明示されていない場合は通常の処理。
-          // vboをbindする
-          this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
-          // attributeLocationを有効にする
-          this.gl.enableVertexAttribArray(attr.location);
-          // attributeLocationを通知し登録する
-          this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
-          // divisorが1以上の場合はvertexAttribDivisorを呼び出す
-          // vboからdivisorを持ってこないといけないのね。
-
-          // isTFの場合はdivisorを適用しない
-          // こうしないとインスタンシングのattrだけ動的に更新する際に不具合が起きる。
-          if (!isTF && vbo.divisor > 0) {
-            this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
-          }
+      // 属性の有効化
+      const attributes = this.currentPainter.getAttributes();
+      const vbos = this.currentFigure.getVBOs();
+      // どっちかっていうとvbosの方に従うべきかな...
+      // 使わないattributeがあってもいいので
+      for(let attrName of Object.keys(vbos)){
+        const vbo = vbos[attrName];
+        const attr = attributes[attrName];
+        // 処理系によってはattrが取得できない（処理系がvbosサイドのattributeの一部を不要と判断するケースがある）ので、
+        // その場合は処理をスキップするようにしましょう。ただ、なるべく過不足のない記述をしたいですね。
+        if(vbo === undefined){ continue; }
+        // TFの場合、outIndex>=0であるようなattributeは書き込み用で、
+        // inで宣言されてないためshaderが捕捉できないので、
+        // outIndexだけ見て個別に対処する。やっかいですね。
+        // TFでない場合ここは完全に無視されて従来の挙動です。
+        if (isTF && vbo.outIndex >= 0 && attr === undefined) {
+          // isTFでなおかつoutIndexが0以上の場合はこのようにbindBufferBaseを用いる
+          this.gl.bindBufferBase(this.gl.TRANSFORM_FEEDBACK_BUFFER, vbo.outIndex, vbo.buf);
+          // そしてこの処理が実行される場合、TFにおいてoutIndexが0以上の
+          // attributeはshaderがattrとして認識していないので次の処理で
+          // 自動的にcontinueされますが、念のため以降の処理が必要ないことを
+          // 明示するためにここでcontinueします。
+          // まずかったですね
+          // 「attrがundefined」という条件を追加しました
+          // これがないと描画と同時に更新することができないんですよね
+          // attributeの入れ替えの際に入れ替えたattributeがoutIndexをもって
+          // いない、また入れ替えでinされるattributeがoutIndexを持っている
+          // ことにより不具合が生じるわけ
+          // 同じIndexを指定しておくことで、これを回避できる。
+          continue;
         }
-    //  }
+        if(attr === undefined){ continue; }
+        // isTFでないかisTFでもoutIndexが明示されていない場合は通常の処理。
+        // vboをbindする
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vbo.buf);
+        // attributeLocationを有効にする
+        this.gl.enableVertexAttribArray(attr.location);
+        // attributeLocationを通知し登録する
+        this.gl.vertexAttribPointer(attr.location, vbo.size, vbo.type, false, 0, 0);
+        // divisorが1以上の場合はvertexAttribDivisorを呼び出す
+        // vboからdivisorを持ってこないといけないのね。
+
+        // isTFの場合はdivisorを適用しない
+        // こうしないとインスタンシングのattrだけ動的に更新する際に不具合が起きる。
+        if (!isTF && vbo.divisor > 0) {
+          this.gl.vertexAttribDivisor(attr.location, vbo.divisor);
+        }
+      }
       if (isTF) {
         this.gl.beginTransformFeedback(this.dict[tfDrawCall]);
         this.inTransformFeedback = true;
@@ -5678,10 +5682,6 @@ const p5wgex = (function(){
         buf = this.currentIBO.buf;
       } else {
         buf = this.currentFigure.getVBOs()[bufName].buf;
-        //buf = (this.currentFigure.useVAO ?
-      //    this.currentFigure.getVAO().vbos[bufName] :
-        //  this.currentFigure.getVBOs()[bufName].buf
-        //);
       }
       // この関数はこの時点でFigureもしくはIBOがbindされていることが前提なので
       // ここは要らないかもしれないって思ったけどVAOだと必須みたいです
@@ -5801,15 +5801,6 @@ const p5wgex = (function(){
           myAlert("bind failure: The corresponding framebuffer does not exist.");
           return null;
         }
-        /* doubleは廃止
-        if(fbo.double){
-          // doubleの場合はwriteをbind
-          gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.write.f);
-          gl.viewport(0, 0, fbo.w, fbo.h);
-          this.currentFBO = target;
-          return this;
-        }
-        */
         // 通常時
         gl.bindFramebuffer(gl.FRAMEBUFFER, fbo.f);
         gl.viewport(0, 0, fbo.w, fbo.h);
@@ -5829,6 +5820,59 @@ const p5wgex = (function(){
       gl.bindFramebuffer(gl.FRAMEBUFFER, target.f);
       gl.viewport(0, 0, target.w, target.h);
       this.currentFBO = target.name;
+      return this;
+    }
+    framebufferTexture2D(fboName, options = {}){
+      const gl = this.gl;
+      const fbo = this.fbos[fboName];
+      if(!fbo){
+        // fboが無い場合の警告
+        myAlert("framebufferTexture2D failure: The corresponding framebuffer does not exist.");
+        return null;
+      }
+      // attachはcolor,depth,stencil,もしくはcolor/1,/2,/3,...とする。
+      // targetは2dか、xp,xn,yp,yn,zp,znの中から選ぶ感じですね。これでいいだろ。だってcube_mapじゃなきゃxpやxn無いでしょ。
+      const {attach = "color", target = "2d"} = options;
+      let attachment, textarget;
+      // 無意味だろうけど一応MRTのことも考慮してみる。attach指定が無ければcolorです。今回は使わないわね。
+      const _attach = attach.split('/');
+      let attachIndex = 0;
+      if (_attach.length > 1){
+        attachIndex = Number(_attach[1]);
+      }
+      const attachType = _attach[0];
+      switch(attachType){
+        case "color":
+          if (attachIndex === 0) {
+            attachment = gl.COLOR_ATTACHMENT0;
+          } else {
+            attachment = gl.COLOR_ATTACHMENT0 + attachIndex;
+          }
+          break;
+        case "depth": attachment = gl.DEPTH_ATTACHMENT; break;
+        case "stencil": attachment = gl.STENCIL_ATTACHMENT; break;
+      }
+      if (attachment === undefined) {
+        myAlert("framebufferTexture2D failure: attachment is invalid.");
+        return null;
+      }
+      switch(target){
+        case "2d": textarget = gl.TEXTURE_2D; break;
+        case "xp": textarget = gl.TEXTURE_CUBE_MAP_POSITIVE_X; break;
+        case "xn": textarget = gl.TEXTURE_CUBE_MAP_NEGATIVE_X; break;
+        case "yp": textarget = gl.TEXTURE_CUBE_MAP_POSITIVE_Y; break;
+        case "yn": textarget = gl.TEXTURE_CUBE_MAP_NEGATIVE_Y; break;
+        case "zp": textarget = gl.TEXTURE_CUBE_MAP_POSITIVE_Z; break;
+        case "zn": textarget = gl.TEXTURE_CUBE_MAP_NEGATIVE_Z; break;
+      }
+      if (textarget === undefined) {
+        myAlert("framebufferTexture2D failure: textarget is invalid.");
+        return null;
+      }
+      // 仕上げ。
+      // これでいいと思う。つまり、bufとは通常の場合、fbo.colorである。
+      const buf = (Array.isArray(fbo[attachType]) ? fbo[attachType][attachIndex] : fbo[attachType]);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, attachment, textarget, buf, 0);
       return this;
     }
     clearFBO(){
@@ -5856,7 +5900,7 @@ const p5wgex = (function(){
       return this;
     }
     setFBOtexture2D(uniformName, fboName, kind = "color", index = 0){
-      // CUBE_MAPも使うようになればいずれ非推奨、今は無理。
+      // CUBE_MAPも使うようになれば...と思ったが、cube_mapも2Dの一種なので、名前を変える必要ないです。
 
       // FBOを名前経由でセット。ダブルの場合はreadをセット。
       // texture限定。fbo.tやfbo.read.tの代わりに[kind]で場合によっては[index]を付ける。
@@ -5878,14 +5922,13 @@ const p5wgex = (function(){
         return null;
       }
       // 通常時
-      // 配列の場合は...
+      // 配列の場合は...おそらくcube_mapはこれでいいと思います。
       const _texture = (Array.isArray(fbo[kind]) ? fbo[kind][index] : fbo[kind]);
-      //this.setTexture2D(uniformName, _texture);
       this.setTexture(uniformName, _texture);
       return this;
     }
     swapFBO(fboName0, fboName1){
-      // 暫定関数。doubleFBOの廃止が決まったので、移行措置。いずれこれがswapFBOになる。
+      // 暫定関数。doubleFBOの廃止が決まったので、移行措置。いずれこれがswapFBOになる → なりました。
       // nullであるかどうかの意味不明な判定も廃止する。コードが古いのよね。
       // swapFBOに改名しました。もう戻れない。いずれlayerSystemを作るつもり。
       // doubleFBOの仕組み自体は否定してない。通常のFBOとごっちゃにして扱うのが不満なだけ。
@@ -5898,27 +5941,8 @@ const p5wgex = (function(){
       this.fbos[fboName1] = tmpFBO;
       return this;
     }
-    /*
-    swapFBO(fboName){
-      // ダブルの場合にしか機能しない中途半端な関数なんて要らないんだよ
-      // ダブル前提。ダブルの場合にswapする
-      if(fboName == null){ return this; }
-      let fbo = this.fbos[fboName];
-      if(!fbo){
-        // fboが無い場合の警告
-        myAlert("The corresponding framebuffer does not exist.");
-        return null;
-      }
-      if(fbo.read && fbo.write){ fbo.swap(); }
-      return this;
-    }
-    */
     swapAttribute(attrName0, attrName1){
       const fig = this.currentFigure;
-    //  if (fig.useVAO) {
-    //    myAlert("this function doesn't support VAO.");
-    //    return null;
-    //  }
       fig.swapAttribute(attrName0, attrName1);
       return this;
     }
@@ -6078,8 +6102,8 @@ const p5wgex = (function(){
       // 各種bind解除
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, null);
       this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, null);
-    //  if (this.currentFigure.useVAO) {
-    //    this.gl.bindVertexArray(null);
+      //  if (this.currentFigure.useVAO) {
+      //    this.gl.bindVertexArray(null);
       if (this.inTransformFeedback) {
         // TFはVAO関係ないのでここに処理を書く
         // transformFeedback状態を解除（設定側）
