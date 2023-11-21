@@ -218,7 +218,7 @@ const mazeFactory = (function(){
 
     const data = {};
     data.vNum = w * h;
-    data.eNum = w * (h - 1) + (w - 1) * h;
+    data.eNum = 2*w*h;
 
     data.connect = [];
 
