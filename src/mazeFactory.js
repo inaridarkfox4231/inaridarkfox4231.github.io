@@ -238,13 +238,282 @@ const mazeFactory = (function(){
     return data;
   }
 
+  // StandardGridMazeの上部構造を用意する。具体的には、辺と面。
+  function createStandardGridMazeStructure(graph, params = {}){
+    const {vertices, edges} = graph;
+    const {w, h} = params;
+    const vv = [];
+    for(let y=0; y<2*h; y++){
+      const vvv = [];
+      for(let x=0; x<2*w; x++){
+        vvv.push({x:x, y:y, exist:false});
+      }
+      vv.push(vvv);
+    }
+    const ee = []; // 辺の集合の元
+    const ff = []; // 面の集合の元
+    // 各verticeに対して四隅を取得して、辺のない方向に壁を作る
+    // 各edgeに対して四隅を取得して、頂点のない方向に壁を作る
+    for(const v of vertices){
+      const p = v.getPosition();
+      const ld = vv[2*p.y][2*p.x];
+      const rd = vv[2*p.y][2*p.x+1];
+      const lu = vv[2*p.y+1][2*p.x];
+      const ru = vv[2*p.y+1][2*p.x+1];
+      ld.exist = true;
+      rd.exist = true;
+      lu.exist = true;
+      ru.exist = true;
+      ff.push([lu, ld, rd], [lu, rd, ru]);
+      const flags = {u:true, d:true, r:true, l:true};
+      const es = v.getConnectedComponents();
+      for(const e of es){
+        if (e.state === IS_NOT_PASSABLE){continue;}
+        const vOther = e.getOtherVertice(v);
+        const q = vOther.getPosition();
+
+        if(p.x === q.x){
+          if(q.y > p.y){
+            flags.u = false;
+          }else{
+            flags.d = false;
+          }
+        }
+        if (p.y === q.y){
+          if(q.x > p.x){
+            flags.r = false;
+          }else{
+            flags.l = false;
+          }
+        }
+      }
+
+      if(flags.u){ee.push([lu, ru])}
+      if(flags.r){ee.push([ru, rd])}
+      if(flags.d){ee.push([rd, ld])}
+      if(flags.l){ee.push([ld, lu])}
+    }
+    for(const e of edges){
+      if (e.state === IS_NOT_PASSABLE){continue;}
+      const vs = e.getConnectedComponents();
+      const p = vs[0].getPosition();
+      const q = vs[1].getPosition();
+
+      let ldx, ldy, rux, ruy;
+      if (p.y === q.y){
+        ldx = Math.min(p.x, q.x);
+        rux = ldx + 1;
+        ldy = p.y;
+        ruy = q.y;
+      }
+      if (p.x === q.x){
+        ldy = Math.min(p.y, q.y);
+        ruy = ldy + 1;
+        ldx = p.x;
+        rux = q.x;
+      }
+
+      let ld, rd, lu, ru;
+      if (ldx === rux){
+        ld = vv[2*ldy+1][2*ldx];
+        rd = vv[2*ldy+1][2*ldx+1];
+        lu = vv[2*ruy][2*ldx];
+        ru = vv[2*ruy][2*ldx+1];
+      }else{
+        ld = vv[2*ldy][2*ldx+1];
+        rd = vv[2*ldy][2*rux];
+        lu = vv[2*ldy+1][2*ldx+1];
+        ru = vv[2*ldy+1][2*rux];
+      }
+
+      ff.push([lu, ld, rd], [lu, rd, ru]);
+
+      ld.exist = true;
+      rd.exist = true;
+      lu.exist = true;
+      ru.exist = true;
+      if (p.y === q.y){
+        ee.push([lu, ru], [rd, ld]);
+      }else{
+        ee.push([ru, rd], [ld, lu]);
+      }
+    }
+    // exist==trueをさらって順繰りにindexを付けなおす
+    // vvはflat()してしまう
+    const result = {v:[], e:[], f:[]};
+
+    let eachIndex = 0;
+
+    for(const v of vv.flat()){
+      if(!v.exist)continue;
+      v.index = eachIndex++;
+      result.v.push(v);
+    }
+
+    for(const e of ee){
+      result.e.push(e[0].index, e[1].index);
+    }
+
+    for(const f of ff){
+      result.f.push(f[0].index, f[1].index, f[2].index);
+    }
+
+    return result;
+  }
+
+  // TorusGridMazeの上部構造を定義する。具体的には辺と面。
+  function createTorusGridMazeStructure(graph, params = {}){
+    const {vertices, edges} = graph;
+    const {w, h} = params;
+    const vv = [];
+    for(let y=0; y<2*h+1; y++){
+      const vvv = [];
+      for(let x=0; x<2*w+1; x++){
+        vvv.push({x:x, y:y, exist:false});
+      }
+      vv.push(vvv);
+    }
+    const ee = []; // 辺の集合の元
+    const ff = []; // 面の集合の元
+    // 各verticeに対して四隅を取得して、辺のない方向に壁を作る
+    // 各edgeに対して四隅を取得して、頂点のない方向に壁を作る
+    for(const v of vertices){
+      const p = v.getPosition();
+      const ld = vv[2*p.y][2*p.x];
+      const rd = vv[2*p.y][2*p.x+1];
+      const lu = vv[2*p.y+1][2*p.x];
+      const ru = vv[2*p.y+1][2*p.x+1];
+      ld.exist = true;
+      rd.exist = true;
+      lu.exist = true;
+      ru.exist = true;
+      ff.push([lu, ld, rd], [lu, rd, ru]);
+      const flags = {u:true, d:true, r:true, l:true};
+      const es = v.getConnectedComponents();
+      for(const e of es){
+        if (e.state === IS_NOT_PASSABLE){continue;}
+        const vOther = e.getOtherVertice(v);
+        const q = vOther.getPosition();
+        if(p.x === q.x){
+          if(Math.abs(p.y - q.y) === 1){
+            if(q.y > p.y){
+              flags.u = false;
+            }else{
+              flags.d = false;
+            }
+          }else{
+            if(q.y === 0){
+              flags.u = false;
+            }else{
+              flags.d = false;
+            }
+          }
+        }
+        if (p.y === q.y){
+          if(Math.abs(p.x - q.x) === 1){
+            if(q.x > p.x){
+              flags.r = false;
+            }else{
+              flags.l = false;
+            }
+          }else{
+
+            if(q.x === 0){
+              flags.r = false;
+            }else{
+              flags.l = false;
+            }
+          }
+        }
+      }
+      if(flags.u){ee.push([lu, ru])}
+      if(flags.r){ee.push([ru, rd])}
+      if(flags.d){ee.push([rd, ld])}
+      if(flags.l){ee.push([ld, lu])}
+    }
+    for(const e of edges){
+      if (e.state === IS_NOT_PASSABLE){continue;}
+      const vs = e.getConnectedComponents();
+      const p = vs[0].getPosition();
+      const q = vs[1].getPosition();
+
+      let ldx, ldy, rux, ruy;
+      if(Math.abs(p.x - q.x) <= 1){
+        ldx = Math.min(p.x, q.x);
+        rux = ldx + (p.x===q.x ? 0 : 1);
+      }else{
+        ldx = Math.max(p.x, q.x);
+        rux = ldx + 1;
+      }
+      if(Math.abs(p.y - q.y) <= 1){
+        ldy = Math.min(p.y, q.y);
+        ruy = ldy + (p.y===q.y ? 0 : 1);
+      }else{
+        ldy = Math.max(p.y, q.y);
+        ruy = ldy + 1;
+      }
+
+      let ld, rd, lu, ru;
+      if (ldx === rux){
+        ld = vv[2*ldy+1][2*ldx];
+        rd = vv[2*ldy+1][2*ldx+1];
+        lu = vv[2*ruy][2*ldx];
+        ru = vv[2*ruy][2*ldx+1];
+      }else{
+        ld = vv[2*ldy][2*ldx+1];
+        rd = vv[2*ldy][2*rux];
+        lu = vv[2*ldy+1][2*ldx+1];
+        ru = vv[2*ldy+1][2*rux];
+      }
+
+      ff.push([lu, ld, rd], [lu, rd, ru]);
+
+      ld.exist = true;
+      rd.exist = true;
+      lu.exist = true;
+      ru.exist = true;
+      if (p.y === q.y){
+        ee.push([lu, ru], [rd, ld]);
+      }else{
+        ee.push([ru, rd], [ld, lu]);
+      }
+    }
+    // exist==trueをさらって順繰りにindexを付けなおす
+    // vvはflat()してしまう
+    const result = {v:[], e:[], f:[]};
+
+    let eachIndex = 0;
+
+    for(const v of vv.flat()){
+      if(!v.exist)continue;
+      v.index = eachIndex++;
+      result.v.push(v);
+    }
+
+    for(const e of ee){
+      result.e.push(e[0].index, e[1].index);
+    }
+
+    for(const f of ff){
+      result.f.push(f[0].index, f[1].index, f[2].index);
+    }
+
+    return result;
+  }
+
   const mz = {};
+
+  // Classes
   mz.Component = Component;
   mz.Vertice = Vertice;
   mz.Edge = Edge;
   mz.Graph = Graph;
+
+  // Utility functions
   mz.createStandardGridMaze = createStandardGridMaze;
   mz.createTorusGridMaze = createTorusGridMaze;
+  mz.createStandardGridMazeStructure = createStandardGridMazeStructure;
+  mz.createTorusGridMazeStructure = createTorusGridMazeStructure;
 
   mz.IS_PASSABLE = 1;
   mz.IS_NOT_PASSABLE = 2;
