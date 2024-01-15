@@ -1,0 +1,4 @@
+CC0ライセンスのMatcap用テクスチャです。
+ハイライトやリムライトなどの光沢表現に使えると思います。
+https://totototem.booth.pm/items/2998107
+【CC0】Matcapテクスチャ50枚
