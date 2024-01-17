@@ -2285,8 +2285,10 @@ const p5wgex = (function(){
     if(src instanceof HTMLImageElement){ return src; }
     if(src instanceof HTMLCanvasElement){ return src; }
     if(src instanceof HTMLVideoElement){ return src; }
-    if(src instanceof p5.Graphics){ return src.elt; }
-    if(src instanceof p5.Image){ return src.canvas; }
+    if (p5 !== undefined) {
+      if(src instanceof p5.Graphics){ return src.elt; }
+      if(src instanceof p5.Image){ return src.canvas; }
+    }
     myAlert("You cannot extract data from that source.");
     return null;
   }
@@ -5558,8 +5560,14 @@ const p5wgex = (function(){
       // infoに誤ってsrcをそのままぶちこまないようにしないといけない？
       // infoが次のタイプの場合は{src:info}で置き換えることとする。
       // もっともこの定義の仕方では他のオプションを用意できないので、あくまでも簡易措置である。
+      if (p5 !== undefined) {
+         if (info instanceof p5.Graphics || info instanceof p5.Image) {
+           this.registTexture(name, {src:info});
+           return this;
+         }
+      }
       if (info instanceof Uint8Array || info instanceof Float32Array || info instanceof HTMLImageElement ||
-          info instanceof HTMLCanvasElement || info instanceof HTMLVideoElement || info instanceof p5.Graphics || info instanceof p5.Image) {
+          info instanceof HTMLCanvasElement || info instanceof HTMLVideoElement) {
         this.registTexture(name, {src:info});
         return this;
       }
