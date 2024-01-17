@@ -2285,7 +2285,8 @@ const p5wgex = (function(){
     if(src instanceof HTMLImageElement){ return src; }
     if(src instanceof HTMLCanvasElement){ return src; }
     if(src instanceof HTMLVideoElement){ return src; }
-    if (p5 !== undefined) {
+    // p5が使われてる場合にこれを評価します（確かFALさんが使ってた）
+    if (typeof p5 === 'function') {
       if(src instanceof p5.Graphics){ return src.elt; }
       if(src instanceof p5.Image){ return src.canvas; }
     }
@@ -5560,7 +5561,8 @@ const p5wgex = (function(){
       // infoに誤ってsrcをそのままぶちこまないようにしないといけない？
       // infoが次のタイプの場合は{src:info}で置き換えることとする。
       // もっともこの定義の仕方では他のオプションを用意できないので、あくまでも簡易措置である。
-      if (p5 !== undefined) {
+      // p5を読み込まない場合を考慮して処理を分ける
+      if (typeof p5 === 'function') {
          if (info instanceof p5.Graphics || info instanceof p5.Image) {
            this.registTexture(name, {src:info});
            return this;
