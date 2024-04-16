@@ -1,7 +1,7 @@
 # Blender 3.1.0
 # www.blender.org
-mtllib DefaultBunny.mtl
-o bunny.obj
+
+
 v 0.374690 0.570177 -0.039634
 v 0.365505 0.560562 -0.025920
 v 0.375664 0.553826 -0.043905
