@@ -30,6 +30,8 @@ p5依存です
   getIntersectionをgetIntersectionsと誤植したせいで
   通らなかった
   ごめんなさい
+
+  createDisjointPathsは出力形式を変えるoptionがあってもいいかもしれない。
 */
 
 const fisceToyBox = (function(){
@@ -307,8 +309,73 @@ const fisceToyBox = (function(){
     いちいち書き換えるのめんどくさいだろ
   */
   function evenlySpacingAll(contours, options = {}){
-    for(let contour of contours){
+    for(const contour of contours){
       evenlySpacing(contour, options);
+    }
+  }
+
+  /*
+    quadBezierize(points, options={})
+    points: p5のベクトル列
+    options:
+      detail: 分割のディテール。default:4
+      closed: 閉路かどうか
+    もともとの点列を制御点とし、点列ごとに中点を取り、中点を端点とするクワドベジエで置き換える。
+    閉路の場合は端点も考慮される。
+  */
+  function quadBezierize(points, options = {}){
+    const {detail = 4, closed = false} = options;
+    const subPoints = [];
+    for(let i=0; i<points.length-1; i++){
+      subPoints.push(p5.Vector.lerp(points[i], points[i+1], 0.5));
+    }
+    if (closed) {
+      subPoints.push(p5.Vector.lerp(points[points.length-1], points[0], 0.5));
+    }
+    const result = [];
+    if (!closed) {
+      result.push(points[0]);
+      result.push(subPoints[0]);
+      for(let k=1; k<subPoints.length; k++){
+        const p = subPoints[k-1];
+        const q = points[k];
+        const r = subPoints[k];
+        for(let m=1; m<=detail; m++){
+          const t = m/detail;
+          result.push(createVector(
+            (1-t)*(1-t)*p.x + 2*t*(1-t)*q.x + t*t*r.x,
+            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y
+          ));
+        }
+      }
+      result.push(points[points.length-1]);
+    } else {
+      result.push(subPoints[0]);
+      for(let k=1; k<=subPoints.length; k++){
+        const p = subPoints[k-1];
+        const q = points[k%subPoints.length];
+        const r = subPoints[k%subPoints.length];
+        for(let m=1; m<=detail; m++){
+          const t = m/detail;
+          if(m===detail&&k===subPoints.length)continue;
+          result.push(createVector(
+            (1-t)*(1-t)*p.x + 2*t*(1-t)*q.x + t*t*r.x,
+            (1-t)*(1-t)*p.y + 2*t*(1-t)*q.y + t*t*r.y
+          ));
+        }
+      }
+    }
+    points.length = 0;
+    for(let i=0; i<result.length; i++) points.push(result[i]);
+  }
+  /*
+    quadBezierizeAll(contours, options={})
+    複数版。閉路かどうかは要統一...そのうち変えるかもしれないが。
+    文字が丸みを帯びたりするかもしれない
+  */
+  function quadBezierizeAll(contours, options = {}){
+    for(const contour of contours){
+      quadBezierize(contour, options);
     }
   }
 
@@ -1972,6 +2039,8 @@ const fisceToyBox = (function(){
   fisce.mergePointsAll = mergePointsAll;
   fisce.evenlySpacing = evenlySpacing;
   fisce.evenlySpacingAll = evenlySpacingAll;
+  fisce.quadBezierize = quadBezierize;
+  fisce.quadBezierizeAll = quadBezierizeAll;
   fisce.getTextContours = getTextContours;
   fisce.getSVGContours = getSVGContours;
 
