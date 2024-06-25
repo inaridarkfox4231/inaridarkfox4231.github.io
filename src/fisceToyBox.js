@@ -25,6 +25,13 @@ p5依存です
 それだけ
 */
 
+/*
+  2024-06-26
+  getIntersectionをgetIntersectionsと誤植したせいで
+  通らなかった
+  ごめんなさい
+*/
+
 const fisceToyBox = (function(){
   const fisce = {};
 
@@ -508,7 +515,7 @@ const fisceToyBox = (function(){
   }
 
   /*
-    getIntersections(a,b,c,d,threshold=1e-9)
+    getIntersection(a,b,c,d,threshold=1e-9)
     a,b,c,d: ベクトル
     イメージ的にはa----bとc----dが線分で、これらの交わり具合を調べるための関数。
     割と複雑なことをしているのだ
@@ -1520,7 +1527,7 @@ const fisceToyBox = (function(){
     // この形式のcycleであればearcutが適用でき、テッセレーションが可能。
   }
 
-  // subroutines for cyclesToCycles() (getIntersections()は流用)
+  // subroutines for cyclesToCycles() (getIntersection()は流用)
 
   function getXMax(contour){
     // x座標が最大となるindexを返すだけ。入力は閉路。何でもOK.
@@ -1953,7 +1960,7 @@ const fisceToyBox = (function(){
 
   // utility.
   fisce.getUnionFind = getUnionFind;
-  fisce.getIntersections = getIntersections;
+  fisce.getIntersection = getIntersection;
   fisce.insideTriangle = insideTriangle;
   fisce.rotateByAxis = rotateByAxis;
   fisce.hsv2rgb = hsv2rgb;
