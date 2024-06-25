@@ -37,6 +37,50 @@ Vと違って両側の制御点の選択点との距離を保ちつつ、
 後ろの制御点の位置を前の制御点から選択点に伸びる半直線上に配置する
 */
 
+/*
+function setup() {
+  createCanvas(400, 400);
+  path0 = new Path2D("M 100 100 L 200 100 L 200 200");
+  path1 = new Path2D("M 100 100 L 200 100 L 200 200 Z");
+
+  background(220);
+
+  stroke(0);
+  drawingContext.stroke(path1);
+}
+参考：SVGパス：https://developer.mozilla.org/ja/docs/Web/SVG/Tutorial/Paths
+というわけでいくつか改善点
+まずBはやめてCにしましょう
+QCやBCはQIやBIにする。IはintermediateのIです。
+で、Zですが、これ閉路、なんですね。
+つまり基本的に用意しない...
+今のシステムだとおしりの点を普通に登録してるので要らないですね
+Mで新しいパスが始まるので
+Mでマルチパスを切り替えればいいわけです。Z要らないと。
+それにCやQで終わる場合にそこと頭をLで結ぶメリットがほぼ無いです。要らないです。
+要は"M a b L c d Z"って"M a b L c d L a b"と同じ、勝手にLを作ってしまうので。
+不要ですね
+strokeで扱いたい場合に意図しない挙動をしても困るので...やめますかね。
+そうなるとベジエ扱ってるコード全部直す羽目になる...
+加えてHとかVもあるとか。あと小文字で差分？でもとりあえず要らないか
+
+セーブとロードからZを排除するの簡単そう
+よかった～機能してないや
+...
+回転体に使うパスとか普通に閉じてないからZあるとまずいのよ
+やめましょ
+
+2024-05-16
+Zをロードとセーブから排除
+
+パースの方いじらないとやばいんだけど、簡単ですね
+Mのところで
+subData.length>0だったらresultに追加すればいいだけ
+ただ文字データがZを使ってて解釈違いになるとまずいので
+Zのところに「subDataの頭とLでつなぐ」って書いておけばいい
+それと最後...出力の直前でsubDataをresultに追加すればOKですね
+*/
+
 let paths = [];
 let pathId = -1;
 let pointId = -1;
@@ -55,15 +99,10 @@ let scalingVelocity = 0;
 // TwitterBird（スケール1でロード、フリップ無し）
 const loadingData = "M -141.000 -122.000 Q -84.500 -54.000 2.000 -50.000 C -3.333 -139.667 79.333 -154.333 124.000 -115.000 Q 145.500 -116.000 167.000 -129.000 Q 158.500 -104.000 142.000 -91.000 Q 163.000 -93.500 179.000 -104.000 Q 165.500 -79.000 146.000 -70.000 C 132.000 140.333 -53.000 181.667 -163.000 115.000 Q -106.500 111.500 -68.000 86.000 Q -116.000 68.000 -130.000 35.000 Q -112.000 38.000 -96.000 35.000 Q -153.500 11.500 -153.000 -38.000 Q -139.500 -28.000 -125.000 -29.000 Q -165.500 -74.500 -141.000 -122.000 Z";
 
-// 肉球（スケール300でロード、フリップ無し）
-const loadingData2 = "M 0.063 0.298 C 0.109 0.311 0.150 0.329 0.200 0.364 C 0.225 0.376 0.250 0.398 0.275 0.417 C 0.287 0.439 0.313 0.454 0.341 0.489 C 0.360 0.505 0.380 0.522 0.400 0.539 C 0.425 0.573 0.450 0.604 0.478 0.636 C 0.506 0.661 0.539 0.694 0.566 0.742 C 0.588 0.792 0.556 0.820 0.503 0.836 C 0.463 0.851 0.394 0.864 0.325 0.886 C 0.247 0.898 0.139 0.917 0.056 0.932 C -0.014 0.938 -0.083 0.943 -0.153 0.948 C -0.212 0.954 -0.287 0.911 -0.313 0.867 C -0.317 0.829 -0.334 0.798 -0.294 0.745 C -0.272 0.698 -0.241 0.679 -0.225 0.654 C -0.200 0.616 -0.175 0.577 -0.159 0.542 C -0.125 0.495 -0.104 0.447 -0.072 0.398 C -0.044 0.365 -0.006 0.328 0.047 0.301 Z M -0.469 0.066 C -0.434 0.100 -0.388 0.128 -0.350 0.163 C -0.329 0.188 -0.306 0.212 -0.300 0.237 C -0.283 0.277 -0.279 0.317 -0.275 0.356 C -0.287 0.392 -0.300 0.427 -0.325 0.450 C -0.346 0.471 -0.384 0.478 -0.412 0.487 C -0.452 0.487 -0.492 0.487 -0.531 0.487 C -0.575 0.478 -0.613 0.447 -0.641 0.425 C -0.662 0.397 -0.662 0.366 -0.675 0.328 C -0.678 0.303 -0.700 0.256 -0.697 0.216 C -0.694 0.188 -0.681 0.128 -0.662 0.097 C -0.647 0.078 -0.637 0.069 -0.616 0.053 C -0.588 0.041 -0.537 0.041 -0.487 0.056 Z M 0.700 -0.159 C 0.719 -0.141 0.738 -0.122 0.756 -0.103 C 0.775 -0.078 0.787 -0.013 0.787 0.034 C 0.787 0.059 0.784 0.116 0.772 0.169 C 0.766 0.200 0.756 0.237 0.731 0.275 C 0.713 0.309 0.688 0.331 0.637 0.350 C 0.600 0.356 0.566 0.353 0.525 0.341 C 0.500 0.331 0.469 0.316 0.441 0.294 C 0.426 0.270 0.411 0.246 0.400 0.216 C 0.394 0.190 0.391 0.157 0.388 0.125 C 0.388 0.100 0.402 0.063 0.409 0.031 C 0.424 0.000 0.439 -0.031 0.453 -0.063 C 0.477 -0.087 0.497 -0.122 0.525 -0.138 C 0.534 -0.153 0.563 -0.169 0.631 -0.178 C 0.600 -0.175 0.659 -0.172 0.681 -0.169 Z M -0.269 -0.694 C -0.248 -0.692 -0.227 -0.680 -0.197 -0.662 C -0.181 -0.647 -0.163 -0.631 -0.141 -0.606 C -0.125 -0.581 -0.100 -0.550 -0.097 -0.522 C -0.087 -0.482 -0.084 -0.441 -0.081 -0.403 C -0.080 -0.348 -0.079 -0.293 -0.078 -0.237 C -0.078 -0.178 -0.084 -0.131 -0.100 -0.075 C -0.113 -0.034 -0.150 -0.009 -0.191 0.006 C -0.223 0.018 -0.261 0.020 -0.300 0.022 C -0.347 0.025 -0.388 0.013 -0.425 -0.019 C -0.453 -0.050 -0.487 -0.087 -0.503 -0.134 C -0.512 -0.156 -0.516 -0.206 -0.519 -0.266 C -0.522 -0.306 -0.516 -0.347 -0.512 -0.384 C -0.503 -0.431 -0.491 -0.469 -0.478 -0.509 C -0.463 -0.544 -0.444 -0.575 -0.419 -0.603 C -0.397 -0.622 -0.375 -0.647 -0.353 -0.659 C -0.330 -0.672 -0.307 -0.684 -0.287 -0.694 Z M 0.269 -0.759 C 0.293 -0.752 0.317 -0.745 0.341 -0.738 C 0.360 -0.720 0.380 -0.702 0.397 -0.681 C 0.428 -0.641 0.441 -0.609 0.450 -0.572 C 0.454 -0.525 0.458 -0.478 0.463 -0.431 C 0.463 -0.378 0.463 -0.322 0.459 -0.284 C 0.456 -0.234 0.447 -0.197 0.441 -0.172 C 0.431 -0.141 0.425 -0.109 0.403 -0.078 C 0.384 -0.053 0.350 -0.031 0.313 -0.009 C 0.284 0.000 0.247 0.009 0.203 0.003 C 0.169 -0.009 0.128 -0.034 0.100 -0.059 C 0.075 -0.094 0.063 -0.109 0.050 -0.134 C 0.045 -0.169 0.040 -0.203 0.034 -0.237 C 0.033 -0.274 0.025 -0.303 0.028 -0.334 C 0.028 -0.384 0.041 -0.425 0.044 -0.469 C 0.053 -0.500 0.069 -0.541 0.078 -0.572 C 0.097 -0.609 0.116 -0.644 0.138 -0.684 C 0.159 -0.709 0.175 -0.734 0.194 -0.753 C 0.215 -0.761 0.229 -0.764 0.244 -0.762 Z M -0.694 -0.056 C -0.703 -0.072 -0.722 -0.081 -0.750 -0.097 C -0.762 -0.103 -0.787 -0.097 -0.800 -0.084 C -0.803 -0.066 -0.800 -0.047 -0.794 -0.034 C -0.784 -0.025 -0.772 -0.016 -0.750 -0.003 C -0.744 -0.008 -0.731 0.000 -0.713 -0.006 C -0.688 -0.022 -0.688 -0.037 -0.684 -0.044 Z M -0.309 -0.753 C -0.331 -0.759 -0.362 -0.759 -0.375 -0.784 C -0.376 -0.800 -0.377 -0.822 -0.378 -0.844 C -0.372 -0.860 -0.366 -0.877 -0.356 -0.884 C -0.342 -0.899 -0.324 -0.904 -0.309 -0.897 C -0.297 -0.887 -0.287 -0.878 -0.278 -0.863 C -0.269 -0.838 -0.275 -0.803 -0.278 -0.791 C -0.278 -0.778 -0.297 -0.759 -0.297 -0.762 Z M 0.250 -0.972 C 0.272 -0.969 0.297 -0.947 0.303 -0.919 C 0.306 -0.897 0.303 -0.887 0.291 -0.856 C 0.306 -0.872 0.269 -0.841 0.263 -0.838 C 0.241 -0.838 0.225 -0.847 0.212 -0.866 C 0.200 -0.872 0.203 -0.897 0.206 -0.922 C 0.211 -0.942 0.223 -0.955 0.237 -0.969 Z M 0.778 -0.328 C 0.800 -0.313 0.809 -0.294 0.803 -0.281 C 0.803 -0.263 0.803 -0.247 0.794 -0.228 C 0.791 -0.216 0.778 -0.200 0.750 -0.197 C 0.725 -0.200 0.715 -0.214 0.703 -0.225 C 0.702 -0.245 0.707 -0.268 0.719 -0.284 C 0.727 -0.303 0.742 -0.316 0.762 -0.334 Z";
+// Zは廃止されました！
+const testPath = "M -0.438 -0.406 C -0.501 -0.616 -0.702 -0.606 -0.800 -0.519 Q -0.898 -0.431 -0.731 -0.275 Q -0.622 -0.084 -0.313 -0.213 Q -0.003 -0.341 0.319 -0.103 Q 0.634 0.009 0.444 0.216 C 0.253 0.422 0.259 0.561 0.084 0.631 C -0.091 0.701 -0.309 0.647 -0.491 0.609 C -0.672 0.572 -0.788 0.413 -0.741 0.225";
 
-// これを回転させる（フリップあり）
-/*
-const utuwa = "M 0.000 -0.388 Q 0.162 -0.386 0.355 -0.335 Q 0.549 -0.283 0.645 -0.003 Q 0.735 0.277 0.756 0.372 Q 0.764 0.411 0.773 0.421 Q 0.784 0.430 0.795 0.419 Q 0.802 0.409 0.797 0.362 Q 0.748 0.180 0.682 -0.025 Q 0.603 -0.218 0.549 -0.271 Q 0.460 -0.352 0.342 -0.384 Q 0.320 -0.393 0.321 -0.425 Q 0.321 -0.464 0.320 -0.523 Q 0.292 -0.544 0.279 -0.489 Q 0.276 -0.449 0.278 -0.406 Q 0.150 -0.447 0.001 -0.444 Z";
-*/
-// ツボの右半分
-const tubo = "M 0.001 -0.713 Q 0.323 -0.745 0.504 -0.583 Q 0.610 -0.483 0.630 -0.356 Q 0.651 -0.230 0.557 -0.103 Q 0.476 0.005 0.352 0.044 Q 0.231 0.086 0.166 0.194 Q 0.089 0.309 0.158 0.430 Q 0.187 0.477 0.232 0.502 Q 0.294 0.542 0.304 0.639 Q 0.317 0.708 0.362 0.697 Q 0.409 0.686 0.402 0.625 Q 0.397 0.553 0.335 0.497 Q 0.277 0.455 0.235 0.395 Q 0.194 0.338 0.257 0.213 Q 0.302 0.152 0.393 0.123 Q 0.499 0.084 0.598 -0.005 Q 0.712 -0.124 0.726 -0.267 Q 0.728 -0.352 0.683 -0.472 Q 0.642 -0.571 0.569 -0.657 Q 0.497 -0.740 0.406 -0.771 Q 0.295 -0.813 0.186 -0.813 L -0.004 -0.813 Z";
+const toonkigou = "M -0.045 -0.352 Q -0.125 -0.573 -0.045 -0.787 Q 0.004 -0.901 0.079 -0.909 Q 0.148 -0.895 0.175 -0.829 Q 0.226 -0.699 0.193 -0.541 Q 0.159 -0.405 0.069 -0.285 L 0.017 -0.222 L 0.057 -0.038 Q 0.154 -0.046 0.220 -0.000 Q 0.291 0.050 0.321 0.118 Q 0.355 0.231 0.300 0.337 Q 0.261 0.422 0.166 0.472 L 0.205 0.644 Q 0.226 0.763 0.167 0.848 Q 0.116 0.913 0.007 0.919 Q -0.113 0.920 -0.166 0.804 Q -0.209 0.705 -0.129 0.648 Q -0.048 0.606 0.015 0.682 Q 0.060 0.756 -0.002 0.822 Q -0.036 0.855 -0.089 0.852 C -0.062 0.893 0.027 0.893 0.085 0.870 Q 0.154 0.831 0.166 0.735 Q 0.175 0.673 0.155 0.604 L 0.130 0.483 Q 0.010 0.511 -0.087 0.470 Q -0.243 0.405 -0.305 0.273 Q -0.368 0.129 -0.303 -0.032 Q -0.270 -0.118 -0.178 -0.221 Q -0.122 -0.283 -0.045 -0.352 M -0.015 -0.379 Q 0.103 -0.466 0.140 -0.609 Q 0.172 -0.709 0.129 -0.774 Q 0.061 -0.786 0.008 -0.704 Q -0.055 -0.595 -0.036 -0.471 L -0.015 -0.379 Z M 0.161 0.426 Q 0.263 0.372 0.256 0.228 Q 0.217 0.087 0.082 0.087 L 0.161 0.426 M 0.121 0.444 L 0.045 0.088 Q -0.052 0.115 -0.059 0.233 Q -0.069 0.313 0.021 0.372 Q -0.122 0.326 -0.142 0.222 Q -0.154 0.099 -0.062 0.021 Q -0.021 -0.013 0.020 -0.027 L -0.013 -0.184 L -0.181 -0.005 Q -0.320 0.178 -0.161 0.368 Q -0.034 0.488 0.121 0.444";
 
 const config = {
   outputScale:1,
@@ -77,9 +116,9 @@ const config = {
 
 function createGUI(){
   const gui = new lil.GUI();
-  gui.add(config, "outputScale", 1, 320, 1);
+  gui.add(config, "outputScale", 1, 320, 0.01);
   gui.add(config, "output_yFlip");
-  gui.add(config, "inputScale",1,320,1);
+  gui.add(config, "inputScale",1,320,0.01);
   gui.add(config, "input_yFlip");
   gui.add(config, "fixCoord_x", 0, 640, 1);
   gui.add(config, "fixCoord_y", 0, 640, 1);
@@ -89,10 +128,9 @@ function createGUI(){
 /*
 let dlImg, img;
 function preload(){
-  dlImg = loadImage("toon.png");
+  dlImg = loadImage("tatiwaki.png");
 }
 */
-
 
 function setup() {
   createCanvas(640, 640);
@@ -185,9 +223,9 @@ function draw() {
           case "M": fill("gray"); break;
           case "L": fill("forestgreen"); break;
           case "Q": fill("red"); break;
-          case "QC": fill("orange"); break;
-          case "B": fill("blue"); break;
-          case "BC": fill("skyblue"); break;
+          case "QI": fill("orange"); break;
+          case "C": fill("blue"); break;
+          case "CI": fill("skyblue"); break;
         }
       }
       else { fill(255); }
@@ -217,7 +255,7 @@ function keyTyped(){
   // すっからかんでエンターの場合
   if (keyIsDown(13) && pathId < 0) {
 
-    loadPathData(tubo);
+    loadPathData(toonkigou);
     pathId = 0;
     updateCurveLayer();
     return;
@@ -294,19 +332,19 @@ function mouseWheel(e){
   scalingVelocity -= e.delta * 0.0005;
 }
 
-// 選択点がQ/Bで、次の点もQ/Bの場合に、
+// 選択点がQ/Cで、次の点もQ/Bの場合に、
 // その点の前後の点を見て、後の点を前の点と選択点に関して対称な位置に移す
 function alignControlPoint(){
   if (pointId < 0) return;
   const path = paths[pathId];
   const p = path[pointId];
-  if (p.type !== 'Q' && p.type !== 'B') return;
+  if (p.type !== 'Q' && p.type !== 'C') return;
   // 次の点を見つけるの難しいね...
   // 単純に次の点を見て、Lなら無視、QCかBCなら...でOK.
   // というかQCかBCでいいだろ。それで判断しよう。
   const nextPointType = path[pointId+1].type;
-  if (nextPointType !== 'QC' && nextPointType !== 'BC') return;
-  const q = (nextPointType === 'QC' ? path[pointId+2] : path[pointId+3]);
+  if (nextPointType !== 'QI' && nextPointType !== 'CI') return;
+  const q = (nextPointType === 'QI' ? path[pointId+2] : path[pointId+3]);
   const prevCP = path[pointId-1];
   const nextCP = path[pointId+1];
   nextCP.x = 2*p.x - prevCP.x;
@@ -356,33 +394,33 @@ function mouseClicked(){
 
     if (!keyIsDown(16)) {
       const lastPoint = currentPath[currentPath.length-1];
-      const middlePoint = {x:(lastPoint.x + mPos.x) * 0.5, y:(lastPoint.y + mPos.y) * 0.5, type:"QC"};
+      const middlePoint = {x:(lastPoint.x + mPos.x) * 0.5, y:(lastPoint.y + mPos.y) * 0.5, type:"QI"};
       currentPath.push(middlePoint);
       currentPath.push({x:mPos.x, y:mPos.y, type:"Q"});
     }else if(insertData.insertable){
       const lastPoint = currentPath[insertData.prevId];
-      const middlePoint = {x:(lastPoint.x + mPos.x) * 0.5, y:(lastPoint.y + mPos.y) * 0.5, type:"QC"};
+      const middlePoint = {x:(lastPoint.x + mPos.x) * 0.5, y:(lastPoint.y + mPos.y) * 0.5, type:"QI"};
       currentPath.splice(insertData.prevId+1, 0, {x:mPos.x, y:mPos.y, type:"Q"});
       currentPath.splice(insertData.prevId+1, 0, middlePoint);
     }
     updateCurveLayer();
     return;
   }
-  // Bキーで制御点とともに3次ベジエ点を追加
+  // Cキーで制御点とともに3次ベジエ点を追加
 
-  if (keyIsDown(66)){
+  if (keyIsDown(67)){
     if (!keyIsDown(16)){
       const lastPoint = currentPath[currentPath.length-1];
-      const firstPoint = {x:(lastPoint.x*2.0 + mPos.x) / 3.0, y:(lastPoint.y*2.0 + mPos.y) / 3.0, type:"BC"};
-      const secondPoint = {x:(lastPoint.x + mPos.x*2.0) / 3.0, y:(lastPoint.y + mPos.y*2.0) / 3.0, type:"BC"};
+      const firstPoint = {x:(lastPoint.x*2.0 + mPos.x) / 3.0, y:(lastPoint.y*2.0 + mPos.y) / 3.0, type:"CI"};
+      const secondPoint = {x:(lastPoint.x + mPos.x*2.0) / 3.0, y:(lastPoint.y + mPos.y*2.0) / 3.0, type:"CI"};
 
       currentPath.push(firstPoint, secondPoint);
-      currentPath.push({x:mPos.x, y:mPos.y, type:"B"});
+      currentPath.push({x:mPos.x, y:mPos.y, type:"C"});
     }else if(insertData.insertable){
       const lastPoint = currentPath[insertData.prevId];
-      const firstPoint = {x:(lastPoint.x*2.0 + mPos.x) / 3.0, y:(lastPoint.y*2.0 + mPos.y) / 3.0, type:"BC"};
-      const secondPoint = {x:(lastPoint.x + mPos.x*2.0) / 3.0, y:(lastPoint.y + mPos.y*2.0) / 3.0, type:"BC"};
-      currentPath.splice(insertData.prevId+1, 0, {x:mPos.x, y:mPos.y, type:"B"});
+      const firstPoint = {x:(lastPoint.x*2.0 + mPos.x) / 3.0, y:(lastPoint.y*2.0 + mPos.y) / 3.0, type:"CI"};
+      const secondPoint = {x:(lastPoint.x + mPos.x*2.0) / 3.0, y:(lastPoint.y + mPos.y*2.0) / 3.0, type:"CI"};
+      currentPath.splice(insertData.prevId+1, 0, {x:mPos.x, y:mPos.y, type:"C"});
       currentPath.splice(insertData.prevId+1, 0, secondPoint);
       currentPath.splice(insertData.prevId+1, 0, firstPoint);
     }
@@ -401,7 +439,7 @@ function mouseClicked(){
         currentPath.splice(pointId-1, 2);
         pointId = -1;
         break;
-      case "B":
+      case "C":
         currentPath.splice(pointId-2, 3);
         pointId = -1;
         break;
@@ -411,6 +449,12 @@ function mouseClicked(){
         if (paths.length === 0){
           //paths.push([]);
           pathId = -1;
+        } else if (pathId === paths.length) {
+          // 最後尾のパスを消した場合のバグを修正
+          // たとえばpathIdが1でもともと長さ4の場合減って3になっても
+          // 0,1,2の1になるけど3だと0,1,2のどれでもなくエラーになる
+          // うっかりしてたわ
+          pathId = paths.length-1;
         }
         pointId = -1;
         break;
@@ -449,7 +493,7 @@ function updateCurveLayer(){
           curveLayer.stroke(config.strokeColor);
           addBezier2(curveLayer, prevQ, cp, p);
           break;
-        case "B":
+        case "C":
           const prevB = path[i-3];
           const cp0 = path[i-2];
           const cp1 = path[i-1];
@@ -477,7 +521,7 @@ function updateSeparateLayer(){
   const keyPoints = [];
   for(let i=0; i<path.length; i++){
     const p = path[i];
-    if (p.type !== "QC" && p.type !== "BC") keyPoints.push(
+    if (p.type !== "QI" && p.type !== "CI") keyPoints.push(
       {v:createVector(p.x,p.y), id:i}
     );
   }
@@ -521,7 +565,6 @@ function updateSeparateLayer(){
 // mx,myは実際の位置になるようにいじる必要がある。
 function updateInfoLayer(){
   infoLayer.clear();
-  infoLayer.text("hello! I'm fine!", 5, 5);
   const mPos = calcRealCoord(mouseX, mouseY);
   infoLayer.text("(" + (mPos.x).toFixed(2) + ", " + (mPos.y).toFixed(2) + ")", 5, 25);
   infoLayer.text("scale:" + displayScale.toFixed(2), 5, 45);
@@ -603,21 +646,21 @@ function getPathData(){
           result += " " + cx.toFixed(3) + " " + cy.toFixed(3);
           result += " " + x.toFixed(3) + " " + y.toFixed(3);
           break;
-        case "B":
+        case "C":
           const c0 = path[k-2];
           const c1 = path[k-1];
           const c0x = (c0.x - 320) * outputScale;
           const c0y = (c0.y - 320) * outputScale * yFlip;
           const c1x = (c1.x - 320) * outputScale;
           const c1y = (c1.y - 320) * outputScale * yFlip;
-          result += " C"; // 記法的には3次ベジエはBじゃなくてCなんですよね
+          result += " C"; // 記法的には3次ベジエはC
           result += " " + c0x.toFixed(3) + " " + c0y.toFixed(3);
           result += " " + c1x.toFixed(3) + " " + c1y.toFixed(3);
           result += " " + x.toFixed(3) + " " + y.toFixed(3);
           break;
       }
     }
-    result += " Z";
+    //result += " Z";
   }
   return result;
 }
@@ -652,9 +695,9 @@ function loadPathData(data){
         ));
         i+=3;
         break;
-      case "Z":
-        i++;
-        break;
+      //case "Z":
+      //  i++;
+      //  break;
       case "L":
         curPath.push(getCmdData(
           Number(dataArray[i+1]), Number(dataArray[i+2]), inputScale, yFlip, "L"
@@ -663,7 +706,7 @@ function loadPathData(data){
         break;
       case "Q":
         curPath.push(getCmdData(
-          Number(dataArray[i+1]), Number(dataArray[i+2]), inputScale, yFlip, "QC"
+          Number(dataArray[i+1]), Number(dataArray[i+2]), inputScale, yFlip, "QI"
         ));
         curPath.push(getCmdData(
           Number(dataArray[i+3]), Number(dataArray[i+4]), inputScale, yFlip, "Q"
@@ -672,13 +715,13 @@ function loadPathData(data){
         break;
       case "C":
         curPath.push(getCmdData(
-          Number(dataArray[i+1]), Number(dataArray[i+2]), inputScale, yFlip, "BC"
+          Number(dataArray[i+1]), Number(dataArray[i+2]), inputScale, yFlip, "CI"
         ));
         curPath.push(getCmdData(
-          Number(dataArray[i+3]), Number(dataArray[i+4]), inputScale, yFlip, "BC"
+          Number(dataArray[i+3]), Number(dataArray[i+4]), inputScale, yFlip, "CI"
         ));
         curPath.push(getCmdData(
-          Number(dataArray[i+5]), Number(dataArray[i+6]), inputScale, yFlip, "B"
+          Number(dataArray[i+5]), Number(dataArray[i+6]), inputScale, yFlip, "C"
         ));
         i+=7;
         break;
