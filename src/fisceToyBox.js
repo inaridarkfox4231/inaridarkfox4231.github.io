@@ -306,6 +306,107 @@ const fisceToyBox = (function(){
   }
 
   /*
+    getTextContours(params={})
+    テキストのcontoursを出すのがめんどくさいのでメソッド化
+    params:
+      font: フォント。これが無いと始まらない。必須なのでデフォルトは無いです。
+      targetText: 文字列。default:"A"
+      textScale: スケール。大きさの目安。 default:320
+      position: 位置の目安。p5のベクトルでもよい。 default:{x:0,y:0}
+      alignV: 横方向。"left","center","right"に応じてどこにxが来るかを指定する。
+      alignH: 縦方向。"top","center","bottom"に応じてどこにyが来るかを指定する。
+      bezierDetail2: 2次ベジエのディテールの指定。default:8
+      bezierDetail3: 3次ベジエのディテールの指定。default:5
+      lineSegmentlengthRatio: Lを解釈する際の長さ指定のスケールに対する比率。default:1/64
+      spacingMinLengthRatio: evenlySpacingを適用する際の長さのスケールに対する比率。default:1/40
+      mergeThresholdRatio: mergePointsを適用する際の長さのスケールに対する比率。default:1/100
+    出力：contoursです。主にcyclesToCyclesにぶち込んで、そこからメッシュ作成などにつなげる形。
+    contoursの段階でいじることも可能。いじる必要があればの話だけど。
+  */
+  function getTextContours(params = {}){
+    const {
+      font, targetText = "A", textScale = 320, position = {x:0,y:0},
+      alignV = "center", alignH = "center",
+      bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
+      spacingMinLengthRatio = 1/40, mergeThresholdRatio = 1/100
+    } = params;
+
+    // textやってみる？
+    const tb = font.textBounds(targetText, 0, 0, textScale);
+
+    const cmd = font.font.getPath(targetText, 0, 0, textScale).commands;
+    const cmdText = parseCmdToText(cmd);
+    const textContours = parseData({
+      data:cmdText,
+      bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
+      lineSegmentLength:lineSegmentLengthRatio*textScale
+    });
+
+    // ここで。
+    const factorW = (alignV === "left" ? 0 : (alignV === "right" ? 1 : 0.5));
+    const factorH = (alignH === "top" ? 0 : (alignH === "bottom" ? 1 : 0.5));
+    const deltaX = tb.x + tb.w*factorW - position.x;
+    const deltaY = tb.y + tb.h*factorH - position.y;
+
+    for(let contour of textContours){
+      for(let p of contour){
+        p.x -= deltaX;
+        p.y -= deltaY;
+      }
+    }
+
+    mergePointsAll(textContours, {closed:true});
+    evenlySpacingAll(textContours, {
+      minLength:spacingMinLengthRatio*textScale, closed:true
+    });
+    mergePointsAll(textContours, {
+      threshold:mergeThresholdRatio*textScale, closed:true
+    });
+
+    return textContours;
+  }
+
+  /*
+    getSVGContours(params={})
+    params:
+      svgData: svgデータの文字列をここに。たとえば例のツールで作ったやつとか。
+      scaleFactor: textScaleに相当するもの。原点中心に拡大する。
+      bezierDetail2: 2次ベジエのディテールの指定。default:8
+      bezierDetail3: 3次ベジエのディテールの指定。default:5
+      lineSegmentlengthRatio: Lを解釈する際の長さ指定のスケールに対する比率。default:1/64
+      spacingMinLengthRatio: evenlySpacingを適用する際の長さのスケールに対する比率。default:1/40
+      mergeThresholdRatio: mergePointsを適用する際の長さのスケールに対する比率。default:1/100
+    SVGのcontoursを出すのがめんどくさいのでメソッド化。
+    マルチパスでも問題ない。
+    ただテキストと違って場合によってはcreateDisjointPaths()が必要かもしれない。
+    加えてclosed pathのみからなるという制約がある。
+    まあほとんどの場合closed pathsに適用するんだけどな。
+  */
+  // 閉曲線(closed)前提
+  function getSVGContours(params = {}){
+    const {
+      svgData = "M 0 0 L 1 0 L 1 1 L 0 1 Z", scaleFactor = 200,
+      bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
+      spacingMinLengthRatio = 1/40, mergeThresholdRatio = 1/100
+    } = params;
+    const svgContours = parseData({
+      data:svgData, parseScale:scaleFactor,
+      bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
+      lineSegmentLength:lineSegmentLengthRatio*scaleFactor
+    });
+
+    mergePointsAll(svgContours, {closed:true});
+    evenlySpacingAll(svgContours, {
+      minLength:spacingMinLengthRatio*scaleFactor, closed:true
+    });
+    mergePointsAll(svgContours, {
+      threshold:mergeThresholdRatio*scaleFactor, closed:true
+    });
+
+    return svgContours;
+  }
+
+  /*
     getUnionFind(n, query)
     n: 最大数（2以上想定）
     query: 長さ2の配列の配列。異なる元からなる。順序は問わない。
@@ -1765,6 +1866,98 @@ const fisceToyBox = (function(){
     return geom;
   }
 
+  /*
+    getBoundingBoxOfGeometry(geom)
+    geometryのバウンディングボックスを取得する。
+    minX, maxX: xの下限上限
+    minY, maxY: yの下限上限
+    minZ, maxZ: zの下限上限
+    たとえば頂点色グラデーションを付けるのに使う。まあ色の塗り方はいくらでもあるけれど...（法線を使うとか）
+  */
+
+  // カラーリングの他にも用途いろいろあるかと。
+  function getBoundingBoxOfGeometry(geom){
+    let minX=Infinity;
+    let maxX=-Infinity;
+    let minY=Infinity;
+    let maxY=-Infinity;
+    let minZ=Infinity;
+    let maxZ=-Infinity;
+    for(const v of geom.vertices){
+      minX = Math.min(minX, v.x);
+      maxX = Math.max(maxX, v.x);
+      minY = Math.min(minY, v.y);
+      maxY = Math.max(maxY, v.y);
+      minZ = Math.min(minZ, v.z);
+      maxZ = Math.max(maxZ, v.z);
+    }
+    return {minX, maxX, minY, maxY, minZ, maxZ};
+  }
+
+  /*
+    rotateByAxis(v, axis, angle=0)
+    v: p5のベクトルでなくてもよい。x,y,z成分からなるなら何でも。
+    axis: 軸。単位ベクトルでなくてもいいが、ゼロはやめてね。
+    angle: 回転角。
+    有用なのにp5が未だに導入してくれないベクトルの回転関数
+    2次元しかないんですよね
+    うそでしょ？
+    vを改変する形。改変したくないならcopy()と組み合わせてね。
+  */
+  function rotateByAxis(v, axis, angle = 0){
+    const na = Math.hypot(axis.x, axis.y, axis.z);
+    const a = [axis.x/na, axis.y/na, axis.z/na];
+    const dp = a[0]*v.x + a[1]*v.y + a[2]*v.z;
+    const w0 = [a[0]*dp, a[1]*dp, a[2]*dp];
+    const c = Math.cos(angle);
+    const w1 = [c*(v.x-w0[0]), c*(v.y-w0[1]), c*(v.z-w0[2])];
+    const s = Math.sin(angle);
+    const w2 = [s*(a[1]*v.z-a[2]*v.y), s*(a[2]*v.x-a[0]*v.z), s*(a[0]*v.y-a[1]*v.x)];
+    v.set(
+      w0[0] + w1[0] + w2[0],
+      w0[1] + w1[1] + w2[1],
+      w0[2] + w1[2] + w2[2]
+    );
+  }
+
+
+
+  // utility関連（番外）
+
+  /*
+    hsv2rgb(h,s,v)
+    HSV指定の色をrgbにする。
+    出力はr,g,bに0～1の数が入ったオブジェクト。
+    vertexColorsに使いたいなら、透明度の1を忘れないようにしないとコケる（何度もやらかした）
+  */
+  // HSVをRGBにしてくれる関数. ただし0～1で指定してね
+  function hsv2rgb(h, s, v){
+
+    const clampFunction = (x, _min, _max) => Math.max(_min, Math.min(_max, x));
+
+    h = clampFunction(h, 0, 1);
+    s = clampFunction(s, 0, 1);
+    v = clampFunction(v, 0, 1);
+    let _r = clampFunction(Math.abs(((6 * h) % 6) - 3) - 1, 0, 1);
+    let _g = clampFunction(Math.abs(((6 * h + 4) % 6) - 3) - 1, 0, 1);
+    let _b = clampFunction(Math.abs(((6 * h + 2) % 6) - 3) - 1, 0, 1);
+    _r = _r * _r * (3 - 2 * _r);
+    _g = _g * _g * (3 - 2 * _g);
+    _b = _b * _b * (3 - 2 * _b);
+    const result = {};
+    result.r = v * (1 - s + s * _r);
+    result.g = v * (1 - s + s * _g);
+    result.b = v * (1 - s + s * _b);
+    return result;
+  }
+
+  // utility.
+  fisce.getUnionFind = getUnionFind;
+  fisce.getIntersections = getIntersections;
+  fisce.insideTriangle = insideTriangle;
+  fisce.rotateByAxis = rotateByAxis;
+  fisce.hsv2rgb = hsv2rgb;
+
   // 点列、テキストデータ操作関連
   fisce.parseCmdToText = parseCmdToText;
   fisce.parseData = parseData;
@@ -1772,10 +1965,10 @@ const fisceToyBox = (function(){
   fisce.mergePointsAll = mergePointsAll;
   fisce.evenlySpacing = evenlySpacing;
   fisce.evenlySpacingAll = evenlySpacingAll;
-  fisce.getUnionFind = getUnionFind;
+  fisce.getTextContours = getTextContours;
+  fisce.getSVGContours = getSVGContours;
 
   // tessellation.
-  fisce.getIntersections = getIntersections;
   fisce.createDisjointPaths = createDisjointPaths;
   fisce.cyclesToCycles = cyclesToCycles;
   fisce.executeEarcut = executeEarcut;
@@ -1783,6 +1976,7 @@ const fisceToyBox = (function(){
   // geometry.
   fisce.createPlaneMeshFromCycles = createPlaneMeshFromCycles;
   fisce.createBoardMeshFromCycles = createBoardMeshFromCycles;
+  fisce.getBoundingBoxOfGeometry = getBoundingBoxOfGeometry;
 
   return fisce;
 })();
