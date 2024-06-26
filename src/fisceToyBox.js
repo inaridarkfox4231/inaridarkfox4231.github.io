@@ -32,6 +32,7 @@ p5依存です
   ごめんなさい
 
   createDisjointPathsは出力形式を変えるoptionがあってもいいかもしれない。
+  optionを追加しました。{output:"cycle_vertices"}ってやるとサイクルの頂点列がそのまま返ります。
 */
 
 const fisceToyBox = (function(){
@@ -664,7 +665,20 @@ const fisceToyBox = (function(){
   /*
     createDisjointPaths(contours, mergeThreshold=1e-9)
     contours: p5のベクトル列の配列。すべて閉路であることが前提。交叉については自由。自己交叉もOK.
-    mergeThreshold: 点をまとめる際のマージの基準 default:1e-9
+    options:
+      mergeThreshold: 点をまとめる際のマージの基準 default:1e-9
+      output: アウトプットの形式について
+        "default": デフォルト。そのまま返る。頂点に関しては接続辺などの情報もあるので、
+                   その辺りで何かしたい場合は有用。
+        "island_vertexIndices": {islands, vertices}が返る。islandsにはislandがインデックス配列の形で入ってる。
+                                verticesはp5のベクトル列で、インデックスからこれを参照する。
+        "island_vertices": {islands}が返る。配列の各元であるislandはすべてp5のベクトル列である。もちろんすべて正の向き。
+                           このままテッセレーションに持っていくこともできる（earcutなどして）。いわゆるsplitに相当する。
+                           （_triangulateはこのsplitが事実上実行不可能で大変な苦労を要した...昔の話。）
+        "cycle_vertexIndices": {cycles, vertices}が返る。cyclesにはcycleがインデックス配列の形で入ってる。
+                              verticesはp5のベクトル列で、インデックスからこれを参照する。
+        "cycle_vertices": {cycles}が返る。配列の各元であるcycleはすべてp5のベクトル列である。
+                         このままcyclesToCyclesにもっていってさらにearcutでメッシュを作ったりできる。
     入力はいわゆる2次元のベクトル列です。
     3次元では使えないです。まあp5の_triangulateに比べたら劣化してるかもしれないけど
     どうでもいいですね。あれ使いづらいので。
@@ -692,7 +706,8 @@ const fisceToyBox = (function(){
     cyclesにおいてそのindexのverticeのpを取り出す必要があるのよね
   */
 
-  function createDisjointPaths(contours, mergeThreshold = 1e-9){
+  function createDisjointPaths(contours, options = {}){
+    const {mergeThreshold = 1e-9, output = "default"} = options;
 
     // cpCheckArrayをcontourの数だけ用意する
     const cpCheckArrays = new Array(contours.length);
@@ -892,19 +907,19 @@ const fisceToyBox = (function(){
         }
       }
 
-      const result = getUnionFind(allVertices.length, query);
+      const unionFindResult = getUnionFind(allVertices.length, query);
       const mergedVertices = [];
       const mergedEdges = [];
 
-      const uf = result.uf;
+      const uf = unionFindResult.uf;
       // ここでいうkがすなわちレベルになるね...lvにしよう
-      for(let lv=0; lv<result.count; lv++){
+      for(let lv=0; lv<unionFindResult.count; lv++){
         const obj = {};
-        obj.p = allVertices[result.rep[lv]].p;
+        obj.p = allVertices[unionFindResult.rep[lv]].p;
         obj.index = lv;
         //obj.neighbor = []; // 使ってない...
         obj.indices = []; // あとで放り込む
-        const members = result.mem[lv];
+        const members = unionFindResult.mem[lv];
         // メンバーごとに設定されたneighborのレベルを放り込む
         // ほとんどの場合メンバーは単独だろう
         // crossの場合は2つ3つ重なっている可能性がある
@@ -1325,6 +1340,82 @@ const fisceToyBox = (function(){
       });
     }
 
+    // output functions.
+    // cyclesToCyclesに渡す場合はcycle_verticesを指定しましょう
+
+    const createOutput0 = () => {
+      const resultVertices = [];
+      for(let i=0;i<mergedVertices.length;i++){
+        resultVertices.push(mergedVertices[i].p);
+      }
+      const resultIslands = [];
+      for(const island of islands){
+        const resultIsland = [];
+        for(let i=0;i<mergedVertices.length;i++){
+          resultIsland.push(mergedVertices[i]);
+        }
+        resultIslands.push(resultIsland);
+      }
+      return {islands:resultIslands, vertices:resultVertices};
+    }
+
+    const createOutput1 = () => {
+      const resultIslands = [];
+      for(const island of islands){
+        const resultIsland = [];
+        for(let i=0;i<island.vertices.length;i++){
+          resultIsland.push(mergedVertices[island.vertices[i]].p);
+        }
+        resultIslands.push(resultIsland);
+      }
+      return {islands:resultIslands};
+    }
+
+    const createOutput2 = () => {
+      const resultVertices = [];
+      for(let i=0;i<mergedVertices.length;i++){
+        resultVertices.push(mergedVertices[i].p);
+      }
+      const resultCycles = [];
+      for(const cycle of cycles){
+        const resultCycle = [];
+        for(let i=0;i<cycle.vertices.length;i++){
+          resultCycle.push(cycle.vertices[i]);
+        }
+        resultCycles.push(resultCycle);
+      }
+      return {cycles:resultCycles, vertices:resultVertices}
+    }
+
+    const createOutput3 = () => {
+      const resultCycles = [];
+      for(const cycle of cycles){
+        const resultCycle = [];
+        for(let i=0;i<cycle.vertices.length;i++){
+          resultCycle.push(mergedVertices[cycle.vertices[i]].p);
+        }
+        resultCycles.push(resultCycle);
+      }
+      return {cycles:resultCycles};
+    }
+
+    switch(output){
+      case "island_vertexIndices":
+        // islandの内容を頂点のインデックス列にし、
+        // verticesを頂点のベクトル列にして返す。
+        return createOutput0();
+      case "island_vertices":
+        // islandの内容を単純に頂点のベクトル列にして返す。
+        return createOutput1();
+      case "cycle_vertexIndices":
+        // cycleの内容を頂点のインデックス列にし、
+        // verticesを頂点のベクトル列にして返す。
+        return createOutput2();
+      case "cycle_vertices":
+        // cycleの内容を単純に頂点のベクトル列にして返す。cyclesToCyclesに渡す用。
+        return createOutput3();
+    }
+    // defaultの場合。
     return {islands, cycles, vertices:mergedVertices, edges:mergedEdges};
   }
 
