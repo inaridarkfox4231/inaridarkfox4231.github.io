@@ -464,8 +464,8 @@ const fisceToyBox = (function(){
     } = params;
 
     // textやってみる？
-    /*
-    const tb = font.textBounds(targetText, 0, 0, textScale);
+
+    //const tb = font.textBounds(targetText, 0, 0, textScale);
 
     const cmd = font.font.getPath(targetText, 0, 0, textScale).commands;
     const cmdText = parseCmdToText(cmd);
@@ -474,7 +474,7 @@ const fisceToyBox = (function(){
       bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
       lineSegmentLength:lineSegmentLengthRatio*textScale
     });
-
+    /*
     // ここで。
     const factorW = (alignV === "left" ? 0 : (alignV === "right" ? 1 : 0.5));
     const factorH = (alignH === "top" ? 0 : (alignH === "bottom" ? 1 : 0.5));
