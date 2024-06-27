@@ -381,6 +381,63 @@ const fisceToyBox = (function(){
   }
 
   /*
+    getBoundingBoxOfContours(contours)
+    contours: 閉路の列
+    閉路の列に対してバウンディングボックスを計算するだけ
+    textにしか使えないと不便なので。
+    これならSVGデータにも使えるし他の用途にも使えるはず
+  */
+  function getBoundingBoxOfContours(contours){
+
+    let _minX = Infinity;
+    let _minY = Infinity;
+    let _maxX = -Infinity;
+    let _maxY = -Infinity;
+
+    for(let contour of contours){
+      for(let p of contour){
+        _minX = Math.min(p.x, _minX);
+        _minY = Math.min(p.y, _minY);
+        _maxX = Math.max(p.x, _maxX);
+        _maxY = Math.max(p.y, _maxY);
+      }
+    }
+    return {x:_minX, y:_minY, w:_maxX-_minX, h:_maxY-_minY};
+  }
+
+  /*
+    alignmentContours(contours, options={})
+    contours: 閉路の列
+    options:
+      position: 基準となる座標
+      alignV: 横調整。left:position.xが左端  right:position.xが右端  center:position.xが中心（default）
+      alignH: 縦調整。top:position.yが上端  bottom:position.yが下端  center:position.yが中心（default）
+    SVGでこれをデフォルトにしちゃうのは色々とまずいだろうからあっちではやらない
+    というか
+    これを提供すればあとでいじれるだろ？だから要らないのさ。
+    テキストの場合は位置調整が基本的な要素としてあるからこれが要るってだけの話。
+  */
+  function alignmentContours(contours, options = {}){
+    const {
+      position = {x:0,y:0}, alignV = "center", alignH = "center"
+    } = options;
+
+    const tb = getBoundingBoxOfContours(contours);
+
+    const factorW = (alignV === "left" ? 0 : (alignV === "right" ? 1 : 0.5));
+    const factorH = (alignH === "top" ? 0 : (alignH === "bottom" ? 1 : 0.5));
+    const deltaX = tb.x+ tb.w*factorW - position.x;
+    const deltaY = tb.y + tb.h*factorH - position.y;
+
+    for(const contour of contours){
+      for(const p of contour){
+        p.x -= deltaX;
+        p.y -= deltaY;
+      }
+    }
+  }
+
+  /*
     getTextContours(params={})
     テキストのcontoursを出すのがめんどくさいのでメソッド化
     params:
@@ -407,6 +464,7 @@ const fisceToyBox = (function(){
     } = params;
 
     // textやってみる？
+    /*
     const tb = font.textBounds(targetText, 0, 0, textScale);
 
     const cmd = font.font.getPath(targetText, 0, 0, textScale).commands;
@@ -429,7 +487,9 @@ const fisceToyBox = (function(){
         p.y -= deltaY;
       }
     }
+    */
 
+    alignmentContours(textContours, {position, alignV, alignH});
     mergePointsAll(textContours, {closed:true});
     evenlySpacingAll(textContours, {
       minLength:spacingMinLengthRatio*textScale, closed:true
@@ -2132,6 +2192,8 @@ const fisceToyBox = (function(){
   fisce.evenlySpacingAll = evenlySpacingAll;
   fisce.quadBezierize = quadBezierize;
   fisce.quadBezierizeAll = quadBezierizeAll;
+  fisce.getBoundingBoxOfContours = getBoundingBoxOfContours;
+  fisce.alignmentContours = alignmentContours;
   fisce.getTextContours = getTextContours;
   fisce.getSVGContours = getSVGContours;
 
