@@ -33,6 +33,12 @@ p5依存です
 
   createDisjointPathsは出力形式を変えるoptionがあってもいいかもしれない。
   optionを追加しました。{output:"cycle_vertices"}ってやるとサイクルの頂点列がそのまま返ります。
+
+  TessSkyのテッセレーション計算は先にテッセレーションを完了させたうえで
+  隣接する島ごとにわけてそれらをislandとみなして分割してるんですよね
+
+  でもTessSkyにはいい思い出が無いので
+  あんまやりたくないです。以上。
 */
 
 const fisceToyBox = (function(){
@@ -2022,6 +2028,8 @@ const fisceToyBox = (function(){
     options:
       result: cyclesToCyclesの結果が入る。
       thick: 厚さ。要するに10なら±5ですね。そんな感じ。
+      topFace: 上面を用意するかどうか default:true
+      bottomFace: 下面を用意するかどうか。どっかにくっつけたい場合に。 default:true
     ボードなので上面と下面があって法線の向きも逆になってる。側面は別メッシュなので綺麗に分かれてる。
     面もすべて正の向きなのでどっかのアルゴリズムみたいにカリングの適用で崩れたりはしない。
     法線の向きを使えば側面だけ違う色にしたり出来るよ。
@@ -2029,7 +2037,7 @@ const fisceToyBox = (function(){
   // BoardMeshの方がいいんじゃないかと...思うけども。
   // というわけでBoardMeshに改名しました
   function createBoardMeshFromCycles(options){
-    const {result, thick = 20} = options;
+    const {result, thick = 20, topFace = true, bottomFace = true} = options;
     const {vertices, cycles, subCycleArrays} = result;
     const geom = new p5.Geometry();
 
@@ -2055,8 +2063,8 @@ const fisceToyBox = (function(){
     for(const cycle of cycles){
       const faces = executeEarcut(vertices, cycle).faces;
       for(let i=0; i<faces.length; i+=3){
-        geom.faces.push([faces[i], faces[i+1], faces[i+2]]);
-        geom.faces.push([vn + faces[i], vn + faces[i+2], vn + faces[i+1]]);
+        if(topFace){ geom.faces.push([faces[i], faces[i+1], faces[i+2]]); }
+        if(bottomFace){ geom.faces.push([vn + faces[i], vn + faces[i+2], vn + faces[i+1]]); }
       }
     }
 
