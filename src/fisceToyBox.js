@@ -2153,7 +2153,747 @@ const fisceToyBox = (function(){
     );
   }
 
+  /*
+    getCrossPointWithLineFromTwoPoints(p, q, c, n)
+    p,q,c,nは2Dのベクトルを想定
+    線分pqとcを通りnを法線ベクトルとする直線が交わっていることを前提として
+    交点を返す関数
+    ratioはp---qにおける比の値、pが点のベクトル
+  */
+  function getCrossPointWithLineFromTwoPoints(p, q, c, n){
+    const a = Math.abs((p.x-c.x)*n.x + (p.y-c.y)*n.y);
+    const b = Math.abs((q.x-c.x)*n.x + (q.y-c.y)*n.y);
+    const ratio = a/(a+b);
+    const crossPoint = createVector((1-ratio)*p.x + ratio*q.x, (1-ratio)*p.y + ratio*q.y);
+    return {ratio:ratio, p:crossPoint}; // ratioも場合によっては必要かも？
+  }
 
+  /*
+    getCrossPointWithPlaneFromTwoPoints(p, q, c, n)
+    平面バージョン。仕様は同じ。
+  */
+  function getCrossPointWithPlaneFromTwoPoints(p, q, c, n){
+    const a = Math.abs((p.x-c.x)*n.x + (p.y-c.y)*n.y + (p.z-c.z)*n.z);
+    const b = Math.abs((q.x-c.x)*n.x + (q.y-c.y)*n.y + (q.z-c.z)*n.z);
+    const ratio = a/(a+b);
+    const crossPoint = createVector((1-ratio)*p.x + ratio*q.x, (1-ratio)*p.y + ratio*q.y, (1-ratio)*p.z + ratio*q.z);
+    return {ratio:ratio, p:crossPoint}; // ratioも場合によっては必要かも？
+  }
+
+  /*
+    pointOnTheLine(p, c, n, threshold=1e-9)
+    pがcを通りnを法線ベクトルとする直線のどっち側にあるかを返す関数
+    nの側にあれば1で反対側にあれば-1を返す
+    閾値に関して線上にあるとみなされれば0を返す
+  */
+  function pointOnTheLine(p, c, n, threshold=1e-9){
+    const verticeValue=(p.x-c.x)*n.x+(p.y-c.y)*n.y;
+    if(Math.abs(verticeValue)<threshold)return 0;
+    return (verticeValue>0?1:-1);
+  }
+
+  /*
+    pointOnThePlane(p, c, n, threshold = 1e-9)
+    平面バージョン。仕様は同じ。
+  */
+  function pointOnThePlane(p, c, n, threshold = 1e-9){
+    // やることは簡単で、p-cとnで内積を取って符号を見るだけ。
+    const verticeValue=(p.x-c.x)*n.x+(p.y-c.y)*n.y+(p.z-c.z)*n.z;
+    if(Math.abs(verticeValue)<threshold)return 0;
+    return (verticeValue>0?1:-1);
+  }
+
+  /*
+    separateGeometry(geom, params = {})
+    geom: p5.Geometryのオブジェクト
+    params:
+      c: カットする平面の中心
+      n: カットする平面の法線ベクトル
+      createBoundaryEdge: 境界の辺を作るかどうか。edgesが無い場合は関係ない
+    geomの三角形をplaneでぶった切ってn側と反対側に分ける
+    戻り値は配列[geom0,geom1]でgeom0がn側、geom1が反対側。
+    vertexNormals, vertexColors, uvs, edgesがgeomに存在する場合、それらは境界で補間される。
+    そのうち境界面も作れるようになるかもしれないし、ならないかもしれない...（難しい）
+  */
+  function separateGeometry(geom, params = {}){
+    const {vertices, faces, vertexNormals = [], vertexColors = [], uvs = [], edges = []} = geom;
+    const {c = createVector(), n = createVector(1,0,0), createBoundaryEdge = true} = params;
+    const vertexObjectArray = [];
+
+    // 補間用フラグ
+    // edgesのも必要かもしれないけどそれはまあいいかとりあえず
+    // 法線は補間した後で正規化する。注意点はほぼ無い。
+    // 色の補間は難しいことを考えても仕方ないので単純にrgb補間でいいかと
+    // uvも単純にlerpするだけ。それでいいですね。
+    const useVertexNormals = (vertexNormals.length > 0);
+    const useVertexColors = (vertexColors.length > 0);
+    const useUvs = (uvs.length > 0);
+    const useEdges = (edges.length > 0);
+
+    const dummyNormal = createVector();
+
+    // 必要ならvertexColorsなども反映されるようにする
+    for(let i=0; i<vertices.length; i++){
+      const v = vertices[i];
+      const vNormal = (useVertexNormals ? vertexNormals[i] : dummyNormal);
+      const vCol = (useVertexColors ? [
+        vertexColors[4*i],vertexColors[4*i+1],vertexColors[4*i+2],vertexColors[4*i+3]
+      ] : []);
+      const vUv = (useUvs ? [uvs[2*i], uvs[2*i+1]] : []);
+      const vertexValue = pointOnThePlane(vertices[i], c, n);
+      if(vertexValue === 0){
+        vertexObjectArray.push([
+          {vertexValue:0, p:v.copy(), index:i, vN:vNormal, vC:vCol, vUv:vUv},
+          {vertexValue:0, p:v.copy(), index:i, vN:vNormal, vC:vCol, vUv:vUv}
+        ]);
+      } else {
+        const obj = {vertexValue:vertexValue, p:v.copy(), index:i, vN:vNormal, vC:vCol, vUv:vUv};
+        if(vertexValue !== 0){
+          obj.crossPair = []; // 辺の重複のない分断をするためのフラグ
+          obj.edgePair = []; // もともとある辺の分断のためのフラグ
+        }
+        vertexObjectArray.push([obj]);
+      }
+    }
+
+    // crossPairには相方のindexの他に新しく追加した頂点のindexも入れる必要がある
+    // つまり長さ2の配列
+    // すでに入っている場合、その頂点のオブジェクトを取得する必要があるので...
+    // 1と-1の双方に入れよう。ややこしさ回避。
+
+    // 三角形をサーチする
+    const faceArray0 = [];
+    const faceArray1 = [];
+    // 辺用
+    const edgeArray0 = [];
+    const edgeArray1 = [];
+    if (useEdges) {
+      // edgesを走査してもともとの辺をvertexObjectに翻訳して分類する
+      for(const e of edges){
+        const obj0 = vertexObjectArray[e[0]];
+        const obj1 = vertexObjectArray[e[1]];
+        const vv0 = obj0[0].vertexValue;
+        const vv1 = obj1[0].vertexValue;
+        // 0がある場合、ひとつめが0側、ふたつめが1側という設定なので、
+        // 入れる際は注意する。
+        if(vv0===1&&vv1===1)edgeArray0.push([obj0[0], obj1[0]]);
+        if(vv0===0&&vv1===1)edgeArray0.push([obj0[0], obj1[0]]);
+        if(vv0===1&&vv1===0)edgeArray0.push([obj0[0], obj1[0]]);
+        if(vv0===-1&&vv1===-1)edgeArray1.push([obj0[0], obj1[0]]);
+        if(vv0===0&&vv1===-1)edgeArray1.push([obj0[1], obj1[0]]);
+        if(vv0===-1&&vv1===0)edgeArray1.push([obj0[0], obj1[1]]);
+        if(vv0===0&&vv1===0){
+          // 0 0の辺はここで入れてしまうので漏れることはないが、
+          // boundaryを面にする場合はちょっと面倒かもしれない
+          edgeArray0.push([obj0[0], obj1[0]]);
+          edgeArray1.push([obj0[1], obj1[1]]);
+        }
+        // 辺の分断に使う情報を登録
+        if(vv0*vv1<0){
+          obj0[0].edgePair.push(obj1[0].index);
+          obj1[0].edgePair.push(obj0[0].index);
+        }
+      }
+    }
+
+    // v0とv1が付加情報を持っている場合も考慮しようということ（color,uv,normal,etc...）
+    // targetIndexが0なら1,-1の順、1なら-1,1の順。この情報は辺の分断に使う。
+    const getCrossPointObject = (targetIndex, v0, v1, c, n) => {
+      // crossPointの生成過程をメソッド化
+      let crossPoint;
+      let crossPointIsAlreadyCreated = false;
+      for(const pair of v0.crossPair){
+        if(pair[0] === v1.index){
+          crossPoint = vertexObjectArray[pair[1]]; // 長さ2の配列
+          // targetIndex===0なら0,1の順、1なら逆。
+          crossPointIsAlreadyCreated = true;
+        }
+      }
+      if(!crossPointIsAlreadyCreated){
+        const cp = getCrossPointWithPlaneFromTwoPoints(v0.p, v1.p, c, n);
+        const cpIndex = vertexObjectArray.length;
+        // vertexNormalの補間
+        const lerpedNormal = (useVertexNormals ?
+          p5.Vector.lerp(v0.vN, v1.vN, cp.ratio).normalize() : dummyNormal);
+        // vertexColorの補間
+        const lerpedVC = (useVertexColors ? [
+          (1-cp.ratio)*v0.vC[0] + cp.ratio*v1.vC[0],
+          (1-cp.ratio)*v0.vC[1] + cp.ratio*v1.vC[1],
+          (1-cp.ratio)*v0.vC[2] + cp.ratio*v1.vC[2],
+          (1-cp.ratio)*v0.vC[3] + cp.ratio*v1.vC[3]
+        ] : []);
+        // uvの補間
+        const lerpedUV = (useUvs ? [
+          (1-cp.ratio)*v0.vUv[0] + cp.ratio*v1.vUv[0],
+          (1-cp.ratio)*v0.vUv[1] + cp.ratio*v1.vUv[1]
+        ] : []);
+        crossPoint = [
+          {p:cp.p.copy(), index:cpIndex, vN:lerpedNormal, vC:lerpedVC, vUv:lerpedUV},
+          {p:cp.p.copy(), index:cpIndex, vN:lerpedNormal, vC:lerpedVC, vUv:lerpedUV}
+        ];
+        vertexObjectArray.push(crossPoint);
+        v0.crossPair.push([v1.index, cpIndex]);
+        v1.crossPair.push([v0.index, cpIndex]);
+        if(useEdges){
+          for(const pairIndex of v0.edgePair){
+            if(pairIndex === v1.index){
+              // ごめんなさい配列で書いた方がいいですね
+              // edgeArrays[0,1]とか？ですね。可読性は...犠牲になるけど。
+              if(targetIndex===0){
+                edgeArray0.push([v0, crossPoint[targetIndex]]);
+                edgeArray1.push([v1, crossPoint[1-targetIndex]]);
+              }else{
+                edgeArray1.push([v0, crossPoint[targetIndex]]);
+                edgeArray0.push([v1, crossPoint[1-targetIndex]]);
+              }
+            }
+          }
+        }
+      }
+      return crossPoint;
+    }
+
+    // targetIndexは0か1です。[1,-1,0]ケースなら0, [-1,1,0]ケースなら1
+    const createSingleCrossPoint = (c, n, targetIndex, v0, v1, v2) => {
+      // まずv0とv1の間に点を取る。取れます。で...
+      // その前にcrossPairを見て、
+      // それぞれv1またはv0のindexが入ってないか調べる
+      // 入ってないならvertexObjectArrayに新しくそれを作る感じ
+      // 1と-1の両方に入ってるので心配ない
+
+      // めんどうなのでサブルーチン化
+      const crossPoint = getCrossPointObject(targetIndex, v0, v1, c, n);
+      const v3 = crossPoint[0];
+      const v4 = crossPoint[1];
+
+      // 1,-1,0ケースは[v0,v3,v2]と[v4,v1,v2]に分ける
+      // -1,1,0ケースは[v1,v2,v3]と[v4,v2,v0]に分ける
+      if(targetIndex===0){
+        faceArray0.push([v0,v3,v2]);
+        faceArray1.push([v4,v1,v2]);
+        if(useEdges && createBoundaryEdge){
+          edgeArray0.push([v2,v3]);
+          edgeArray1.push([v4,v2]);
+        }
+      } else {
+        faceArray0.push([v1,v2,v3]);
+        faceArray1.push([v4,v2,v0]);
+        if(useEdges && createBoundaryEdge){
+          edgeArray0.push([v3,v2]);
+          edgeArray1.push([v2,v4]);
+        }
+      }
+    }
+
+    // targetIndexは0か1です。[1,-1,1]ケースなら0, [-1,1,-1]ケースなら1
+    const createDoubleCrossPoints = (c, n, targetIndex, v0, v1, v2) => {
+      // 2つ辺がある。場合によっては両方とも生成済みの可能性がありややこしい。
+
+      const crossPoint0 = getCrossPointObject(targetIndex, v0, v1, c, n);
+      const v3 = crossPoint0[0];
+      const v4 = crossPoint0[1];
+      const crossPoint1 = getCrossPointObject(1-targetIndex, v1, v2, c, n);
+      const v5 = crossPoint1[0];
+      const v6 = crossPoint1[1];
+
+      // あとは面倒な場合分けをするだけ。
+      if(targetIndex===0){
+        // 1,-1,1ケース
+        // [0,3,2],[2,3,5] | [4,1,6]
+        faceArray0.push([v0,v3,v2], [v2,v3,v5]);
+        faceArray1.push([v4,v1,v6]);
+        if(useEdges && createBoundaryEdge){
+          // どっちでもいいんだが、
+          // おそらくだけど三角形の辺の向きと逆にするとのちのち楽かもしれない
+          edgeArray0.push([v5,v3]);
+          edgeArray1.push([v4,v6]);
+        }
+      } else {
+        // -1,1,-1ケース
+        // [1,5,3] | [4,6,2],[4,2,0]
+        faceArray0.push([v1,v5,v3]);
+        faceArray1.push([v4,v6,v2],[v4,v2,v0]);
+        if(useEdges && createBoundaryEdge){
+          // どっちでもいいんだが、
+          // おそらくだけど三角形の辺の向きと逆にするとのちのち楽かもしれない
+          edgeArray0.push([v3,v5]);
+          edgeArray1.push([v6,v4]);
+        }
+      }
+    }
+
+    for(let i=0; i<faces.length; i++){
+      const f = faces[i];
+      const v0 = vertexObjectArray[f[0]][0];
+      const v1 = vertexObjectArray[f[1]][0];
+      const v2 = vertexObjectArray[f[2]][0];
+      // これらの値によっては並び替えを実行する
+      // 主に6つ...
+      // まず0側のみのケース（1,1,1 1,1,0 1,0,0）
+      // 1側のみのケース（-1,-1,-1 -1,-1,0 -1,0,0）
+      // 0と1にまたがるケースは並び替えにより次の4種類に分ける
+      // [1,-1,0] [-1,1,0] [1,-1,1] [-1,1,-1]
+      // それぞれについて処理する
+      const vv0 = v0.vertexValue;
+      const vv1 = v1.vertexValue;
+      const vv2 = v2.vertexValue;
+      const absSum = Math.abs(vv0)+Math.abs(vv1)+Math.abs(vv2);
+      const sum = vv0+vv1+vv2;
+      const sumAbs = Math.abs(sum);
+      if(absSum === sumAbs){
+        // 同符号
+        if(sum>0){
+          // 1 0 0はここ
+          faceArray0.push([v0,v1,v2]); continue;
+        } else if(sum<0){
+          // -1 0 0はここ
+          faceArray1.push([v0,v1,v2]); continue;
+        } else {
+          // 0 0 0はここ
+          faceArray0.push([v0,v1,v2]);
+          faceArray1.push([v0,v1,v2]); continue;
+        }
+      } else {
+        // 1と-1が共存するケース
+        // 並び替えで1,-1,0か-1,1,0か1,-1,1か-1,1,-1のケースに帰着させる
+        // absSumは2か3で、それで分ける。
+        if(absSum===2){
+          // 0,1,-1  0,-1,1  1,0,-1  -1,0,1  1,-1,0   -1,1,0の6通り
+          if(vv0===0&&vv1===1)createSingleCrossPoint(c,n,0,v1,v2,v0);
+          if(vv0===0&&vv1===-1)createSingleCrossPoint(c,n,1,v1,v2,v0);
+          if(vv1===0&&vv2===1)createSingleCrossPoint(c,n,0,v2,v0,v1);
+          if(vv1===0&&vv2===-1)createSingleCrossPoint(c,n,1,v2,v0,v1);
+          if(vv2===0&&vv0===1)createSingleCrossPoint(c,n,0,v0,v1,v2);
+          if(vv2===0&&vv0===-1)createSingleCrossPoint(c,n,1,v0,v1,v2);
+        }else{
+          // 1,1,-1  1,-1,1  -1,1,1  -1,-1,1  -1,1,-1  1,-1,-1の6通り
+          if(vv0===1&&vv1===1)createDoubleCrossPoints(c,n,0,v1,v2,v0);
+          if(vv1===1&&vv2===1)createDoubleCrossPoints(c,n,0,v2,v0,v1);
+          if(vv2===1&&vv0===1)createDoubleCrossPoints(c,n,0,v0,v1,v2);
+          if(vv0===-1&&vv1===-1)createDoubleCrossPoints(c,n,1,v1,v2,v0);
+          if(vv1===-1&&vv2===-1)createDoubleCrossPoints(c,n,1,v2,v0,v1);
+          if(vv2===-1&&vv0===-1)createDoubleCrossPoints(c,n,1,v0,v1,v2);
+        }
+      }
+    }
+    // faceArray0とfaceArray1が完成したので
+    // vertexObjectArray0とvertexObjectArray1に内容を分ける
+    // もちろんcrossPointも0と1で分断される。つまり配列の長さで分ける。
+    // 長さ1ならvertexValueに応じて1か-1なら0か1
+    // 長さ2なら0番と1番をそのまま放り込む。
+    const vertexObjectArray0 = [];
+    const vertexObjectArray1 = [];
+    for(let i=0; i<vertexObjectArray.length; i++){
+      const vo = vertexObjectArray[i];
+      if(vo.length===1){
+        if(vo[0].vertexValue===1){
+          vo[0].index = vertexObjectArray0.length;
+          vertexObjectArray0.push(vo[0]);
+        }
+        if(vo[0].vertexValue===-1){
+          vo[0].index = vertexObjectArray1.length;
+          vertexObjectArray1.push(vo[0]);
+        }
+      }else{
+        vo[0].index = vertexObjectArray0.length;
+        vertexObjectArray0.push(vo[0]);
+        vo[1].index = vertexObjectArray1.length;
+        vertexObjectArray1.push(vo[1]);
+      }
+    }
+
+    // 入れるとともに
+    // indexを書き換えて通し番号にする
+    // そして
+    // faceの方でindexを参照しつつresultfaces0とresultFaces1を構成
+    // 一方verticesの方も
+    // resultVertices0とresultVertices1をpを参照しつつ構成
+
+    const resultGeom0 = new p5.Geometry();
+    const resultGeom1 = new p5.Geometry();
+
+    for(const v of vertexObjectArray0){
+      resultGeom0.vertices.push(v.p);
+      if(useVertexNormals){
+        resultGeom0.vertexNormals.push(v.vN);
+      }
+      if(useVertexColors){
+        resultGeom0.vertexColors.push(...v.vC);
+      }
+      if(useUvs){
+        resultGeom0.uvs.push(...v.vUv);
+      }
+    }
+    for(const v of vertexObjectArray1){
+      resultGeom1.vertices.push(v.p);
+      if(useVertexNormals){
+        resultGeom1.vertexNormals.push(v.vN);
+      }
+      if(useVertexColors){
+        resultGeom1.vertexColors.push(...v.vC);
+      }
+      if(useUvs){
+        resultGeom1.uvs.push(...v.vUv);
+      }
+    }
+
+    for(const face of faceArray0){
+      resultGeom0.faces.push([face[0].index, face[1].index, face[2].index]);
+    }
+    for(const face of faceArray1){
+      resultGeom1.faces.push([face[0].index, face[1].index, face[2].index]);
+    }
+    // 場合によってはuvやvertexColorsも分割するかもしれない
+
+    if(useEdges){
+      for(const edge of edgeArray0){
+        resultGeom0.edges.push([edge[0].index, edge[1].index]);
+      }
+      resultGeom0._edgesToVertices();
+      for(const edge of edgeArray1){
+        resultGeom1.edges.push([edge[0].index, edge[1].index]);
+      }
+      resultGeom1._edgesToVertices();
+    }
+
+    return [resultGeom0, resultGeom1];
+  }
+
+  /*
+    subDivideGeometry(geom, params = {})
+    geom: ジオメトリー
+    params:
+      c: カットに使う平面の中心
+      n: 法線
+      autoNormal: 法線を補間するかどうか。しない場合、computeNormalsで計算される。default:true
+    平面で分割して切れ目を入れる。ポリゴンはその面との交点を含むように分割される。
+    これにより、ジオメトリーを曲げる際に不自然な崩壊が起きないようにできる。
+    具体的には曲げる方向に応じて沢山分割したりなどといったことに使う。
+  */
+  function subDivideGeometry(geom, params = {}){
+    const {vertices, faces, vertexNormals = [], vertexColors = [], uvs = [], edges = []} = geom;
+    const {c = createVector(), n = createVector(1,0,0), autoNormal = true} = params;
+    const vertexObjectArray = [];
+
+    // 補間用フラグ
+    // edgesのも必要かもしれないけどそれはまあいいかとりあえず
+    // 法線は補間した後で正規化する。注意点はほぼ無い。
+    // 色の補間は難しいことを考えても仕方ないので単純にrgb補間でいいかと
+    // uvも単純にlerpするだけ。それでいいですね。
+    const useVertexNormals = (vertexNormals.length > 0);
+    const useVertexColors = (vertexColors.length > 0);
+    const useUvs = (uvs.length > 0);
+    const useEdges = (edges.length > 0);
+
+    const dummyNormal = createVector();
+
+    // 必要ならvertexColorsなども反映されるようにする
+    for(let i=0; i<vertices.length; i++){
+      const v = vertices[i];
+      const vNormal = (useVertexNormals ? vertexNormals[i] : dummyNormal);
+
+      const vCol = (useVertexColors ? [
+        vertexColors[4*i],vertexColors[4*i+1],vertexColors[4*i+2],vertexColors[4*i+3]
+      ] : []);
+      const vUv = (useUvs ? [uvs[2*i], uvs[2*i+1]] : []);
+      const vertexValue = pointOnThePlane(vertices[i], c, n);
+      if(vertexValue === 0){
+        vertexObjectArray.push([
+          {vertexValue:0, p:v.copy(), index:i, vN:vNormal, vC:vCol, vUv:vUv},
+          {vertexValue:0, p:v.copy(), index:i, vN:vNormal, vC:vCol, vUv:vUv}
+        ]);
+      } else {
+        const obj = {vertexValue:vertexValue, p:v.copy(), index:i, vN:vNormal, vC:vCol, vUv:vUv};
+        if(vertexValue !== 0){
+          obj.crossPair = []; // 辺の重複のない分断をするためのフラグ
+          obj.edgePair = []; // もともとある辺の分断のためのフラグ
+        }
+        vertexObjectArray.push([obj]);
+      }
+    }
+
+    // crossPairには相方のindexの他に新しく追加した頂点のindexも入れる必要がある
+    // つまり長さ2の配列
+    // すでに入っている場合、その頂点のオブジェクトを取得する必要があるので...
+    // 1と-1の双方に入れよう。ややこしさ回避。
+
+    // 三角形をサーチする
+    const faceArray0 = [];
+    const faceArray1 = [];
+    // 辺用
+    const edgeArray0 = [];
+    const edgeArray1 = [];
+    if (useEdges) {
+      // edgesを走査してもともとの辺をvertexObjectに翻訳して分類する
+      for(const e of edges){
+        const obj0 = vertexObjectArray[e[0]];
+        const obj1 = vertexObjectArray[e[1]];
+        const vv0 = obj0[0].vertexValue;
+        const vv1 = obj1[0].vertexValue;
+        // 0がある場合、ひとつめが0側、ふたつめが1側という設定なので、
+        // 入れる際は注意する。
+        if(vv0===1&&vv1===1)edgeArray0.push([obj0[0], obj1[0]]);
+        if(vv0===0&&vv1===1)edgeArray0.push([obj0[0], obj1[0]]);
+        if(vv0===1&&vv1===0)edgeArray0.push([obj0[0], obj1[0]]);
+        if(vv0===-1&&vv1===-1)edgeArray1.push([obj0[0], obj1[0]]);
+        if(vv0===0&&vv1===-1)edgeArray1.push([obj0[1], obj1[0]]);
+        if(vv0===-1&&vv1===0)edgeArray1.push([obj0[0], obj1[1]]);
+        if(vv0===0&&vv1===0){
+          // 0 0の辺はここで入れてしまうので漏れることはないが、
+          // boundaryを面にする場合はちょっと面倒かもしれない
+          edgeArray0.push([obj0[0], obj1[0]]);
+          // 重複辺は片方にだけ入れる
+          //edgeArray1.push([obj0[1], obj1[1]]);
+        }
+        // 辺の分断に使う情報を登録
+        if(vv0*vv1<0){
+          obj0[0].edgePair.push(obj1[0].index);
+          obj1[0].edgePair.push(obj0[0].index);
+        }
+      }
+    }
+
+    // v0とv1が付加情報を持っている場合も考慮しようということ（color,uv,normal,etc...）
+    // targetIndexが0なら1,-1の順、1なら-1,1の順。この情報は辺の分断に使う。
+    const getCrossPointObject = (targetIndex, v0, v1, c, n) => {
+      // crossPointの生成過程をメソッド化
+      let crossPoint;
+      let crossPointIsAlreadyCreated = false;
+      for(const pair of v0.crossPair){
+        if(pair[0] === v1.index){
+          crossPoint = vertexObjectArray[pair[1]]; // 長さ2の配列
+          // targetIndex===0なら0,1の順、1なら逆。
+          crossPointIsAlreadyCreated = true;
+        }
+      }
+      if(!crossPointIsAlreadyCreated){
+        const cp = getCrossPointWithPlaneFromTwoPoints(v0.p, v1.p, c, n);
+        const cpIndex = vertexObjectArray.length;
+        // vertexNormalの補間
+        const lerpedNormal = (useVertexNormals && !autoNormal ?
+          p5.Vector.lerp(v0.vN, v1.vN, cp.ratio).normalize() : dummyNormal);
+        // vertexColorの補間
+        const lerpedVC = (useVertexColors ? [
+          (1-cp.ratio)*v0.vC[0] + cp.ratio*v1.vC[0],
+          (1-cp.ratio)*v0.vC[1] + cp.ratio*v1.vC[1],
+          (1-cp.ratio)*v0.vC[2] + cp.ratio*v1.vC[2],
+          (1-cp.ratio)*v0.vC[3] + cp.ratio*v1.vC[3]
+        ] : []);
+        // uvの補間
+        const lerpedUV = (useUvs ? [
+          (1-cp.ratio)*v0.vUv[0] + cp.ratio*v1.vUv[0],
+          (1-cp.ratio)*v0.vUv[1] + cp.ratio*v1.vUv[1]
+        ] : []);
+        crossPoint = [
+          {p:cp.p.copy(), index:cpIndex, vN:lerpedNormal, vC:lerpedVC, vUv:lerpedUV},
+          {p:cp.p.copy(), index:cpIndex, vN:lerpedNormal, vC:lerpedVC, vUv:lerpedUV}
+        ];
+        vertexObjectArray.push(crossPoint);
+        v0.crossPair.push([v1.index, cpIndex]);
+        v1.crossPair.push([v0.index, cpIndex]);
+        if(useEdges){
+          for(const pairIndex of v0.edgePair){
+            if(pairIndex === v1.index){
+              // ごめんなさい配列で書いた方がいいですね
+              // edgeArrays[0,1]とか？ですね。可読性は...犠牲になるけど。
+              if(targetIndex===0){
+                edgeArray0.push([v0, crossPoint[targetIndex]]);
+                edgeArray1.push([v1, crossPoint[1-targetIndex]]);
+              }else{
+                edgeArray1.push([v0, crossPoint[targetIndex]]);
+                edgeArray0.push([v1, crossPoint[1-targetIndex]]);
+              }
+            }
+          }
+        }
+      }
+      return crossPoint;
+    }
+
+    // targetIndexは0か1です。[1,-1,0]ケースなら0, [-1,1,0]ケースなら1
+    const createSingleCrossPoint = (c, n, targetIndex, v0, v1, v2) => {
+      // まずv0とv1の間に点を取る。取れます。で...
+      // その前にcrossPairを見て、
+      // それぞれv1またはv0のindexが入ってないか調べる
+      // 入ってないならvertexObjectArrayに新しくそれを作る感じ
+      // 1と-1の両方に入ってるので心配ない
+
+      // めんどうなのでサブルーチン化
+      const crossPoint = getCrossPointObject(targetIndex, v0, v1, c, n);
+      const v3 = crossPoint[0];
+      const v4 = crossPoint[1];
+
+      // 1,-1,0ケースは[v0,v3,v2]と[v4,v1,v2]に分ける
+      // -1,1,0ケースは[v1,v2,v3]と[v4,v2,v0]に分ける
+      // ここの辺は重複しているので片方にだけ入れる
+      if(targetIndex===0){
+        faceArray0.push([v0,v3,v2]);
+        faceArray1.push([v4,v1,v2]);
+        if(useEdges){
+          edgeArray0.push([v2,v3]);
+          //edgeArray1.push([v4,v2]);
+        }
+      } else {
+        faceArray0.push([v1,v2,v3]);
+        faceArray1.push([v4,v2,v0]);
+        if(useEdges){
+          edgeArray0.push([v3,v2]);
+          //edgeArray1.push([v2,v4]);
+        }
+      }
+    }
+
+    // targetIndexは0か1です。[1,-1,1]ケースなら0, [-1,1,-1]ケースなら1
+    const createDoubleCrossPoints = (c, n, targetIndex, v0, v1, v2) => {
+      // 2つ辺がある。場合によっては両方とも生成済みの可能性がありややこしい。
+
+      const crossPoint0 = getCrossPointObject(targetIndex, v0, v1, c, n);
+      const v3 = crossPoint0[0];
+      const v4 = crossPoint0[1];
+      const crossPoint1 = getCrossPointObject(1-targetIndex, v1, v2, c, n);
+      const v5 = crossPoint1[0];
+      const v6 = crossPoint1[1];
+
+      // あとは面倒な場合分けをするだけ。
+      if(targetIndex===0){
+        // 1,-1,1ケース
+        // [0,3,2],[2,3,5] | [4,1,6]
+        faceArray0.push([v0,v3,v2], [v2,v3,v5]);
+        faceArray1.push([v4,v1,v6]);
+        if(useEdges){
+          // どっちでもいいんだが、
+          // おそらくだけど三角形の辺の向きと逆にするとのちのち楽かもしれない
+          edgeArray0.push([v5,v3]);
+          //edgeArray1.push([v4,v6]);
+        }
+      } else {
+        // -1,1,-1ケース
+        // [1,5,3] | [4,6,2],[4,2,0]
+        faceArray0.push([v1,v5,v3]);
+        faceArray1.push([v4,v6,v2],[v4,v2,v0]);
+        if(useEdges){
+          // どっちでもいいんだが、
+          // おそらくだけど三角形の辺の向きと逆にするとのちのち楽かもしれない
+          edgeArray0.push([v3,v5]);
+          //edgeArray1.push([v6,v4]);
+        }
+      }
+    }
+
+    for(let i=0; i<faces.length; i++){
+      const f = faces[i];
+      const v0 = vertexObjectArray[f[0]][0];
+      const v1 = vertexObjectArray[f[1]][0];
+      const v2 = vertexObjectArray[f[2]][0];
+      // これらの値によっては並び替えを実行する
+      // 主に6つ...
+      // まず0側のみのケース（1,1,1 1,1,0 1,0,0）
+      // 1側のみのケース（-1,-1,-1 -1,-1,0 -1,0,0）
+      // 0と1にまたがるケースは並び替えにより次の4種類に分ける
+      // [1,-1,0] [-1,1,0] [1,-1,1] [-1,1,-1]
+      // それぞれについて処理する
+      const vv0 = v0.vertexValue;
+      const vv1 = v1.vertexValue;
+      const vv2 = v2.vertexValue;
+      const absSum = Math.abs(vv0)+Math.abs(vv1)+Math.abs(vv2);
+      const sum = vv0+vv1+vv2;
+      const sumAbs = Math.abs(sum);
+      // ここで切断面に重なる三角形の辺はもともと存在しない場合
+      // この細分でも用意されないので、
+      // 重複覚悟でここで追加する
+      // absSum===1の場合である
+      // どうせnoStroke()なら重複しても何の害もない
+      if(absSum===1){
+        if(vv0!==0){edgeArray0.push([v1,v2]);}
+        if(vv1!==0){edgeArray0.push([v2,v0]);}
+        if(vv2!==0){edgeArray0.push([v0,v1]);}
+      }
+      if(absSum === sumAbs){
+        // 同符号
+        if(sum>0){
+          // 1 0 0はここ
+          faceArray0.push([v0,v1,v2]); continue;
+        } else if(sum<0){
+          // -1 0 0はここ
+          faceArray1.push([v0,v1,v2]); continue;
+        } else {
+          // 0 0 0はここ
+          faceArray0.push([v0,v1,v2]);
+          //faceArray1.push([v0,v1,v2]);
+          continue;
+        }
+      } else {
+        // 1と-1が共存するケース
+        // 並び替えで1,-1,0か-1,1,0か1,-1,1か-1,1,-1のケースに帰着させる
+        // absSumは2か3で、それで分ける。
+        if(absSum===2){
+          // 0,1,-1  0,-1,1  1,0,-1  -1,0,1  1,-1,0   -1,1,0の6通り
+          if(vv0===0&&vv1===1)createSingleCrossPoint(c,n,0,v1,v2,v0);
+          if(vv0===0&&vv1===-1)createSingleCrossPoint(c,n,1,v1,v2,v0);
+          if(vv1===0&&vv2===1)createSingleCrossPoint(c,n,0,v2,v0,v1);
+          if(vv1===0&&vv2===-1)createSingleCrossPoint(c,n,1,v2,v0,v1);
+          if(vv2===0&&vv0===1)createSingleCrossPoint(c,n,0,v0,v1,v2);
+          if(vv2===0&&vv0===-1)createSingleCrossPoint(c,n,1,v0,v1,v2);
+        }else{
+          // 1,1,-1  1,-1,1  -1,1,1  -1,-1,1  -1,1,-1  1,-1,-1の6通り
+          if(vv0===1&&vv1===1)createDoubleCrossPoints(c,n,0,v1,v2,v0);
+          if(vv1===1&&vv2===1)createDoubleCrossPoints(c,n,0,v2,v0,v1);
+          if(vv2===1&&vv0===1)createDoubleCrossPoints(c,n,0,v0,v1,v2);
+          if(vv0===-1&&vv1===-1)createDoubleCrossPoints(c,n,1,v1,v2,v0);
+          if(vv1===-1&&vv2===-1)createDoubleCrossPoints(c,n,1,v2,v0,v1);
+          if(vv2===-1&&vv0===-1)createDoubleCrossPoints(c,n,1,v0,v1,v2);
+        }
+      }
+    }
+
+    // 今回は細分が目的なので
+    // vertexObjectArrayからそのまま出しちゃえばOK
+    geom.vertices.length = 0;
+    if(useVertexNormals && !autoNormal) geom.vertexNormals.length = 0;
+    if(useVertexColors) geom.vertexColors.length = 0;
+    if(useUvs) geom.uvs.length = 0;
+
+    for(let i=0; i<vertexObjectArray.length; i++){
+      const vo = vertexObjectArray[i][0];
+      geom.vertices.push(vo.p);
+      // ここで法線や色やらuvやら処理してしまう
+      if(useVertexNormals && !autoNormal){
+        geom.vertexNormals.push(vo.vN);
+      }
+      if(useVertexColors){
+        geom.vertexColors.push(...vo.vC);
+      }
+      if(useUvs){
+        geom.uvs.push(...vo.vUv);
+      }
+    }
+
+    // autoNormalの場合は法線計算
+    if(useVertexNormals && autoNormal){
+      geom.computeNormals();
+    }
+
+    // あとはfacesだが、indexをそのまま使って翻訳すればOK
+    // edgesも。ただし両方からぶち込む。
+    geom.faces.length = 0;
+    for(const face of faceArray0){
+      geom.faces.push([face[0].index, face[1].index, face[2].index]);
+    }
+    for(const face of faceArray1){
+      geom.faces.push([face[0].index, face[1].index, face[2].index]);
+    }
+    if(useEdges){
+      geom.edges.length = 0;
+      for(const edge of edgeArray0){
+        geom.edges.push([edge[0].index, edge[1].index]);
+      }
+      for(const edge of edgeArray1){
+        geom.edges.push([edge[0].index, edge[1].index]);
+      }
+      geom._edgesToVertices();
+    }
+    // 戻り値は、無いです。
+  }
 
   // utility関連（番外）
 
@@ -2214,6 +2954,8 @@ const fisceToyBox = (function(){
   fisce.createPlaneMeshFromCycles = createPlaneMeshFromCycles;
   fisce.createBoardMeshFromCycles = createBoardMeshFromCycles;
   fisce.getBoundingBoxOfGeometry = getBoundingBoxOfGeometry;
+  fisce.separateGeometry = separateGeometry;
+  fisce.subDivideGeometry = subDivideGeometry
 
   return fisce;
 })();
