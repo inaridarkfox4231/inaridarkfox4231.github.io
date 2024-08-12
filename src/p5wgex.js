@@ -5956,6 +5956,20 @@ const p5wgex = (function(){
       fig.swapAttribute(attrName0, attrName1);
       return this;
     }
+    disableUnusedAttribute(){
+      // 使用しないvertexAttribute,というかレジスタを使用不可にすることで処理系依存のバグを防ぐ為の関数。
+      // drawCall前に呼んで使用するPainterとFigureの情報から使用されないvertexAttributeを特定しdisableにする。
+      const attrs = this.currentPainter.getAttributes();
+      const vbos = this.currentFigure.getVBOs();
+      for(const attrName of Object.keys(attrs)){
+        // 登録されているattributeでshaderに出現し、かつcountが正の物だけenableになっているようにしたい。
+        if(vbos[attrName] !== undefined){
+          if(fig[attrName].count > 0){ continue; }
+        }
+        // そうでないものをdisableにするわけ
+    		this.gl.disableVertexAttribArray(attrs[attrName].location);
+    	}
+    }
     drawCall(callName, mode, options = {}){
       // 総合ドローコール関数
       // 元のあれこれもそのままおいとくけどね。後方互換性。なくすかも...しれないが...
@@ -6032,6 +6046,9 @@ const p5wgex = (function(){
         // "back"や"front"を指定すれば、カリングの状態も変更される。invalidの場合何も起きない。
         this.cullFace(cullFace);
       }
+      // ここでdisable.
+      this.disableUnusedAttribute();
+      // drawCall実行パート（switch分岐）
       switch(callName) {
         case "arrays":
           this.gl.drawArrays(this.dict[mode], first, count); break;
