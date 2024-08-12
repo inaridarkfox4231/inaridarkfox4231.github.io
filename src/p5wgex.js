@@ -5964,7 +5964,7 @@ const p5wgex = (function(){
       for(const attrName of Object.keys(attrs)){
         // 登録されているattributeでshaderに出現し、かつcountが正の物だけenableになっているようにしたい。
         if(vbos[attrName] !== undefined){
-          if(fig[attrName].count > 0){ continue; }
+          if(vbos[attrName].count > 0){ continue; }
         }
         // そうでないものをdisableにするわけ
     		this.gl.disableVertexAttribArray(attrs[attrName].location);
