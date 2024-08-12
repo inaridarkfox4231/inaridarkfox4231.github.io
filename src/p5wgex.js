@@ -7801,7 +7801,7 @@ const p5wgex = (function(){
 
         // directionalLightの計算
         void applyDirectionalLight(vec3 direction, vec3 diffuseColor, vec3 specularColor,
-                                   vec3 modelPosition, vec3 normal, out vec3 diffuse, out vec3 specular){
+                                   vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
           vec3 lightVector = (uViewMatrix * vec4(direction, 0.0)).xyz;
           vec3 lightDir = normalize(lightVector);
@@ -7817,7 +7817,7 @@ const p5wgex = (function(){
 
         // PointLight項の計算。attenuationも考慮。
         void applyPointLight(vec3 location, vec3 diffuseColor, vec3 specularColor,
-                             vec3 modelPosition, vec3 normal, out vec3 diffuse, out vec3 specular){
+                             vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
           vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz;
           vec3 lightVector = modelPosition - lightPosition;
@@ -7838,7 +7838,7 @@ const p5wgex = (function(){
         // SpotLight項の計算。attenuationは共通で。
         // locationとdirectionが両方入っているうえ、光源の開き(angle)と集中度合い(conc)が追加されて複雑になってる。
         void applySpotLight(vec3 location, vec3 direction, float angle, float conc, vec3 diffuseColor, vec3 specularColor,
-                            vec3 modelPosition, vec3 normal, out vec3 diffuse, out vec3 specular){
+                            vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
           vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz; // locationは光の射出位置
           vec3 lightVector = modelPosition - lightPosition; // 光源 → モデル位置

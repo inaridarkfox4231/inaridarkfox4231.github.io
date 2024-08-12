@@ -2565,14 +2565,15 @@ const fisceToyBox = (function(){
     params:
       c: カットに使う平面の中心
       n: 法線
-      autoNormal: 法線を補間するかどうか。しない場合、computeNormalsで計算される。default:true
+      autoNormal: 法線を補間するかどうか。しない場合、computeNormalsで計算される。default:false
+    法線は自動計算だと基本的に汚くなるのでやらない方がいいです。
     平面で分割して切れ目を入れる。ポリゴンはその面との交点を含むように分割される。
     これにより、ジオメトリーを曲げる際に不自然な崩壊が起きないようにできる。
     具体的には曲げる方向に応じて沢山分割したりなどといったことに使う。
   */
   function subDivideGeometry(geom, params = {}){
     const {vertices, faces, vertexNormals = [], vertexColors = [], uvs = [], edges = []} = geom;
-    const {c = createVector(), n = createVector(1,0,0), autoNormal = true} = params;
+    const {c = createVector(), n = createVector(1,0,0), autoNormal = false} = params;
     const vertexObjectArray = [];
 
     // 補間用フラグ
