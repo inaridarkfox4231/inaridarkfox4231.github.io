@@ -805,6 +805,13 @@ const foxIA = (function(){
   // キーを押したとき(activate), キーを押しているとき(update), キーを離したとき(inActivate),
   // それぞれに対してイベントを設定する。
   // 改変でキーコードが分かるようにするわ。
+
+  // 改善案（同時押し対応）
+  // isActiveが未定義の場合nullを返しているところをfalseを返すようにする
+  // さらにactivate,update,inActivateの関数登録で引数を持たせられるようにする。その内容は第一引数で、
+  // thisである。どう使うかというとたとえば(e)=>{if(e.isActive){~~~}}といった感じで「これこれのキーが押されている場合～～」
+  // っていう、いわゆる同時押し対応をできるようにする。その際、たとえばBを押しながらAのときに、Bを押すだけの処理が存在しないと
+  // isActiveがnullを返してしまうので、先のように変更したいわけです。
   class KeyAction extends Interaction{
     constructor(canvas, options = {}){
       // keydown,keyupは何も指定せずともlistenerが登録されるようにする
@@ -865,7 +872,7 @@ const foxIA = (function(){
     }
     isActive(code){
       const agent = this.keys[code];
-      if (agent === undefined) return null;
+      if (agent === undefined) return false; // 未定義の場合はfalse.
       return agent.active;
     }
     keyDownAction(e){
@@ -880,21 +887,21 @@ const foxIA = (function(){
       }
       const agent = this.keys[e.code];
       if (agent === undefined || agent.active) return;
-      agent.activate();
+      agent.activate(this); // this.isActiveなどの処理を可能にする。
       agent.active = true;
     }
     update(){
       for(const name of Object.keys(this.keys)){
         const agent = this.keys[name];
         if (agent.active) {
-          agent.update();
+          agent.update(this); // this.isActiveなどの処理を可能にする。
         }
       }
     }
     keyUpAction(e){
       const agent = this.keys[e.code];
       if (agent === undefined || !agent.active) return;
-      agent.inActivate();
+      agent.inActivate(this); // this.isActiveなどの処理を可能にする。
       agent.active = false;
     }
   }
