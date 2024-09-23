@@ -322,7 +322,11 @@ const foxIA = (function(){
       //this.canvasLeft = rect.left;
       //this.canvasTop = rect.top;
       // 右クリック時のメニュー表示を殺す
-      document.oncontextmenu = (e) => { e.preventDefault(); }
+      // 一応デフォルトtrueのオプションにするか...（あんま意味ないが）
+      const {preventOnContextMenu = true} = options;
+      if(preventOnContextMenu){
+        document.oncontextmenu = (e) => { e.preventDefault(); }
+      }
       // touchのデフォルトアクションを殺す
       //canvas.style["touch-action"] = "none";
       // イベントリスナー
@@ -401,7 +405,7 @@ const foxIA = (function(){
     }
     mouseMovePointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
-      if(this.pointers.length == 0){ return; }
+      if(this.pointers.length === 0){ return; }
       const p = this.pointers[0];
       p.mouseUpdate(e);
       p.mouseMoveAction(e);
@@ -415,7 +419,7 @@ const foxIA = (function(){
     }
     mouseUpPointerAction(){
       // pointerが生成されなかった場合は処理を実行しない
-      if(this.pointers.length == 0){ return; }
+      if(this.pointers.length === 0){ return; }
       // ここで排除するpointerに何かさせる...
       const p = this.pointers[0];
       p.mouseUpAction();
@@ -455,7 +459,7 @@ const foxIA = (function(){
       // シングルタップの場合、0ならカウントを増やしつつ350ms後に0にするカウントダウンを開始
       // ただし、factoryがnullを返すなど、pointerが生成されないならば、実行しない。
       // pointerが無い以上、ダブルタップの判定が出来ないので。
-      if(this.pointers.length == 0){ return; }
+      if(this.pointers.length === 0){ return; }
       if(this.tapCount === 0){
         // thisをbindしないとおかしなことになると思う
         setTimeout((function(){ this.tapCount = 0; }).bind(this), 350);
@@ -539,7 +543,7 @@ const foxIA = (function(){
     }
     touchMovePointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
-      if(this.pointers.length == 0){ return; }
+      if(this.pointers.length === 0){ return; }
       //e.preventDefault();
       const currentTouches = e.targetTouches;
       for (let i = 0; i < currentTouches.length; i++){
@@ -575,7 +579,7 @@ const foxIA = (function(){
     }
     touchEndPointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
-      if(this.pointers.length == 0){ return; }
+      if(this.pointers.length === 0){ return; }
       const changedTouches = e.changedTouches;
       for (let i = 0; i < changedTouches.length; i++){
         for (let j = this.pointers.length-1; j >= 0; j--){
