@@ -453,6 +453,9 @@ const foxIA = (function(){
       // マルチタップ時にはイベントキャンセル（それはダブルタップではない）
       if(this.pointers.length > 1){ this.tapCount = 0; return; }
       // シングルタップの場合、0ならカウントを増やしつつ350ms後に0にするカウントダウンを開始
+      // ただし、factoryがnullを返すなど、pointerが生成されないならば、実行しない。
+      // pointerが無い以上、ダブルタップの判定が出来ないので。
+      if(this.pointers.length == 0){ return; }
       if(this.tapCount === 0){
         // thisをbindしないとおかしなことになると思う
         setTimeout((function(){ this.tapCount = 0; }).bind(this), 350);
