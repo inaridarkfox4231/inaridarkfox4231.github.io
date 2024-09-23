@@ -819,7 +819,41 @@ const foxIA = (function(){
 
   // キーを押したとき(activate), キーを押しているとき(update), キーを離したとき(inActivate),
   // それぞれに対してイベントを設定する。
-  // 改変でキーコードが分かるようにするわ。
+  // 改変でキーコードが分かるようにするわ（どう使うか？showKeyCode:trueしたうえで使いたいキーをたたくだけ。）
+
+  // キーごとにただひとつ生成されるagent
+  // プロパティを持たせることで処理に柔軟性を持たせることができる。
+  // もちろんすべてのagentが共通のプロパティを持つ必要はないが、
+  // そこはメソッドで無視すればいいだけ。
+  class KeyAgent{
+    constructor(code){
+      this.code = code;
+      // tは親のKeyActionで、すなわちそれを受け取る。
+      // 他のキーのactive状態などを分岐処理に利用できる。
+      this.activateFunction = (t,a)=>{};
+      this.updateFunction = (t,a)=>{};
+      this.inActivateFunction = (t,a)=>{};
+      this.active = false;
+    }
+    isActive(){
+      return this.active;
+    }
+    activate(t){
+      this.activateFunction(t, this);
+      this.active = true;
+    }
+    update(t){
+      this.updateFunction(t, this);
+    }
+    inActivate(t){
+      this.inActivateFunction(t, this);
+      this.active = false;
+    }
+    registAction(actionType, func){
+      if(typeof actionType)
+      this[actionType.concat("Function")] = func;
+    }
+  }
 
   // 改善案（同時押し対応）
   // isActiveが未定義の場合nullを返しているところをfalseを返すようにする
@@ -827,6 +861,8 @@ const foxIA = (function(){
   // thisである。どう使うかというとたとえば(e)=>{if(e.isActive){~~~}}といった感じで「これこれのキーが押されている場合～～」
   // っていう、いわゆる同時押し対応をできるようにする。その際、たとえばBを押しながらAのときに、Bを押すだけの処理が存在しないと
   // isActiveがnullを返してしまうので、先のように変更したいわけです。
+  // 改良版KeyAction.
+  // agentをクラス化することでさらに複雑な処理を可能にする.
   class KeyAction extends Interaction{
     constructor(canvas, options = {}){
       // keydown,keyupは何も指定せずともlistenerが登録されるようにする
@@ -838,6 +874,10 @@ const foxIA = (function(){
       this.options = {
         showKeyCode:false, autoRegist:true
       }
+      // keyAgentFactoryはcodeを引数に取る
+      // codeごとに異なる毛色のagentが欲しい場合に有用
+      const {keyAgentFactory = (code) => new KeyAgent(code)} = options;
+      this.keyAgentFactory = keyAgentFactory;
       // showKeyCode: デフォルトはfalse. trueの場合、キーをたたくとコンソールにe.codeが表示される
       // autoRegist: デフォルトはtrue. trueの場合、キーをたたくと自動的にkeyActionObjectがそれに対して生成される。
     }
@@ -862,19 +902,27 @@ const foxIA = (function(){
         const agent = this.keys[code];
         if (agent === undefined) {
           // 存在しない場合は、空っぽのアクションが生成される。指定がある場合はそれが設定される。
-          const result = {};
+          //const result = {};
+          const newAgent = this.keyAgentFactory(code);
           const {
-            activate = () => {}, update = () => {}, inActivate = () => {}
+            activate = (t,a) => {},
+            update = (t,a) => {},
+            inActivate = (t,a) => {}
           } = actions;
-          result.activate = activate;
-          result.update = update;
-          result.inActivate = inActivate;
-          result.active = false;
-          this.keys[code] = result;
+          newAgent.registAction("activate", activate);
+          newAgent.registAction("update", update);
+          newAgent.registAction("inActivate", inActivate);
+          this.keys[code] = newAgent;
+          //result.activate = activate;
+          //result.update = update;
+          //result.inActivate = inActivate;
+          //result.active = false;
+          //this.keys[code] = result;
         } else {
           // 存在する場合、actionsで指定されたものだけ上書きされる。
           for (const actionType of Object.keys(actions)) {
-            agent[actionType] = actions[actionType];
+            //agent[actionType] = actions[actionType];
+            agent.registAction(actionType, actions[actionType]);
           }
         }
       } else if (typeof code === 'object') {
@@ -888,7 +936,8 @@ const foxIA = (function(){
     isActive(code){
       const agent = this.keys[code];
       if (agent === undefined) return false; // 未定義の場合はfalse.
-      return agent.active;
+      //return agent.active;
+      return agent.isActive();
     }
     keyDownAction(e){
       if (this.options.showKeyCode) {
@@ -901,23 +950,28 @@ const foxIA = (function(){
         this.registAction(e.code);
       }
       const agent = this.keys[e.code];
-      if (agent === undefined || agent.active) return;
-      agent.activate(this); // this.isActiveなどの処理を可能にする。
-      agent.active = true;
+      if(agent === undefined || agent.isActive())return;
+      agent.activate(this);
+      //if (agent === undefined || agent.active) return;
+      //agent.activate(this); // this.isActiveなどの処理を可能にする。
+      //agent.active = true;
     }
     update(){
       for(const name of Object.keys(this.keys)){
         const agent = this.keys[name];
-        if (agent.active) {
+        //if (agent.active) {
+        if(agent.isActive()){
           agent.update(this); // this.isActiveなどの処理を可能にする。
         }
       }
     }
     keyUpAction(e){
       const agent = this.keys[e.code];
-      if (agent === undefined || !agent.active) return;
-      agent.inActivate(this); // this.isActiveなどの処理を可能にする。
-      agent.active = false;
+      if(agent===undefined || !agent.isActive()) return;
+      agent.inActivate(this);
+      //if (agent === undefined || !agent.active) return;
+      //agent.inActivate(this); // this.isActiveなどの処理を可能にする。
+      //agent.active = false;
     }
   }
 
@@ -925,6 +979,7 @@ const foxIA = (function(){
   fox.PointerPrototype = PointerPrototype;
   fox.Inspector = Inspector;
   fox.Locater = Locater;
+  fox.KeyAgent = KeyAgent; // 追加(20240923)
   fox.KeyAction = KeyAction;
 
   return fox;
