@@ -283,6 +283,8 @@ const foxIA = (function(){
   // 特に指定が無ければ空っぽのoptionsでやればいい。factoryが欲しい、clickやdblclickを有効化したい場合に
   // optionsを書けばいいわね。
   // setFactoryは必要になったら用意しましょ
+  // 仕様変更(20240923): factoryがnullを返す場合はpointerを生成しない。かつ、タッチエンド/マウスアップの際に
+  // pointersが空の場合は処理を実行しない。これにより、factoryで分岐処理を用意することで、ポインターの生成が実行されないようにできる。
   class Interaction{
     constructor(canvas, options = {}){
       this.pointers = [];
@@ -383,6 +385,7 @@ const foxIA = (function(){
     }
     mouseDownPointerAction(e){
       const p = this.factory();
+      if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
       //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
       p.mouseInitialize(e, this.rect);
       p.mouseDownAction(e);
@@ -397,6 +400,7 @@ const foxIA = (function(){
       this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.rect.left, e.clientY - this.rect.top);
     }
     mouseMovePointerAction(e){
+      // pointerが生成されなかった場合は処理を実行しない
       if(this.pointers.length == 0){ return; }
       const p = this.pointers[0];
       p.mouseUpdate(e);
@@ -410,6 +414,7 @@ const foxIA = (function(){
       this.mouseUpDefaultAction();
     }
     mouseUpPointerAction(){
+      // pointerが生成されなかった場合は処理を実行しない
       if(this.pointers.length == 0){ return; }
       // ここで排除するpointerに何かさせる...
       const p = this.pointers[0];
@@ -484,6 +489,7 @@ const foxIA = (function(){
         }
         if(!equalFlag){
           const p = this.factory();
+          if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
           //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
           p.touchInitialize(currentTouches[i], this.rect);
           p.touchStartAction(currentTouches[i]);
@@ -529,6 +535,8 @@ const foxIA = (function(){
       }
     }
     touchMovePointerAction(e){
+      // pointerが生成されなかった場合は処理を実行しない
+      if(this.pointers.length == 0){ return; }
       //e.preventDefault();
       const currentTouches = e.targetTouches;
       for (let i = 0; i < currentTouches.length; i++){
@@ -563,6 +571,8 @@ const foxIA = (function(){
       this.touchEndDefaultAction(e);
     }
     touchEndPointerAction(e){
+      // pointerが生成されなかった場合は処理を実行しない
+      if(this.pointers.length == 0){ return; }
       const changedTouches = e.changedTouches;
       for (let i = 0; i < changedTouches.length; i++){
         for (let j = this.pointers.length-1; j >= 0; j--){
