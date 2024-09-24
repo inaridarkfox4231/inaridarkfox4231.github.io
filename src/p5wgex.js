@@ -888,6 +888,9 @@ const foxIA = (function(){
       // こういう使い方もあるのだ（superの宣言箇所は任意！）
       options.keydown = true;
       options.keyup = true;
+      options.defaultIA = false; // 不要なので
+      options.wheel = false; // 不要なので
+      options.factory = () => null; // 不要なので
       super(canvas, options);
       this.keys = {};
       this.options = {
