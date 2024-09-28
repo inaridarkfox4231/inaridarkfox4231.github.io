@@ -508,6 +508,58 @@ const fisceToyBox = (function(){
   }
 
   /*
+    getTextDrawingData(params={})
+    params:
+      font: フォント。これが無いと始まらない。必須なのでデフォルトは無いです。
+      targetText: 文字列。default:"A"
+      textScale: スケール。大きさの目安。 default:320
+      position: 位置の目安。p5のベクトルでもよい。 default:{x:0,y:0}
+      alignV: 横方向。"left","center","right"に応じてどこにxが来るかを指定する。
+      alignH: 縦方向。"top","center","bottom"に応じてどこにyが来るかを指定する。
+      bezierDetail2: 2次ベジエのディテールの指定。default:8
+      bezierDetail3: 3次ベジエのディテールの指定。default:5
+      lineSegmentlengthRatio: Lを解釈する際の長さ指定のスケールに対する比率。default:1/64
+      spacingMinLengthRatio: evenlySpacingを適用する際の長さのスケールに対する比率。default:1/40
+    マージを除くすべて。基本的にはalignHまでしか要しない。
+    出力：
+      bd:描画されるテキストのbd.
+      dx,dy:描画時のずらし。これだけずらすと正確に描画できる。translateなどを使う。
+      path:Path2Dオブジェクト。これをdrawingContext.fill()で描画する。
+      たとえばalignV,alignHにleft,topを入れたうえで得られるdx,dyだけずらしてこのパスを描画すれば
+      bdの中にそれがすっぽりおさまる。
+    textFont()とtextAlign()を用いた描画では正確にアラインメントできないようです。そこで、
+    パスデータから逆算して位置をずらすことで厳密な描画を実現しようというわけです。
+    もっとも雑でいいならこの関数は不要ということでもあります。
+  */
+  function getTextDrawingData(params = {}){
+    const {
+      font, targetText = "A", textScale = 320, position = {x:0,y:0},
+      alignV = "center", alignH = "center",
+      bezierDetail2 = 8, bezierDetail3 = 5, lineSegmentLengthRatio = 1/64,
+      spacingMinLengthRatio = 1/40
+    } = params;
+    const cmd = font.font.getPath(targetText, 0, 0, textScale).commands;
+    const cmdText = parseCmdToText(cmd);
+
+    // 描画に使うパスを生成する
+    const textPath = new Path2D(cmdText);
+
+    const textContours = parseData({
+      data:cmdText,
+      bezierDetail2:bezierDetail2, bezierDetail3:bezierDetail3,
+      lineSegmentLength:lineSegmentLengthRatio*textScale
+    });
+    const tb = getBoundingBoxOfContours(textContours);
+
+    const factorW = (alignV === "left" ? 0 : (alignV === "right" ? 1 : 0.5));
+    const factorH = (alignH === "top" ? 0 : (alignH === "bottom" ? 1 : 0.5));
+    const deltaX = tb.x + tb.w*factorW - position.x;
+    const deltaY = tb.y + tb.h*factorH - position.y;
+    const bd = {x:tb.x - deltaX, y:tb.y - deltaY, w:tb.w, h:tb.h};
+    return {bd:bd, dx:-deltaX, dy:-deltaY, path:textPath};
+  }
+
+  /*
     getSVGContours(params={})
     params:
       svgData: svgデータの文字列をここに。たとえば例のツールで作ったやつとか。
@@ -2944,6 +2996,7 @@ const fisceToyBox = (function(){
   fisce.getBoundingBoxOfContours = getBoundingBoxOfContours;
   fisce.alignmentContours = alignmentContours;
   fisce.getTextContours = getTextContours;
+  fisce.getTextDrawingData = getTextDrawingData;
   fisce.getSVGContours = getSVGContours;
 
   // tessellation.
