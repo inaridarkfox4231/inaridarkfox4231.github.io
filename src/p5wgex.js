@@ -9675,6 +9675,7 @@ const p5wgex = (function(){
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.getTranspose3x3 = getTranspose3x3; // これ必要ですね...
   // 色関連
+  ex.presetColors = presetColors; // 色パレット
   ex.hsv2rgb = hsv2rgb;
   ex.hsvArray = hsvArray;
   ex.hsl2rgb_soft = hsl2rgb_soft;
