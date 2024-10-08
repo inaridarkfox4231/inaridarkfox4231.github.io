@@ -1008,7 +1008,11 @@ const foxIA = (function(){
     wheelScrollCoeff: ホイールの際の係数、デフォルト0.05
     swipeScrollCoeff: スワイプの際の係数、デフォルト0.2
     frictionCoeff: 値の減衰率。デフォルト0.15（0にすると滑りっぱなし）
+    scrollDirection: 通常はいじらない。Math.PI/2がデフォルト。
+    つまり下にスワイプ/ドラッグで増える。場合によってはそうでないと。ただその場合
+    ホイールは使われないと思う（知らんけど）。要するに0だと右操作で増える。
   */
+
   class Scroller extends Interaction{
     constructor(cvs, options = {}){
       super(cvs, options);
@@ -1018,7 +1022,8 @@ const foxIA = (function(){
         maxOffset = 5,
         wheelScrollCoeff = 0.05,
         swipeScrollCoeff = 0.2,
-        frictionCoeff = 0.15
+        frictionCoeff = 0.15,
+        scrollDirection = Math.PI*0.5, // swipeの際にどっちに動かすと増えるか
       } = options;
       this.offset = defaultOffset;
       this.offsetVelocity = 0;
@@ -1029,6 +1034,7 @@ const foxIA = (function(){
       this.wheelScrollCoeff = wheelScrollCoeff;
       this.swipeScrollCoeff = swipeScrollCoeff;
       this.frictionCoeff = frictionCoeff;
+      this.scrollDirection = scrollDirection;
     }
     resetOffset(){
       // ページ遷移の際にオフセットがリセットされると便利かも
@@ -1052,8 +1058,16 @@ const foxIA = (function(){
     getOffset(){
       return this.offset;
     }
-    touchSwipeAction(dx,dy,x,y,px,py){
-      this.offsetAcceleration = dy * this.swipeScrollCoeff;
+    applyAcceleration(dx, dy){
+      if(this.pointers.length === 0) return; // 必須
+      const acceleration = Math.cos(this.scrollDirection) * dx + Math.sin(this.scrollDirection) * dy;
+      this.offsetAcceleration = acceleration * this.swipeScrollCoeff;
+    }
+    mouseMoveDefaultAction(dx, dy, x, y){
+      this.applyAcceleration(dx, dy);
+    }
+    touchSwipeAction(dx, dy, x, y, px, py){
+      this.applyAcceleration(dx, dy);
     }
   }
 
