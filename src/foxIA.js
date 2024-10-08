@@ -1020,7 +1020,7 @@ const foxIA = (function(){
         this[param] = params[param];
       }
     }
-    offsetUpdate(){
+    updateOffset(){
       this.offsetVelocity += this.offsetAcceleration;
       this.offsetAcceleration = 0;
       this.offset = Math.min(Math.max(this.offset + this.offsetVelocity, this.minOffset), this.maxOffset);
