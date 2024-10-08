@@ -997,12 +997,73 @@ const foxIA = (function(){
     }
   }
 
+  /*
+    使い方
+    defaultOffsetを定義します（0でもいいし何でも）
+    マウススクロールや上下スワイプで値が変動します
+    getOffset()で値を取得します
+    setParamで微調整します
+    minOffset: offsetの最小値
+    maxOffset: offsetの最大値
+    wheelScrollCoeff: ホイールの際の係数、デフォルト0.05
+    swipeScrollCoeff: スワイプの際の係数、デフォルト0.2
+    frictionCoeff: 値の減衰率。デフォルト0.15（0にすると滑りっぱなし）
+  */
+  class Scroller extends Interaction{
+    constructor(cvs, options = {}){
+      super(cvs, options);
+      const {
+        defaultOffset = 5,
+        minOffset = -1000,
+        maxOffset = 5,
+        wheelScrollCoeff = 0.05,
+        swipeScrollCoeff = 0.2,
+        frictionCoeff = 0.15
+      } = options;
+      this.offset = defaultOffset;
+      this.offsetVelocity = 0;
+      this.offsetAcceleration = 0;
+      this.defaultOffset = defaultOffset;
+      this.maxOffset = maxOffset;
+      this.minOffset = minOffset;
+      this.wheelScrollCoeff = wheelScrollCoeff;
+      this.swipeScrollCoeff = swipeScrollCoeff;
+      this.frictionCoeff = frictionCoeff;
+    }
+    resetOffset(){
+      // ページ遷移の際にオフセットがリセットされると便利かも
+      this.offset = this.defaultOffset;
+    }
+    setParam(params = {}){
+      for(const param of Object.keys(params)){
+        this[param] = params[param];
+      }
+    }
+    offsetUpdate(){
+      this.offsetVelocity += this.offsetAcceleration;
+      this.offsetAcceleration = 0;
+      this.offset = Math.min(Math.max(this.offset + this.offsetVelocity, this.minOffset), this.maxOffset);
+      this.offsetVelocity *= 1.0 - this.frictionCoeff;
+      if(Math.abs(this.offsetVelocity)<0.001)this.offsetVelocity = 0;
+    }
+    wheelAction(e){
+      this.offsetAcceleration = -e.deltaY*this.wheelScrollCoeff;
+    }
+    getOffset(){
+      return this.offset;
+    }
+    touchSwipeAction(dx,dy,x,y,px,py){
+      this.offsetAcceleration = dy * this.swipeScrollCoeff;
+    }
+  }
+
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
   fox.Inspector = Inspector;
   fox.Locater = Locater;
   fox.KeyAgent = KeyAgent; // 追加(20240923)
   fox.KeyAction = KeyAction;
+  fox.Scroller = Scroller; // 追加(20241008)
 
   return fox;
 })();

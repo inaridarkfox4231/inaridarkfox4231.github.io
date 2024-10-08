@@ -980,15 +980,15 @@ const foxIA = (function(){
 
   /*
     使い方
-  	defaultOffsetを定義します（0でもいいし何でも）
-  	マウススクロールや上下スワイプで値が変動します
-  	getOffset()で値を取得します
-  	setParamで微調整します
-  	minOffset: offsetの最小値
-  	maxOffset: offsetの最大値
-  	wheelScrollCoeff: ホイールの際の係数、デフォルト0.05
-  	swipeScrollCoeff: スワイプの際の係数、デフォルト0.2
-  	frictionCoeff: 値の減衰率。デフォルト0.15（0にすると滑りっぱなし）
+    defaultOffsetを定義します（0でもいいし何でも）
+    マウススクロールや上下スワイプで値が変動します
+    getOffset()で値を取得します
+    setParamで微調整します
+    minOffset: offsetの最小値
+    maxOffset: offsetの最大値
+    wheelScrollCoeff: ホイールの際の係数、デフォルト0.05
+    swipeScrollCoeff: スワイプの際の係数、デフォルト0.2
+    frictionCoeff: 値の減衰率。デフォルト0.15（0にすると滑りっぱなし）
   */
   class Scroller extends Interaction{
     constructor(cvs, options = {}){
@@ -1004,11 +1004,16 @@ const foxIA = (function(){
       this.offset = defaultOffset;
       this.offsetVelocity = 0;
       this.offsetAcceleration = 0;
+      this.defaultOffset = defaultOffset;
       this.maxOffset = maxOffset;
       this.minOffset = minOffset;
       this.wheelScrollCoeff = wheelScrollCoeff;
       this.swipeScrollCoeff = swipeScrollCoeff;
       this.frictionCoeff = frictionCoeff;
+    }
+    resetOffset(){
+      // ページ遷移の際にオフセットがリセットされると便利かも
+      this.offset = this.defaultOffset;
     }
     setParam(params = {}){
       for(const param of Object.keys(params)){
