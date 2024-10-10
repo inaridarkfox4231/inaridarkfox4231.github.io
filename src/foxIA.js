@@ -980,69 +980,107 @@ const foxIA = (function(){
 
   /*
     使い方
-    defaultOffsetを定義します（0でもいいし何でも）
-    マウススクロールや上下スワイプで値が変動します
-    getOffset()で値を取得します
-    setParamで微調整します
-    minOffset: offsetの最小値
-    maxOffset: offsetの最大値
-    wheelScrollCoeff: ホイールの際の係数、デフォルト0.05
-    swipeScrollCoeff: スワイプの際の係数、デフォルト0.2
-    frictionCoeff: 値の減衰率。デフォルト0.15（0にすると滑りっぱなし）
-    scrollDirection: 通常はいじらない。Math.PI/2がデフォルト。
-    つまり下にスワイプ/ドラッグで増える。場合によってはそうでないと。ただその場合
-    ホイールは使われないと思う（知らんけど）。要するに0だと右操作で増える。
+    defaultValueとminValue,maxValueを定義する
+    ホイールで動かすなら適当に係数を決めて
+    アクションでsetForceを呼び出せばいい
+    DamperのgetValue,setParam,setForce,resetValue,updateValueはすべて
+    同じ名前で使える
+    ピンチインアウトで単純拡縮とか
+    そういう使い方もできるでしょ。多分ね。
   */
+  class Damper{
+    constructor(params = {}){
+      const {
+        defaultValue = 0,
+        minValue = -100,
+        maxValue = 0,
+        frictionCoeff = 0.15,
+      } = params;
+      this.value = defaultValue;
+      this.velocity = 0;
+      this.acceleration = 0;
+      this.defaultValue = defaultValue;
+      this.minValue = minValue;
+      this.maxValue = maxValue;
+      this.frictionCoeff = frictionCoeff;
+    }
+    resetValue(){
+      this.value = this.defaultValue;
+    }
+    setParam(params = {}){
+      // 用意されたものだけ変更すればよい
+      for(const param of Object.keys(params)){
+        if(this[param] === undefined)continue;
+        this[param] = params[param];
+      }
+    }
+    setForce(force){
+      this.acceleration = force;
+    }
+    updateValue(){
+      this.velocity += this.acceleration;
+      this.acceleration = 0;
+      this.value += this.velocity;
+      if(this.value > this.maxValue){
+        this.value = this.maxValue; this.velocity = 0;
+      }
+      if(this.value < this.minValue){
+        this.value = this.minValue; this.velocity = 0;
+      }
+      this.velocity *= 1.0 - this.frictionCoeff;
+      if(Math.abs(this.velocity)<0.001)this.velocity = 0;
+    }
+    getValue(){
+      return this.value;
+    }
+    getVelocity(){
+      return this.velocity;
+    }
+    implement(target, implementMethodNames = []){
+      // targetにメソッドを継承させるコード
+      if(implementMethodNames.length === 0){
+        // デフォルトで継承するコード
+        implementMethodNames.push(
+          "getValue", "getVelocity", "resetValue",
+          "updateValue", "setParam", "setForce"
+        );
+      }
+      // 引数がどうであっても継承させられる
+      for(const methodName of implementMethodNames){
+        target[methodName] = (function(){
+          return this[methodName](...arguments);
+        }).bind(this);
+      }
+    }
+  }
 
+  // とはいえいちいちエクステンション書くのめんどくさいな
+  // というわけでdamperにimplementを導入しました
+
+  // 厳密には違うけど。ただの横着。
   class Scroller extends Interaction{
     constructor(cvs, options = {}){
       super(cvs, options);
       const {
-        defaultOffset = 5,
-        minOffset = -1000,
-        maxOffset = 5,
         wheelScrollCoeff = 0.05,
         swipeScrollCoeff = 0.2,
-        frictionCoeff = 0.15,
         scrollDirection = Math.PI*0.5, // swipeの際にどっちに動かすと増えるか
       } = options;
-      this.offset = defaultOffset;
-      this.offsetVelocity = 0;
-      this.offsetAcceleration = 0;
-      this.defaultOffset = defaultOffset;
-      this.maxOffset = maxOffset;
-      this.minOffset = minOffset;
+      this.damper = new Damper(options);
+      // こう書くだけでdamperの主要メソッドはすべて継承される
+      this.damper.implement(this);
+
       this.wheelScrollCoeff = wheelScrollCoeff;
       this.swipeScrollCoeff = swipeScrollCoeff;
-      this.frictionCoeff = frictionCoeff;
       this.scrollDirection = scrollDirection;
     }
-    resetOffset(){
-      // ページ遷移の際にオフセットがリセットされると便利かも
-      this.offset = this.defaultOffset;
-    }
-    setParam(params = {}){
-      for(const param of Object.keys(params)){
-        this[param] = params[param];
-      }
-    }
-    updateOffset(){
-      this.offsetVelocity += this.offsetAcceleration;
-      this.offsetAcceleration = 0;
-      this.offset = Math.min(Math.max(this.offset + this.offsetVelocity, this.minOffset), this.maxOffset);
-      this.offsetVelocity *= 1.0 - this.frictionCoeff;
-      if(Math.abs(this.offsetVelocity)<0.001)this.offsetVelocity = 0;
-    }
     wheelAction(e){
-      this.offsetAcceleration = -e.deltaY*this.wheelScrollCoeff;
-    }
-    getOffset(){
-      return this.offset;
+      this.setForce(-e.deltaY*this.wheelScrollCoeff);
     }
     applyAcceleration(dx, dy){
       if(this.pointers.length === 0) return; // 必須
       const acceleration = Math.cos(this.scrollDirection) * dx + Math.sin(this.scrollDirection) * dy;
-      this.offsetAcceleration = acceleration * this.swipeScrollCoeff;
+      this.setForce(acceleration * this.swipeScrollCoeff);
     }
     mouseMoveDefaultAction(dx, dy, x, y){
       this.applyAcceleration(dx, dy);
@@ -1058,6 +1096,7 @@ const foxIA = (function(){
   fox.Locater = Locater;
   fox.KeyAgent = KeyAgent; // 追加(20240923)
   fox.KeyAction = KeyAction;
+  fox.Damper = Damper; // DamperとScrollerを分離(20241010)
   fox.Scroller = Scroller; // 追加(20241008)
 
   return fox;
