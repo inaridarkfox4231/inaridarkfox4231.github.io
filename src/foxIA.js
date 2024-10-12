@@ -2,6 +2,20 @@
 MANUAL
 マニュアルを書きます
 
+この度公開することになったので
+えーと。
+wheelActionでマウス位置を使いたい
+ということなので
+マウス位置をゲットする関数を導入します
+mouse(e){
+  return {x:e.clientX - this.rect.left, y:e.clientY - this.rect.top};
+}
+ホイールイベントとかでマウス位置が欲しい場合に便利かなと。
+タッチの場合はpage...
+もしかしてマウスの場合もpageの方がいい？？
+みたいですね...
+pageにしよう。ごめんなさい。
+
 PointerPrototypeの仕様と継承の仕方、用意すべき関数について
 Interactionの仕様と継承の仕方、用意すべき関数について
 特にeとかtなどの引数の有無、それらがイベントの場合とpointerの場合が混在していて若干面倒なことになってるのでね。
@@ -100,7 +114,7 @@ Interaction:
     これをx,yで書かないのは、要するにタッチだとそれがあちこちになるので不整合、
     そこら辺を考慮してる。詳しくやりたいならPointerを継承すべき。
   mouseMoveDefaultAction(dx, dy, x, y):
-    e.clientX/Yからキャンバスの位置座標を引いて計算する
+    e.clientX/Yからキャンバスの位置座標を引いて計算する -> pageじゃないとスクロールに対応できないのでpageに変更
     マウスポインタが存在しなくても実行されるようにする必要があるのでそういう形になる
     なるんだけど
     それだけ用意してもタッチサイドでは何もできないのでう～んって感じではあるわね
@@ -194,8 +208,8 @@ const foxIA = (function(){
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
     mouseInitialize(e, rect){
-      this.x = e.clientX - rect.left;
-      this.y = e.clientY - rect.top;
+      this.x = e.pageX - rect.left;
+      this.y = e.pageY - rect.top;
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -209,10 +223,10 @@ const foxIA = (function(){
     mouseUpdate(e){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (e.clientX - this.rect.left - this.x);
-      this.dy = (e.clientY - this.rect.top - this.y);
-      this.x = e.clientX - this.rect.left;
-      this.y = e.clientY - this.rect.top;
+      this.dx = (e.pageX - this.rect.left - this.x);
+      this.dy = (e.pageY - this.rect.top - this.y);
+      this.x = e.pageX - this.rect.left;
+      this.y = e.pageY - this.rect.top;
     }
     mouseMoveAction(e){
     }
@@ -266,6 +280,8 @@ const foxIA = (function(){
   // 特に指定が無ければ空っぽのoptionsでやればいい。factoryが欲しい、clickやdblclickを有効化したい場合に
   // optionsを書けばいいわね。
   // setFactoryは必要になったら用意しましょ
+  // 仕様変更(20240923): factoryがnullを返す場合はpointerを生成しない。かつ、タッチエンド/マウスアップの際に
+  // pointersが空の場合は処理を実行しない。これにより、factoryで分岐処理を用意することで、ポインターの生成が実行されないようにできる。
   class Interaction{
     constructor(canvas, options = {}){
       this.pointers = [];
@@ -382,7 +398,12 @@ const foxIA = (function(){
     mouseMoveAction(e){
       this.mouseMovePointerAction(e);
       //this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.canvasLeft, e.clientY - this.canvasTop);
-      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.rect.left, e.clientY - this.rect.top);
+      // なぜmovementを使っているかというと、
+      // このアクションはポインターが無関係だから（ポインターが無くても実行される）
+      // まずいのはわかってるけどね...
+      // マウスダウン時のPointerの位置の計算についてはmovementが出てこないので
+      // マウスダウン時しか要らない場合は使わないのもあり。
+      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.pageX - this.rect.left, e.pageY - this.rect.top);
     }
     mouseMovePointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
@@ -408,6 +429,11 @@ const foxIA = (function(){
     }
     mouseUpDefaultAction(){
       // Interactionサイドの実行内容を書く
+    }
+    mouse(e){
+      // ホイールのイベントなどで正確なマウス座標が欲しい場合に有用
+      // マウス限定なのでイベント内部などマウスが関係する処理でしか使わない方がいいです
+      return {x:e.pageX - this.rect.left, y:e.pageY - this.rect.top};
     }
     wheelAction(e){
       // Interactionサイドの実行内容を書く
