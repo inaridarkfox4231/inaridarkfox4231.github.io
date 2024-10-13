@@ -205,6 +205,7 @@ const foxIA = (function(){
   class PointerPrototype{
     constructor(){
       this.id = -1;
+      this.parent = null; // 親のInteractionクラス。KAとかいろいろ応用できそう
       this.x = 0;
       this.y = 0;
       this.dx = 0;
@@ -216,9 +217,10 @@ const foxIA = (function(){
       this.rect = {width:0, height:0, left:0, top:0};
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
-    mouseInitialize(e, rect){
+    mouseInitialize(e, rect, parent = null){
       this.x = e.clientX - rect.left;
       this.y = e.clientY - rect.top;
+      this.parent = parent;
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -241,10 +243,11 @@ const foxIA = (function(){
     }
     mouseUpAction(){
     }
-    touchInitialize(t, rect){
+    touchInitialize(t, rect, parent = null){
       this.id = t.identifier;
       this.x = t.clientX - rect.left; // 要するにmouseX的なやつ
       this.y = t.clientY - rect.top; // 要するにmouseY的なやつ
+      this.parent = parent;
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -401,7 +404,7 @@ const foxIA = (function(){
       const p = this.factory();
       if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
       //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
-      p.mouseInitialize(e, this.rect);
+      p.mouseInitialize(e, this.rect, this);
       p.mouseDownAction(e);
       this.pointers.push(p);
     }
@@ -416,7 +419,7 @@ const foxIA = (function(){
       // まずいのはわかってるけどね...
       // マウスダウン時のPointerの位置の計算についてはmovementが出てこないので
       // マウスダウン時しか要らない場合は使わないのもあり。
-      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.pageX - this.rect.left, e.pageY - this.rect.top);
+      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.rect.left, e.clientY - this.rect.top);
     }
     mouseMovePointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
@@ -518,7 +521,7 @@ const foxIA = (function(){
           const p = this.factory();
           if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
           //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
-          p.touchInitialize(currentTouches[i], this.rect);
+          p.touchInitialize(currentTouches[i], this.rect, this);
           p.touchStartAction(currentTouches[i]);
           newPointers.push(p);
         }
@@ -821,6 +824,9 @@ const foxIA = (function(){
       // mouseFreeUpdateがtrueであれば常に位置更新がされるようにする
       // タッチの場合ここは実行されないため、mouseFreeUpdateがtrueでも問題ない。
       if (this.mouseFreeUpdate) {
+        // ああここか
+        // xとyをそのまま使っちゃってる
+        // ...
         this.positionUpdate(x, y, dx, dy);
       }
       if(this.active){

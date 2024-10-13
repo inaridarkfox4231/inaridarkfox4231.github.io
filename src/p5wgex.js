@@ -198,6 +198,7 @@ const foxIA = (function(){
   class PointerPrototype{
     constructor(){
       this.id = -1;
+      this.parent = null; // 親のInteractionクラス。KAとかいろいろ応用できそう
       this.x = 0;
       this.y = 0;
       this.dx = 0;
@@ -209,9 +210,10 @@ const foxIA = (function(){
       this.rect = {width:0, height:0, left:0, top:0};
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
-    mouseInitialize(e, rect){
-      this.x = e.pageX - rect.left;
-      this.y = e.pageY - rect.top;
+    mouseInitialize(e, rect, parent = null){
+      this.x = e.clientX - rect.left;
+      this.y = e.clientY - rect.top;
+      this.parent = parent;
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -225,19 +227,20 @@ const foxIA = (function(){
     mouseUpdate(e){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (e.pageX - this.rect.left - this.x);
-      this.dy = (e.pageY - this.rect.top - this.y);
-      this.x = e.pageX - this.rect.left;
-      this.y = e.pageY - this.rect.top;
+      this.dx = (e.clientX - this.rect.left - this.x);
+      this.dy = (e.clientY - this.rect.top - this.y);
+      this.x = e.clientX - this.rect.left;
+      this.y = e.clientY - this.rect.top;
     }
     mouseMoveAction(e){
     }
     mouseUpAction(){
     }
-    touchInitialize(t, rect){
+    touchInitialize(t, rect, parent = null){
       this.id = t.identifier;
-      this.x = t.pageX - rect.left; // 要するにmouseX的なやつ
-      this.y = t.pageY - rect.top; // 要するにmouseY的なやつ
+      this.x = t.clientX - rect.left; // 要するにmouseX的なやつ
+      this.y = t.clientY - rect.top; // 要するにmouseY的なやつ
+      this.parent = parent;
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -253,20 +256,20 @@ const foxIA = (function(){
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
       this.rect = {width, height, left, top};
-      this.x += prevLeft - l;
-      this.y += prevTop - t;
-      this.prevX += prevLeft - l;
-      this.prevY += prevTop - t;
+      this.x += prevLeft - left;
+      this.y += prevTop - top;
+      this.prevX += prevLeft - left;
+      this.prevY += prevTop - top;
     }
     touchStartAction(t){
     }
     touchUpdate(t){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (t.pageX - this.rect.left - this.x);
-      this.dy = (t.pageY - this.rect.top - this.y);
-      this.x = t.pageX - this.rect.left;
-      this.y = t.pageY - this.rect.top;
+      this.dx = (t.clientX - this.rect.left - this.x);
+      this.dy = (t.clientY - this.rect.top - this.y);
+      this.x = t.clientX - this.rect.left;
+      this.y = t.clientY - this.rect.top;
     }
     touchMoveAction(t){
     }
@@ -350,9 +353,12 @@ const foxIA = (function(){
 
       // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
       window.addEventListener('resize', (function(){
-        const newRect = canvas.getBoundingClientRect();
+
         //this.updateCanvasData(newRect.left, newRect.top);
-        this.updateCanvasData(newRect);
+        this.updateCanvasData();
+      }).bind(this));
+      window.addEventListener('scroll', (function(){
+        this.updateCanvasData();
       }).bind(this));
 
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
@@ -374,13 +380,14 @@ const foxIA = (function(){
       // リサイズ。
       if (resize) { canvas.addEventListener('resize', this.resizeAction.bind(this), {passive:false}); }
     }
-    updateCanvasData(rect){
+    updateCanvasData(){
+      const newRect = canvas.getBoundingClientRect();
       // 対象のキャンバスを更新
-      const {width, height, left, top} = rect;
+      const {width, height, left, top} = newRect;
       this.rect = {width, height, left, top};
       //this.canvasLeft = left;
       //this.canvasTop = top;
-      for(const p of this.pointers){ p.updateCanvasData(rect); }
+      for(const p of this.pointers){ p.updateCanvasData(newRect); }
     }
     mouseDownAction(e){
       this.mouseDownPointerAction(e);
@@ -390,7 +397,7 @@ const foxIA = (function(){
       const p = this.factory();
       if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
       //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
-      p.mouseInitialize(e, this.rect);
+      p.mouseInitialize(e, this.rect, this);
       p.mouseDownAction(e);
       this.pointers.push(p);
     }
@@ -405,7 +412,7 @@ const foxIA = (function(){
       // まずいのはわかってるけどね...
       // マウスダウン時のPointerの位置の計算についてはmovementが出てこないので
       // マウスダウン時しか要らない場合は使わないのもあり。
-      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.pageX - this.rect.left, e.pageY - this.rect.top);
+      this.mouseMoveDefaultAction(e.movementX, e.movementY, e.clientX - this.rect.left, e.clientY - this.rect.top);
     }
     mouseMovePointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
@@ -435,7 +442,7 @@ const foxIA = (function(){
     mouse(e){
       // ホイールのイベントなどで正確なマウス座標が欲しい場合に有用
       // マウス限定なのでイベント内部などマウスが関係する処理でしか使わない方がいいです
-      return {x:e.pageX - this.rect.left, y:e.pageY - this.rect.top};
+      return {x:e.clientX - this.rect.left, y:e.clientY - this.rect.top};
     }
     wheelAction(e){
       // Interactionサイドの実行内容を書く
@@ -507,7 +514,7 @@ const foxIA = (function(){
           const p = this.factory();
           if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
           //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
-          p.touchInitialize(currentTouches[i], this.rect);
+          p.touchInitialize(currentTouches[i], this.rect, this);
           p.touchStartAction(currentTouches[i]);
           newPointers.push(p);
         }
@@ -810,6 +817,9 @@ const foxIA = (function(){
       // mouseFreeUpdateがtrueであれば常に位置更新がされるようにする
       // タッチの場合ここは実行されないため、mouseFreeUpdateがtrueでも問題ない。
       if (this.mouseFreeUpdate) {
+        // ああここか
+        // xとyをそのまま使っちゃってる
+        // ...
         this.positionUpdate(x, y, dx, dy);
       }
       if(this.active){
