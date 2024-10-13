@@ -901,15 +901,15 @@ const foxIA = (function(){
   // isActiveがnullを返してしまうので、先のように変更したいわけです。
   // 改良版KeyAction.
   // agentをクラス化することでさらに複雑な処理を可能にする.
+  // うん
+  // PointerPrototypeで遊びたいので
+  // オフにするのはやめましょ
   class KeyAction extends Interaction{
     constructor(canvas, options = {}){
       // keydown,keyupは何も指定せずともlistenerが登録されるようにする
       // こういう使い方もあるのだ（superの宣言箇所は任意！）
       options.keydown = true;
       options.keyup = true;
-      options.defaultIA = false; // 不要なので
-      options.wheel = false; // 不要なので
-      options.factory = () => null; // 不要なので
       super(canvas, options);
       this.keys = {};
       this.options = {
