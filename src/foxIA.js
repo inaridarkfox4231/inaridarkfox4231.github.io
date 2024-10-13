@@ -15,6 +15,15 @@ mouse(e){
 もしかしてマウスの場合もpageの方がいい？？
 みたいですね...
 pageにしよう。ごめんなさい。
+20241013
+pageにしたらresizeの問題が再燃した...
+というかそれ以前にリサイズの問題はタッチの方でも解決してなかったのでやり直し...
+20241013
+pageをすべてclientに変更
+さらに
+windowのscroll時にもupdateCanvasData
+さらに
+PointerPrototypeのバグを修正（left,topがl,tになってた）
 
 PointerPrototypeの仕様と継承の仕方、用意すべき関数について
 Interactionの仕様と継承の仕方、用意すべき関数について
@@ -208,8 +217,8 @@ const foxIA = (function(){
       this.button = -1; // マウス用ボタン記録。-1:タッチですよ！の意味
     }
     mouseInitialize(e, rect){
-      this.x = e.pageX - rect.left;
-      this.y = e.pageY - rect.top;
+      this.x = e.clientX - rect.left;
+      this.y = e.clientY - rect.top;
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -223,10 +232,10 @@ const foxIA = (function(){
     mouseUpdate(e){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (e.pageX - this.rect.left - this.x);
-      this.dy = (e.pageY - this.rect.top - this.y);
-      this.x = e.pageX - this.rect.left;
-      this.y = e.pageY - this.rect.top;
+      this.dx = (e.clientX - this.rect.left - this.x);
+      this.dy = (e.clientY - this.rect.top - this.y);
+      this.x = e.clientX - this.rect.left;
+      this.y = e.clientY - this.rect.top;
     }
     mouseMoveAction(e){
     }
@@ -234,8 +243,8 @@ const foxIA = (function(){
     }
     touchInitialize(t, rect){
       this.id = t.identifier;
-      this.x = t.pageX - rect.left; // 要するにmouseX的なやつ
-      this.y = t.pageY - rect.top; // 要するにmouseY的なやつ
+      this.x = t.clientX - rect.left; // 要するにmouseX的なやつ
+      this.y = t.clientY - rect.top; // 要するにmouseY的なやつ
       //this.canvasLeft = left;
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
@@ -251,20 +260,20 @@ const foxIA = (function(){
       //this.canvasTop = top;
       const {width, height, left, top} = rect;
       this.rect = {width, height, left, top};
-      this.x += prevLeft - l;
-      this.y += prevTop - t;
-      this.prevX += prevLeft - l;
-      this.prevY += prevTop - t;
+      this.x += prevLeft - left;
+      this.y += prevTop - top;
+      this.prevX += prevLeft - left;
+      this.prevY += prevTop - top;
     }
     touchStartAction(t){
     }
     touchUpdate(t){
       this.prevX = this.x;
       this.prevY = this.y;
-      this.dx = (t.pageX - this.rect.left - this.x);
-      this.dy = (t.pageY - this.rect.top - this.y);
-      this.x = t.pageX - this.rect.left;
-      this.y = t.pageY - this.rect.top;
+      this.dx = (t.clientX - this.rect.left - this.x);
+      this.dy = (t.clientY - this.rect.top - this.y);
+      this.x = t.clientX - this.rect.left;
+      this.y = t.clientY - this.rect.top;
     }
     touchMoveAction(t){
     }
@@ -348,9 +357,12 @@ const foxIA = (function(){
 
       // リサイズの際にleftとtopが変更されるのでそれに伴ってleftとtopを更新する
       window.addEventListener('resize', (function(){
-        const newRect = canvas.getBoundingClientRect();
+
         //this.updateCanvasData(newRect.left, newRect.top);
-        this.updateCanvasData(newRect);
+        this.updateCanvasData();
+      }).bind(this));
+      window.addEventListener('scroll', (function(){
+        this.updateCanvasData();
       }).bind(this));
 
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
@@ -372,13 +384,14 @@ const foxIA = (function(){
       // リサイズ。
       if (resize) { canvas.addEventListener('resize', this.resizeAction.bind(this), {passive:false}); }
     }
-    updateCanvasData(rect){
+    updateCanvasData(){
+      const newRect = canvas.getBoundingClientRect();
       // 対象のキャンバスを更新
-      const {width, height, left, top} = rect;
+      const {width, height, left, top} = newRect;
       this.rect = {width, height, left, top};
       //this.canvasLeft = left;
       //this.canvasTop = top;
-      for(const p of this.pointers){ p.updateCanvasData(rect); }
+      for(const p of this.pointers){ p.updateCanvasData(newRect); }
     }
     mouseDownAction(e){
       this.mouseDownPointerAction(e);
@@ -433,7 +446,7 @@ const foxIA = (function(){
     mouse(e){
       // ホイールのイベントなどで正確なマウス座標が欲しい場合に有用
       // マウス限定なのでイベント内部などマウスが関係する処理でしか使わない方がいいです
-      return {x:e.pageX - this.rect.left, y:e.pageY - this.rect.top};
+      return {x:e.clientX - this.rect.left, y:e.clientY - this.rect.top};
     }
     wheelAction(e){
       // Interactionサイドの実行内容を書く
