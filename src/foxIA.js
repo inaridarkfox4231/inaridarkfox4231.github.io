@@ -25,6 +25,11 @@ windowのscroll時にもupdateCanvasData
 さらに
 PointerPrototypeのバグを修正（left,topがl,tになってた）
 
+20241014
+スクロールに関する位置取得が失敗していたのでpageをすべてclientに変更
+PointerPrototypeにparentを追加（親のInteraction）。使うかどうか不明だが。
+Interactionのfactory関数が引数としてthisを取れるようにした（factory内部で情報を使えるようにするため）
+
 PointerPrototypeの仕様と継承の仕方、用意すべき関数について
 Interactionの仕様と継承の仕方、用意すべき関数について
 特にeとかtなどの引数の有無、それらがイベントの場合とpointerの場合が混在していて若干面倒なことになってるのでね。
@@ -297,7 +302,7 @@ const foxIA = (function(){
   class Interaction{
     constructor(canvas, options = {}){
       this.pointers = [];
-      this.factory = (() => new PointerPrototype());
+      this.factory = ((t) => new PointerPrototype());
       //this.width = 0;
       //this.height = 0;
       // leftとtopがwindowのサイズ変更に対応するために必要
@@ -316,7 +321,7 @@ const foxIA = (function(){
       // 念のためpointersを空にする
       this.pointers = [];
       // factoryを定義
-      const {factory = (() => new PointerPrototype())} = options;
+      const {factory = ((t) => new PointerPrototype())} = options;
       this.factory = factory;
       // 横幅縦幅を定義
       //this.width = Number((canvas.style.width).split("px")[0]);
@@ -401,7 +406,7 @@ const foxIA = (function(){
       this.mouseDownDefaultAction(e);
     }
     mouseDownPointerAction(e){
-      const p = this.factory();
+      const p = this.factory(this);
       if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
       //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
       p.mouseInitialize(e, this.rect, this);
@@ -518,7 +523,7 @@ const foxIA = (function(){
           }
         }
         if(!equalFlag){
-          const p = this.factory();
+          const p = this.factory(this);
           if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
           //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
           p.touchInitialize(currentTouches[i], this.rect, this);

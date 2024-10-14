@@ -290,7 +290,7 @@ const foxIA = (function(){
   class Interaction{
     constructor(canvas, options = {}){
       this.pointers = [];
-      this.factory = (() => new PointerPrototype());
+      this.factory = ((t) => new PointerPrototype());
       //this.width = 0;
       //this.height = 0;
       // leftとtopがwindowのサイズ変更に対応するために必要
@@ -309,7 +309,7 @@ const foxIA = (function(){
       // 念のためpointersを空にする
       this.pointers = [];
       // factoryを定義
-      const {factory = (() => new PointerPrototype())} = options;
+      const {factory = ((t) => new PointerPrototype())} = options;
       this.factory = factory;
       // 横幅縦幅を定義
       //this.width = Number((canvas.style.width).split("px")[0]);
@@ -394,7 +394,7 @@ const foxIA = (function(){
       this.mouseDownDefaultAction(e);
     }
     mouseDownPointerAction(e){
-      const p = this.factory();
+      const p = this.factory(this);
       if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
       //p.mouseInitialize(e, this.canvasLeft, this.canvasTop);
       p.mouseInitialize(e, this.rect, this);
@@ -511,7 +511,7 @@ const foxIA = (function(){
           }
         }
         if(!equalFlag){
-          const p = this.factory();
+          const p = this.factory(this);
           if (p === null) return; // factoryがnullを返す場合はpointerを生成しない
           //p.touchInitialize(currentTouches[i], this.canvasLeft, this.canvasTop);
           p.touchInitialize(currentTouches[i], this.rect, this);
