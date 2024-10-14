@@ -1,0 +1,14 @@
+{
+  "MyDog": [
+    {
+      "Name": "taro",
+      "age": "1",
+      "weight": 3
+    },
+    {
+      "Name": "jiro",
+      "age": "0.5",
+      "weight": 2
+    }
+  ]
+}
