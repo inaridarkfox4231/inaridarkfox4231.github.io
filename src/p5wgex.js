@@ -4644,6 +4644,17 @@ const p5wgex = (function(){
       }
       return result;
     }
+    copy(){
+      // ジオメトリのコピーを返す
+      // 複製したうえでcompositeしたりとかできる
+      const copyGeometry = new Geometry();
+      copyGeometry.v.push(...this.v);
+      copyGeometry.n.push(...this.n);
+      copyGeometry.uv.push(...this.uv);
+      copyGeometry.f.push(...this.f);
+      copyGeometry.l.push(...this.l);
+      return copyGeometry();
+    }
     static validateParameter(x, y, z, _default = 0){
       if (x === undefined) { x = _default; }
       const result = {};

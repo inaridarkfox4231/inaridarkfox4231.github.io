@@ -23,6 +23,12 @@ hsv2rgbとclampの移植
 p5依存です
 理由はp5が便利だから
 それだけ
+
+p5依存性をチェックします
+C:非依存
+B:やや依存
+A:大部分を依存
+S:p5が無ければロジック自体が機能しない
 */
 
 /*
@@ -55,6 +61,10 @@ const fisceToyBox = (function(){
     cmd = font.font.getPath(targetText, 0, 0, textScale).commands;
     ってやるとtargetTextのtextScaleに応じたデータが得られる
     文字列にした後の操作は別の関数による
+
+    p5依存度：C（非依存）
+    引数のcmdはfontとopentypeから出力されるのでそもそもp5が絡んでいない
+    あれを取得するにはopentypeのcdnとロードしたfont情報が要る（つまりp5が絡んでいない）
   */
   function parseCmdToText(cmd){
     let result = "";
@@ -84,16 +94,21 @@ const fisceToyBox = (function(){
   }
 
   /*
-  parseData(options={})
-  options:
-    data: 文字列。MLQCZ記法で書かれている。例のツールで出力したやつとかそのまま使える感じ。
-    bezierDetail2: Qを解釈する際の分割数。default:8
-    bezierDetail3: Cを解釈する際の分割数。default:5
-    parseScale: パースの際に何倍化するのであれば必要。default:1
-    lineSegmentLength: Lを解釈する際の最小単位。default:1 たとえばscale100でこれが5だと20分割くらいされる
-  最終的に得られるのはp5のベクトル列のcontourの配列である。つまり配列の配列なので、
-  たとえば単独の場合[somePointArray]みたいになり、[0]しないとアクセスできないので注意する。
-  これは柔軟性のためである。配列だったり配列の配列だったりしたらややこしいでしょ？
+    parseData(options={})
+    options:
+      data: 文字列。MLQCZ記法で書かれている。例のツールで出力したやつとかそのまま使える感じ。
+      bezierDetail2: Qを解釈する際の分割数。default:8
+      bezierDetail3: Cを解釈する際の分割数。default:5
+      parseScale: パースの際に何倍化するのであれば必要。default:1
+      lineSegmentLength: Lを解釈する際の最小単位。default:1 たとえばscale100でこれが5だと20分割くらいされる
+    最終的に得られるのはp5のベクトル列のcontourの配列である。つまり配列の配列なので、
+    たとえば単独の場合[somePointArray]みたいになり、[0]しないとアクセスできないので注意する。
+    これは柔軟性のためである。配列だったり配列の配列だったりしたらややこしいでしょ？
+
+    p5依存度：B（やや依存）
+    createVectorをnew Vec3で書き換えればいい
+    createVectorに相当するp5wgexの関数が無いね
+    作る？
   */
   function parseData(options = {}){
     const {data="M 0 0", bezierDetail2 = 8, bezierDetail3 = 5, parseScale = 1, lineSegmentLength = 1} = options;
@@ -176,6 +191,11 @@ const fisceToyBox = (function(){
     点列に対し隣り合う点が近すぎる場合に片方を排除する
     逆走査なので後ろの方がカットされる
     closedの場合はおしりが頭に近い場合にそれが排除される
+
+    p5依存度：B（やや依存）
+    distがp5の関数...引数はベクトル列を仮定してる
+    ジオメトリーの前段階としてベクトル列に相当する何かが必要かもしれないです
+    まあいいか
   */
   function mergePoints(points, options = {}){
     const {threshold = 0.000001, closed = false} = options;
@@ -203,6 +223,10 @@ const fisceToyBox = (function(){
     なので、closedとそれ以外が混じっているなら個別に対処する必要がある。
     そこは柔軟性を持たせたいところだけどね。めんどくさいわね。optionsとしてoptionsの配列を許せばいけるか？
     ただほとんどの場合は閉路とそれ以外が混じることはほぼ無いからな。
+
+    p5依存度：B（やや依存）
+    mergePointsがBなので。
+    contoursをどう扱うかという問題だけど、まあnew Vec3()で出来るベクトルの列の列、でいいんじゃないかな。
   */
   function mergePointsAll(contours, options = {}){
     for(let contour of contours) {
@@ -223,6 +247,10 @@ const fisceToyBox = (function(){
     textDataって割とそこら辺雑だからな
     見た目的にそこまで変化はないけど
     まあそれなりに有用です
+
+    p5依存度：B（やや依存）
+    setもlerpもdistも移植済みなので
+    Vec3配列が入力である限り特に問題なく移植できるはず
   */
   // 等間隔化にもclosed optionを導入したいな
   function evenlySpacing(points, options = {}){
@@ -314,6 +342,9 @@ const fisceToyBox = (function(){
     まあ
     そういうのを避けるためにライブラリ化してるわけ
     いちいち書き換えるのめんどくさいだろ
+
+    p5依存度：B（やや依存）
+    evenlySpacingが以下略
   */
   function evenlySpacingAll(contours, options = {}){
     for(const contour of contours){
@@ -329,6 +360,13 @@ const fisceToyBox = (function(){
       closed: 閉路かどうか
     もともとの点列を制御点とし、点列ごとに中点を取り、中点を端点とするクワドベジエで置き換える。
     閉路の場合は端点も考慮される。
+
+    p5依存度：B（やや依存）
+    p5の関数で書き換えるだけ
+    もういっそベクトル列やcontoursをクラスとして定義しちゃった方が
+    話が早いかもしれない
+    そうなるとこの手のあれこれはすべてメソッドという形になるわね
+    Vec3Array, Contoursでいいのかな。んー。
   */
   function quadBezierize(points, options = {}){
     const {detail = 4, closed = false} = options;
@@ -379,6 +417,8 @@ const fisceToyBox = (function(){
     quadBezierizeAll(contours, options={})
     複数版。閉路かどうかは要統一...そのうち変えるかもしれないが。
     文字が丸みを帯びたりするかもしれない
+
+    p5依存度：B（以下略）
   */
   function quadBezierizeAll(contours, options = {}){
     for(const contour of contours){
@@ -392,6 +432,13 @@ const fisceToyBox = (function(){
     閉路の列に対してバウンディングボックスを計算するだけ
     textにしか使えないと不便なので。
     これならSVGデータにも使えるし他の用途にも使えるはず
+
+    p5依存度：C（非依存）
+    まあcontoursをp5非依存で書けばいいだけ
+    クラスを用意すればただのメソッドになる
+    Geometryにも適用できる...
+    って思ったらあっちはもう関数出来てますね
+    本格的にContoursをクラス化する必要性出てきた感ある
   */
   function getBoundingBoxOfContours(contours){
 
@@ -422,6 +469,9 @@ const fisceToyBox = (function(){
     というか
     これを提供すればあとでいじれるだろ？だから要らないのさ。
     テキストの場合は位置調整が基本的な要素としてあるからこれが要るってだけの話。
+
+    p5依存性：C（非依存）
+    難しいことはしてないのでcontoursが非依存であれば非依存
   */
   function alignmentContours(contours, options = {}){
     const {
@@ -460,6 +510,13 @@ const fisceToyBox = (function(){
       mergeThresholdRatio: mergePointsを適用する際の長さのスケールに対する比率。default:1/100
     出力：contoursです。主にcyclesToCyclesにぶち込んで、そこからメッシュ作成などにつなげる形。
     contoursの段階でいじることも可能。いじる必要があればの話だけど。
+
+    p5依存性：B（やや依存）
+    fontですが、font.font.getPathの最初のfontがp5.Fontを想定しているんですね
+    つまり非自明な依存性
+    ここは「.fontがundefinedの場合はfontのまま使う」としたうえでそのfontをopentype経由で取得する
+    機構を整えればp5から脱却できる（実験済み）
+    あとはp5に依存するかどうかはcontoursの中身次第ですね
   */
   function getTextContours(params = {}){
     const {
@@ -530,6 +587,14 @@ const fisceToyBox = (function(){
     textFont()とtextAlign()を用いた描画では正確にアラインメントできないようです。そこで、
     パスデータから逆算して位置をずらすことで厳密な描画を実現しようというわけです。
     もっとも雑でいいならこの関数は不要ということでもあります。
+
+    p5依存性：B（やや依存）
+    fontについて同じ処理をすればそのままいける
+    まあ2D用だから使うかどうか微妙だが
+    そこまで神経質になるものでもない
+    opentypeのfontだとアラインメントに微妙にずれが生じるからそれを補正するための物
+    たとえばメッシュ構築とかだと内部でアラインメントを正確に実行しちゃうから
+    これ要らんのよ
   */
   function getTextDrawingData(params = {}){
     const {
@@ -574,6 +639,12 @@ const fisceToyBox = (function(){
     ただテキストと違って場合によってはcreateDisjointPaths()が必要かもしれない。
     加えてclosed pathのみからなるという制約がある。
     まあほとんどの場合closed pathsに適用するんだけどな。
+
+    p5依存度：B（やや依存）
+    SVGパスをメッシュ化するうえでの窓口となる関数
+    お魚メッシュをp5wgexに持ってくのにこれを使う
+    現在はp5.Vectorからなるcontoursを返す形なので
+    そこをVec3で書き直せば非依存にできる
   */
   // 閉曲線(closed)前提
   function getSVGContours(params = {}){
@@ -615,6 +686,9 @@ const fisceToyBox = (function(){
 
     0,1,2,...,n-1をqueryでまとめる
     いくつの塊になったのかとそのレベルを返す感じ（lvで参照できる）
+
+    p5依存度：C（非依存）
+    補助関数
   */
 
   function getUnionFind(n, query){
@@ -695,6 +769,10 @@ const fisceToyBox = (function(){
     a,b,cは2次元ベクトル
     a--->c, b--->cの外積を取る操作。
     そんだけ。
+
+    p5依存度：B（やや依存）
+    a,b,cはp5.Vectorを想定しているが
+    まあVec3でも普通に機能する
   */
   function getDet2(a,b,c){
     return (c.x-a.x) * (c.y-b.y) - (c.x-b.x) * (c.y-a.y);
@@ -717,6 +795,9 @@ const fisceToyBox = (function(){
     んでたとえばratioが0.3ならa---bの上に0.3:0.7で内分した位置にその点が置かれる
     まあそんな感じです
     overlapはもともと無視していたんですがとある事情により追加されました
+
+    p5依存度：B（非依存）
+    a,b,c,dをVec3にすればOKで、distもちゃんとあるので問題ない
   */
   function getIntersection(a,b,c,d,threshold = 1e-9){
     // a,b,c,dは2次元ベクトル
@@ -822,6 +903,15 @@ const fisceToyBox = (function(){
     そういうわけなので
     ここからcyclesToCyclesに持っていくなら
     cyclesにおいてそのindexのverticeのpを取り出す必要があるのよね
+
+    p5依存度：B（やや依存）
+    outputのバグを直しました（凡ミス）
+    contoursがそもそもVec3で書けていれば
+    後は問題ないかと
+    出力は場合によってはcontoursだし
+    場合によってはVec3Arrayですね
+    contoursは今のところはVec3Arrayの配列を想定してる
+    すべてclosedでなくても扱えるが基本的にはすべてclosedが想定されてるね
   */
 
   function createDisjointPaths(contours, options = {}){
@@ -1469,8 +1559,9 @@ const fisceToyBox = (function(){
       const resultIslands = [];
       for(const island of islands){
         const resultIsland = [];
-        for(let i=0;i<mergedVertices.length;i++){
-          resultIsland.push(mergedVertices[i]);
+        // ここミスです。ごめんなさい。
+        for(let i=0;i<island.vertices.length;i++){
+          resultIsland.push(island.vertices[i]);
         }
         resultIslands.push(resultIsland);
       }
@@ -1552,6 +1643,11 @@ const fisceToyBox = (function(){
     subCycleArraysはサブサイクル...つまりcyclesで扱ったサイクルがindex配列の形で入っている。
     これがないとメッシュの作成の際に困るので用意した
     奇数番目のサイクルは逆向きなのでカリングについても問題なく処理できる
+
+    p5依存度：B（やや依存）
+    contoursではないですね
+    入力はcontoursだけど結論はベクトルの列とindex配列ですね
+    なぜ分けるのかというと重複点の問題があるからで...まあ難しいです。
   */
   function cyclesToCycles(cycles){
     // 各々のcycleはベクトル列
@@ -1874,6 +1970,11 @@ const fisceToyBox = (function(){
     出力：{vertices, faces}
     facesにはindexが3つずつ順繰りに入ってる。3つずつ取り出してverticesから参照して三角形を復元する。
     すべて正の向きなので心配ないです。
+
+    p5依存度：B（やや依存）
+    cyclesToCyclesで得られる結果を用いることが前提だが、単純閉曲線をそのままぶち込んでも
+    使えるには使えるね
+    はい...そうですね。Vec3なら問題なく扱える。
   */
   function executeEarcut(vertices, indices = [], threshold = 1e-9){
     const cycle = [];
@@ -2049,6 +2150,13 @@ const fisceToyBox = (function(){
     cyclesToCyclesで出したサイクル群からメッシュを生成する。平面です。
     geomを出力させる形になってるのは柔軟性のため。だって色とか付けたいでしょ？
     変形もしたいでしょう。その際に不便なんだよな。
+
+   p5依存度：A（かなり依存）
+   まああのp5.Geometryが「入れ物」として便利すぎるのがいけない
+   たとえば「PreGeometry」って感じでGeometryの前段階としての関数を用意するとかすれば
+   また違うのかもしれない
+   vとnがVec3配列になってるやつ
+   さらにfacesは長さ3の配列、の、配列。
   */
   // 面だけ
   function createPlaneMeshFromCycles(options = {}){
@@ -2085,6 +2193,10 @@ const fisceToyBox = (function(){
     ボードなので上面と下面があって法線の向きも逆になってる。側面は別メッシュなので綺麗に分かれてる。
     面もすべて正の向きなのでどっかのアルゴリズムみたいにカリングの適用で崩れたりはしない。
     法線の向きを使えば側面だけ違う色にしたり出来るよ。
+
+    p5依存度：A（かなり依存）
+    まあp5.Geometryが入れ物として以下略
+    作ればいいんだ...作れば...
   */
   // BoardMeshの方がいいんじゃないかと...思うけども。
   // というわけでBoardMeshに改名しました
@@ -2158,6 +2270,13 @@ const fisceToyBox = (function(){
     minY, maxY: yの下限上限
     minZ, maxZ: zの下限上限
     たとえば頂点色グラデーションを付けるのに使う。まあ色の塗り方はいくらでもあるけれど...（法線を使うとか）
+
+    p5依存度：A（かなり依存）
+    geomがp5.Geometryを想定しているのでverticesが特に問題なく採用されている。
+    そうね
+    自分がやるんだったら「vertices,normals,faces」かなぁ
+    だって「vertexNormals」の「vertex」ってなんか、ねぇ、要らないでしょ。
+    「vertexColors」は要ると思うけど。その場合もできれば長さ4の配列の配列がいいな
   */
 
   // カラーリングの他にも用途いろいろあるかと。
@@ -2188,6 +2307,9 @@ const fisceToyBox = (function(){
     2次元しかないんですよね
     うそでしょ？
     vを改変する形。改変したくないならcopy()と組み合わせてね。
+
+    p5依存どうこう以前にVec3はこれを持っているので、
+    要らないです。
   */
   function rotateByAxis(v, axis, angle = 0){
     const na = Math.hypot(axis.x, axis.y, axis.z);
@@ -2211,6 +2333,9 @@ const fisceToyBox = (function(){
     線分pqとcを通りnを法線ベクトルとする直線が交わっていることを前提として
     交点を返す関数
     ratioはp---qにおける比の値、pが点のベクトル
+
+    p5依存度：B（やや依存）
+    createVectorが問題なだけ
   */
   function getCrossPointWithLineFromTwoPoints(p, q, c, n){
     const a = Math.abs((p.x-c.x)*n.x + (p.y-c.y)*n.y);
@@ -2223,6 +2348,9 @@ const fisceToyBox = (function(){
   /*
     getCrossPointWithPlaneFromTwoPoints(p, q, c, n)
     平面バージョン。仕様は同じ。
+
+    p5依存度：B（やや依存）
+    createVector以下略
   */
   function getCrossPointWithPlaneFromTwoPoints(p, q, c, n){
     const a = Math.abs((p.x-c.x)*n.x + (p.y-c.y)*n.y + (p.z-c.z)*n.z);
@@ -2237,6 +2365,9 @@ const fisceToyBox = (function(){
     pがcを通りnを法線ベクトルとする直線のどっち側にあるかを返す関数
     nの側にあれば1で反対側にあれば-1を返す
     閾値に関して線上にあるとみなされれば0を返す
+
+    p5依存度：B（やや依存）
+    p,c,nがそういうのになってるだけ
   */
   function pointOnTheLine(p, c, n, threshold=1e-9){
     const verticeValue=(p.x-c.x)*n.x+(p.y-c.y)*n.y;
@@ -2247,6 +2378,8 @@ const fisceToyBox = (function(){
   /*
     pointOnThePlane(p, c, n, threshold = 1e-9)
     平面バージョン。仕様は同じ。
+
+    p5依存度：B
   */
   function pointOnThePlane(p, c, n, threshold = 1e-9){
     // やることは簡単で、p-cとnで内積を取って符号を見るだけ。
@@ -2266,6 +2399,15 @@ const fisceToyBox = (function(){
     戻り値は配列[geom0,geom1]でgeom0がn側、geom1が反対側。
     vertexNormals, vertexColors, uvs, edgesがgeomに存在する場合、それらは境界で補間される。
     そのうち境界面も作れるようになるかもしれないし、ならないかもしれない...（難しい）
+
+    p5依存度：A（かなり依存）
+    uvsやedgesなどp5.Geometryの構造に大きく依存してるのでかなり移植が厄介
+    PreGeometryクラスをどう定義するかによる
+    その場合もuvsやedegsの列の長さで判定できるので...
+    結局のところ
+    p5.Geometryを「入れ物」としてしか扱っていないので、
+    入れ物さえ用意できれば容易に移植できるし、
+    その「入れ物」に独自にメソッドを付け加えれば処理を簡明にすることもできるかもしれないですね。
   */
   function separateGeometry(geom, params = {}){
     const {vertices, faces, vertexNormals = [], vertexColors = [], uvs = [], edges = []} = geom;
@@ -2622,6 +2764,10 @@ const fisceToyBox = (function(){
     平面で分割して切れ目を入れる。ポリゴンはその面との交点を含むように分割される。
     これにより、ジオメトリーを曲げる際に不自然な崩壊が起きないようにできる。
     具体的には曲げる方向に応じて沢山分割したりなどといったことに使う。
+
+    p5依存度：A（かなり依存）
+    p5.Geometryは完全にただの入れ物です。以上です。
+    PreGeometryを作ればいいですね。
   */
   function subDivideGeometry(geom, params = {}){
     const {vertices, faces, vertexNormals = [], vertexColors = [], uvs = [], edges = []} = geom;
@@ -2955,6 +3101,9 @@ const fisceToyBox = (function(){
     HSV指定の色をrgbにする。
     出力はr,g,bに0～1の数が入ったオブジェクト。
     vertexColorsに使いたいなら、透明度の1を忘れないようにしないとコケる（何度もやらかした）
+
+    hsv2rgbか
+    rgb2hsvもあるといいかもしれない。最近作った。見ての通り、p5全く関係ないです。
   */
   // HSVをRGBにしてくれる関数. ただし0～1で指定してね
   function hsv2rgb(h, s, v){
@@ -2976,6 +3125,18 @@ const fisceToyBox = (function(){
     result.b = v * (1 - s + s * _b);
     return result;
   }
+
+  /*
+    以上
+    それほど難しくないかも？
+    ていうかまだ導入してない関数があってな
+    それ導入する前にいろいろやっちゃいたいんだわ
+    たとえば
+    傘の描画で使ってるコンポジットとか
+    トーラスノットで使ってるフルネセレ関連のあれこれとかが
+    未導入なので
+    それも入れられるといいですね
+  */
 
   // utility.
   fisce.getUnionFind = getUnionFind;
