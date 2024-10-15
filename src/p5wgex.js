@@ -4653,7 +4653,7 @@ const p5wgex = (function(){
       copyGeometry.uv.push(...this.uv);
       copyGeometry.f.push(...this.f);
       copyGeometry.l.push(...this.l);
-      return copyGeometry();
+      return copyGeometry;
     }
     static validateParameter(x, y, z, _default = 0){
       if (x === undefined) { x = _default; }
