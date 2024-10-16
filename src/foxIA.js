@@ -374,10 +374,9 @@ const foxIA = (function(){
       }).bind(this));
 
       // options. これらは基本パソコン環境前提なので（スマホが関係ないので）、オプションとします。
-      // リサイズも滅多に使わないのでオプションで。
       const {
         mouseenter = false, mouseleave = false, click = false, dblclick = false,
-        keydown = false, keyup = false, resize = false
+        keydown = false, keyup = false
       } = options;
       // マウスの出入り
       if (mouseenter) { canvas.addEventListener('mouseenter', this.mouseEnterAction.bind(this), {passive:false}); }
@@ -389,8 +388,6 @@ const foxIA = (function(){
       // いわゆる押しっぱなしの時の処理についてはフラグの切り替えのために両方必要になるわね
       if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
       if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
-      // リサイズ。
-      if (resize) { canvas.addEventListener('resize', this.resizeAction.bind(this), {passive:false}); }
     }
     updateCanvasData(){
       const newRect = canvas.getBoundingClientRect();
