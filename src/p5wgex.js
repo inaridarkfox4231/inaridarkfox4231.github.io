@@ -3180,6 +3180,12 @@ const p5wgex = (function(){
     }
   }
 
+  // Vec3生成関数
+  function createVec3(){
+    return new Vec3(0, 0, 0);
+  }
+  // 生成関数にバリエーションがあるといいかもしれない
+
   // ---------------------------------------------------------------------------------------------- //
   // utility for Vec3.
 
@@ -4668,6 +4674,12 @@ const p5wgex = (function(){
       return x; // xがすでにベクトルなどの場合
     }
   }
+
+  // Geometryクラスを生成する
+  function createGeom(){
+    return new Geometry();
+  }
+  // 生成関数にバリエーションがあるといいかもしれない
 
   // 立方体
   // まあキューブマップ使いましょうね
@@ -9854,6 +9866,10 @@ const p5wgex = (function(){
   ex.CameraManager = CameraManager;
   ex.Transform = Transform;
   ex.Vec3 = Vec3;
+
+  // Vec3とGeometryの生成関数
+  ex.createGeom = createGeom;
+  ex.createVec3 = createVec3;
 
   // data格納用のshader欲しいかも
 
