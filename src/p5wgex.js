@@ -5245,6 +5245,10 @@ const p5wgex = (function(){
 
   // 進んでる方向は正しいので自信を持とうね
   function _renderingTexture(node, materialType, target, options = {}){
+    if(node.painters.__foxTextureRenderer__ === undefined){
+      // 使うのであればこのタイミングで生成する
+      _createTextureRenderer(node);
+    }
     node.use("__foxTextureRenderer__", "foxBoard");
 
     _setMaterialUniforms(node, materialType, target);
@@ -5272,6 +5276,10 @@ const p5wgex = (function(){
   }
 
   function _renderingMixTexture(node, src, dst, options = {}){
+    if(node.painters.__foxMixTextureRenderer__ === undefined){
+      // 使うのであればこのタイミングで生成する
+      _createMixTextureRenderer(node);
+    }
     node.use("__foxMixTextureRenderer__", "foxBoard");
 
     const {type:materialType_src = 'color', target:target_src = 'black'} = src;
@@ -5308,6 +5316,10 @@ const p5wgex = (function(){
 
   // とにかくシンプルに。transformもしません。4枚表示するだけ。
   function _renderingQuadTextures(node, textures = [], options = {}){
+    if(node.painters.__foxQuadTextureRenderer__ === undefined){
+      // 使うのであればこのタイミングで生成する
+      _createQuadTextureRenderer(node);
+    }
     node.use("__foxQuadTextureRenderer__", "foxBoard");
 
     for (let i=0; i<textures.length; i++) {
@@ -5428,9 +5440,10 @@ const p5wgex = (function(){
       // drawArraysは"triangle_strip"です。板ポリ全般で使えます。
       this.registFigure("foxBoard", [{size:2, name:"aPosition", data:[-1,-1,1,-1,-1,1,1,1]}]);
       // デフォルトのペインターを作る
-      _createTextureRenderer(this);
-      _createMixTextureRenderer(this);
-      _createQuadTextureRenderer(this);
+      // 必要に応じて作られるようにしましょ！
+      //_createTextureRenderer(this);
+      //_createMixTextureRenderer(this);
+      //_createQuadTextureRenderer(this);
 
     }
     enableExtensions(){
