@@ -246,7 +246,7 @@ const foxIA = (function(){
     }
     mouseMoveAction(e){
     }
-    mouseUpAction(){
+    mouseUpAction(e){
     }
     touchInitialize(t, rect, parent = null){
       this.id = t.identifier;
@@ -433,19 +433,19 @@ const foxIA = (function(){
     mouseMoveDefaultAction(dx, dy, x, y){
       // Interactionサイドの実行内容を書く
     }
-    mouseUpAction(){
-      this.mouseUpPointerAction();
-      this.mouseUpDefaultAction();
+    mouseUpAction(e){
+      this.mouseUpPointerAction(e);
+      this.mouseUpDefaultAction(e);
     }
-    mouseUpPointerAction(){
+    mouseUpPointerAction(e){
       // pointerが生成されなかった場合は処理を実行しない
       if(this.pointers.length === 0){ return; }
       // ここで排除するpointerに何かさせる...
       const p = this.pointers[0];
-      p.mouseUpAction();
+      p.mouseUpAction(e);
       this.pointers.pop();
     }
-    mouseUpDefaultAction(){
+    mouseUpDefaultAction(e){
       // Interactionサイドの実行内容を書く
     }
     mouse(e){
@@ -688,7 +688,7 @@ const foxIA = (function(){
     mouseMoveDefaultAction(dx, dy, x, y){
       this.execute("mousemove", arguments);
     }
-    mouseUpDefaultAction(){
+    mouseUpDefaultAction(e){
       this.execute("mouseup", arguments);
     }
     wheelAction(e){
@@ -717,9 +717,6 @@ const foxIA = (function(){
     }
     touchStartDefaultAction(e){
       this.execute("touchstart", arguments);
-    }
-    doubleTapAction(){
-      this.execute("dbltap", arguments);
     }
   }
 
@@ -753,7 +750,7 @@ const foxIA = (function(){
       this.actions.activate = (e) => {};
       this.actions.move = (x, y, dx, dy) => {};
       this.actions.update = (x, y, dx, dy) => {};
-      this.actions.inActivate = () => {};
+      this.actions.inActivate = (e) => {};
       // ボタン.
       this.button = -1;
     }
@@ -835,11 +832,11 @@ const foxIA = (function(){
         this.actions.move(x, y, dx, dy);
       }
     }
-    mouseUpDefaultAction(){
+    mouseUpDefaultAction(e){
       // activateされていないなら各種の処理は不要
       if (!this.active) return;
       this.active = false;
-      this.actions.inActivate();
+      this.actions.inActivate(e);
       // ボタンリセット
       this.button = -1;
     }
@@ -859,7 +856,7 @@ const foxIA = (function(){
       // ここもactiveでないのに実行されてしまうようですね...防いでおくか。
       if (this.active && this.pointers.length === 0) {
         this.active = false;
-        this.actions.inActivate();
+        this.actions.inActivate(e);
       }
     }
   }
