@@ -1134,6 +1134,62 @@ const foxIA = (function(){
     }
   }
 
+  // Commander.
+  // PointerPrototypeの継承でなんかやりたいけどいちいち書くのめんどくさい、
+  // 別にプロパティ持たせる気はなくて、this.xやthis.yでぐりぐりしたいだけなんだ...
+  // って時に便利です。きちんと設計したい場合は自由度の高い通常のやり方を用いましょう。
+  // pointerdown, pointermove, pointerupを使うと個別に処理を書くのをサボれます。
+  class Commander extends Interaction{
+    constructor(cvs, options = {}, commands = {}){
+      options.factory = () => {
+        return new Soldier(commands);
+      }
+      super(cvs, options);
+    }
+  }
+
+  // 内部クラス。これも供用した方がいいのかしら（もしかしたら便利かもしれない）
+  class Soldier extends PointerPrototype{
+    constructor(commands = {}){
+      super();
+      const {
+        mousedown = (e,p) => {},
+        mousemove = (e,p) => {},
+        mouseup = (e,p) => {},
+        touchstart = (t,p) => {},
+        touchmove = (t,p) => {},
+        touchend = (t,p) => {},
+        pointerdown,
+        pointermove,
+        pointerup
+      } = commands;
+      this.mousedown = (pointerdown === undefined ? mousedown : pointerdown);
+      this.mousemove = (pointermove === undefined ? mousemove : pointermove);
+      this.mouseup = (pointerup === undefined ? mouseup : pointerup);
+      this.touchstart = (pointerdown === undefined ? touchstart : pointerdown);
+      this.touchmove = (pointermove === undefined ? touchmove : pointermove);
+      this.touchend = (pointerup === undefined ? touchend : pointerup);
+    }
+    mouseDownAction(e){
+      this.mousedown(e, this);
+    }
+    mouseMoveAction(e){
+      this.mousemove(e, this);
+    }
+    mouseUpAction(e){
+      this.mouseup(e, this);
+    }
+    touchStartAction(e){
+      this.touchstart(e, this);
+    }
+    touchMoveAction(e){
+      this.touchmove(e, this);
+    }
+    touchEndAction(e){
+      this.touchend(e, this);
+    }
+  }
+
   fox.Interaction = Interaction;
   fox.PointerPrototype = PointerPrototype;
   fox.Inspector = Inspector;
@@ -1142,6 +1198,8 @@ const foxIA = (function(){
   fox.KeyAction = KeyAction;
   fox.Damper = Damper; // DamperとScrollerを分離(20241010)
   fox.Scroller = Scroller; // 追加(20241008)
+  fox.Commander = Commander; // 追加(20241020)
+  fox.Soldier = Soldier; // 追加(20241020)
 
   return fox;
 })();
