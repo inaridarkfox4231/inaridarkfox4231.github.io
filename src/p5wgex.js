@@ -5406,6 +5406,148 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
+  // GradationRenderer.
+  function _createGradationRenderer(node){
+    const sh = new PlaneShader(node);
+    sh.initialize();
+
+    // 一応、transform系の機能も用意しておくか。
+    // 柔軟性のためにね。
+    sh.addUniform("vec2", "uScale", "vs");
+    sh.addUniform("float", "uRotation", "vs");
+    sh.addUniform("vec2", "uTranslate", "vs");
+
+    sh.addCode(`
+      position *= uScale;
+      position *= mat2(cos(uRotation), -sin(uRotation), sin(uRotation), cos(uRotation));
+      position += uTranslate;
+    `, "preProcess", "vs");
+
+    sh.addUniform("vec4", "uPos", "fs");
+    sh.addUniform("float", "uStops[16]", "fs");
+    sh.addUniform("vec4", "uColors[16]", "fs");
+    sh.addUniform("int", "uMode", "fs");
+
+    // uPos.xyからuPos.zwに線を引く
+    // (0,0)が左上で(1,1)が右上（固定）
+    // linearの場合はこの線に垂直な線を用意して
+    // それとの距離で調べてグラデーションする感じ
+    // stopが1つなら色だけ使って0と1にする（単色）
+    // stopが無いならデフォルトで真っ白にする。これも2つですね
+    // stopが2つ以上の場合は間に入るときに補間する
+    // 端っこの場合はその色にする感じですね
+    // posの方？fromのデフォが(0,0)でtoのデフォが(1,1)です以上
+    // radiusは距離として単純距離を使うだけ
+    // manhattan. 以上。
+
+    sh.addCode(`
+      float calcLinearDist(in vec2 p, in vec2 c, in vec2 n, in float d){
+        // cが起点でnがcから出ている単位ベクトル
+        // p-cとnの内積を取ってdで割るだけ
+        return dot(p-c, n)/d;
+      }
+      float calcRadialDist(in vec2 p, in vec2 c, in float d){
+        // 単純にp-cの長さをdで割るだけ
+        return length(p-c)/d;
+      }
+      float calcManhattanDist(in vec2 p, in vec2 c, in float d){
+        // pとcのマンハッタン距離をdで割るだけ
+        return max(abs(p.x-c.x), abs(p.y-c.y))/d;
+      }
+      vec4 calcLerpedColor(in float d0, in vec2 c, in float d){
+        if (d0 < uStops[0]) return uColors[0];
+        int left = 0;
+        for(int i=1; i<16; i++){
+          if(uStops[i] < 0.0) break;
+          if(d0 < uStops[i]) {
+            float ratio = (d0 - uStops[left])/(uStops[i] - uStops[left]);
+            return (1.0 - ratio) * uColors[left] + ratio * uColors[i];
+          }
+          left++;
+        }
+        return uColors[left];
+      }
+      vec4 calcFinalColor(in vec2 uv){
+        vec2 from = uPos.xy;
+        vec2 to = uPos.zw;
+        float l, sampleDist;
+        if(uMode==0){
+          l = length(to - from);
+          vec2 n = normalize(to - from);
+          sampleDist = calcLinearDist(uv, from, n, l);
+        }
+        if(uMode==1){
+          l = length(to - from);
+          sampleDist = calcRadialDist(uv, from, l);
+        }
+        if(uMode==2){
+          l = max(abs(to.x-from.x), abs(to.y - from.y));
+          sampleDist = calcManhattanDist(uv, from, l);
+        }
+        return calcLerpedColor(sampleDist, from, l);
+      }
+    `, "routines", "fs");
+    sh.addCode(`
+      // fromとtoに対しなんらかの処理を実行して
+      // 具体的にはcにあたるのがfromでdにあたるのが両者の距離
+      // んで長さ2以上のuColorsとuStopsの出番
+      // -1まで。
+      // 挟まるときだけ距離で補間する
+      color = calcFinalColor(vUv);
+      // 色出力なのでrgbにalphaを掛ける
+      color.rgb *= color.a;
+    `, "preProcess", "fs");
+
+    sh.registPainter("__foxGradationRenderer__");
+  }
+
+  function _setGradationUniforms(node, target){
+    const {
+      from = {x:0,y:0}, to = {x:1, y:1},
+      stops = [0,1], colors = [[0,0,0,1],[1,1,1,1]], type = "linear"
+    } = target;
+
+    // 長さ調整は特に必要ないかと
+    // 長さを揃えてしまうので
+    while(stops.length < 16){
+      stops.push(-1);
+    }
+    while(colors.length < 16){
+      colors.push([-1,-1,-1,-1]);
+    }
+
+    node.setUniform("uPos", [from.x, from.y, to.x, to.y]);
+    node.setUniform("uStops", stops);
+    node.setUniform("uColors", colors.flat());
+    const modeDict = {linear:0, radial:1, manhattan:2};
+    node.setUniform("uMode", modeDict[type]);
+  }
+
+  function _renderingGradation(node, target, options = {}){
+    if(node.painters.__foxGradationRenderer__ === undefined){
+      // 使うのであればこのタイミングで生成する
+      _createGradationRenderer(node);
+    }
+    node.use("__foxGradationRenderer__", "foxBoard");
+
+    const {transform = {}} = options;
+    const {sx = 1, sy = 1, r = 0, tx = 0, ty = 0} = transform;
+    node.setUniforms({
+      uScale:[sx, sy], uRotation:r, uTranslate:[tx, ty]
+    });
+
+    _setGradationUniforms(node, target);
+
+    const {depthMask = false, depthTest = false, cullFace = "disable"} = options;
+    options.depthMask = depthMask;
+    options.depthTest = depthTest;
+    options.cullFace = cullFace;
+
+    node.drawArrays("triangle_strip", options);
+    node.unbind();
+  }
+
+  // ---------------------------------------------------------------------------------------------- //
   // Utility for save texture
 
   function _getSaveTargetInfo(target){
@@ -6439,6 +6581,13 @@ const p5wgex = (function(){
     renderQuadTexture(textures = [], options = {}){
       _renderingQuadTextures(this, textures, options);
       return this;
+    }
+    renderGradation(target, options = {}){
+      // targetは引数。from:{x,y},to:{x,y}で基準線を用意。
+      // typeは"linear","radial","manhattan"から選ぶ。
+      // stopsでいわゆるストップを用意。colorsは長さ4の配列の配列でそれぞれが色を意味する
+      // 補間方法はrgba一択。以上。
+      _renderingGradation(this, target, options);
     }
     unbind(){
       // 各種bind解除
