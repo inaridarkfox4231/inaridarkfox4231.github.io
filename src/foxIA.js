@@ -661,6 +661,7 @@ const foxIA = (function(){
         keydown:[],
         keyup:[],
         touchstart:[], // スマホだとclickが発動しないので代わりに。
+        touchend:[], // タッチエンドあった方がいい？
         dbltap:[] // doubleTapですね。これも用意しておきましょ。
       };
     }
@@ -717,6 +718,9 @@ const foxIA = (function(){
     }
     touchStartDefaultAction(e){
       this.execute("touchstart", arguments);
+    }
+    touchEndDefaultAction(e){
+      this.execute("touchend", arguments);
     }
   }
 
