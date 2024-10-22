@@ -99,6 +99,29 @@
 // falseならfalseであとで作るのが面倒だし
 // そういうわけで使う場合に即時生成という結論に至りました
 
+// 20241021
+// 構造体のuniformについて
+// いくつか実験した結果、配列の仕様が特殊であることが判明
+// https://webglfundamentals.org/webgl/lessons/ja/webgl-shaders-and-glsl.html
+// sample: https://openprocessing.org/sketch/2405155
+// MyStruct:{vec2 position, vec2 velocity} でuMyStruct[2]の場合
+// uMyStruct[0].position, uMyStruct[0].velocity, uMyStruct[1].position, uMyStruct[1].velocity
+// 全部バラバラで現れるので個数がsizeなどの方法で把握できないのだ（まじかよ）
+// なので...
+
+// 当然だが.でsplitすれば構造体かどうかは一目瞭然だし、そのあとで[でsplitをかければ
+// 長さから配列の一部かどうかわかる。長さ2だとして]でsplitして0番を取れば番号が分かる
+// そんな感じで構造体なのか、構造体の配列なのかといったメタデータを用意する
+// 一方、通常のuniformsは今まで通り普通に作成する
+// 今まで通りのナイーブなやり方でセットすることも認める
+// その一方で
+// 構造体uniformに関するメタデータを用いた簡易的な処理を提供できればいい。
+// つまりやることはメタデータの作成とそれを用いた簡易的なuniform登録方法の策定だけ
+// 従来のメソッドを改造する必要はない
+
+// それとは別にaddUniformにおいて構造体のuniformを指定できるようにするのと...
+// そもそも構造体が作れないのでそこを何とかする感じですね
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
@@ -2226,6 +2249,7 @@ const p5wgex = (function(){
   }
 
   // _loadUniforms. glを引数に。
+  // 構造体の場合の仕様...
   function _loadUniforms(gl, pg){
     // ユニフォームの総数を取得
     const numUniforms = gl.getProgramParameter(pg, gl.ACTIVE_UNIFORMS);
@@ -8783,7 +8807,9 @@ const p5wgex = (function(){
 
       this.vs = {};
       this.vs.precisions = ``;
+      this.vs.defines = ``;
       this.vs.constants = ``;
+      this.vs.structs = ``;
       this.vs.uniforms = ``;
       this.vs.routines = ``; // 関数群
       this.vs.preProcess = ``;
@@ -8792,7 +8818,9 @@ const p5wgex = (function(){
 
       this.fs = {};
       this.fs.precisions = ``;
+      this.fs.defines = ``;
       this.fs.constants = ``;
+      this.fs.structs = ``;
       this.fs.uniforms = ``;
       this.fs.outputs = ``;
       this.fs.routines = ``; // 関数群
@@ -8825,12 +8853,19 @@ const p5wgex = (function(){
       this.varyings.push({type, name});
       return this;
     }
+    addStruct(name, structInfo, addLocation){
+      // struct 「name」のあとstructInfoのObject.keys()からtype,対象からname
+      // それをaddLocationにおく
+    }
     addUniform(type, name, addLocation){
       this[addLocation].uniforms +=
         `
           uniform ` + type + ` ` + name + `;
         `;
       return this;
+    }
+    addDefine(targetString, resultString, addLocation){
+      // targetStringをresultStringで置き換える
     }
     addConstant(type, name, value, addLocation){
       this[addLocation].uniforms +=
@@ -8874,9 +8909,11 @@ const p5wgex = (function(){
       `#version 300 es
       `;
       _vs += this.vs.precisions;
+      _vs += this.vs.defines;
+      _vs += this.vs.constants;
       _vs += _convertAttributesToText(this.attrs);
       _vs += _convertOutVaryingsToText(this.outVaryings);
-      _vs += this.vs.constants;
+      _vs += this.vs.structs;
       _vs += this.vs.uniforms;
       _vs += _convertVaryingsToText(this.varyings, "vs");
       _vs += this.vs.routines;
@@ -8896,7 +8933,9 @@ const p5wgex = (function(){
       `#version 300 es
       `;
       _fs += this.fs.precisions;
+      _fs += this.fs.defines;
       _fs += this.fs.constants;
+      _fs += this.fs.structs;
       _fs += this.fs.uniforms;
       _fs += _convertVaryingsToText(this.varyings, "fs", 2);
       _fs += this.fs.outputs;
@@ -9635,8 +9674,16 @@ const p5wgex = (function(){
       this.currentShader.addVarying(type, name);
       return this;
     }
+    addStruct(name, structInfo, addLocation){
+      this.currentShader.addStruct(name, structInfo, addLocation);
+      return this;
+    }
     addUniform(type, name, addLocation){
       this.currentShader.addUniform(type, name, addLocation);
+      return this;
+    }
+    addDefine(targetString, resultString, addLocation){
+      this.currentShader.addDefine(targetString, resultString, addLocation)
       return this;
     }
     addConstant(type, name, value, addLocation){
