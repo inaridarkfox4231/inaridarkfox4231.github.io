@@ -6198,6 +6198,24 @@ const p5wgex = (function(){
       this.currentPainter.setTexture(name, _texture);
       return this;
     }
+    setStructUniform(name, data){
+      // 構造体uniformの登録の簡略化
+      // dataが配列かどうかで分ける感じですね
+      // 配列の場合はindexを[index]の形で追加する感じですね
+      // それ以降はsetUniformに丸投げすればOK!
+      if(Array.isArray(data)){
+        for(let i=0; i<data.length; i++){
+          for(const dataName of Object.keys(data[i])){
+            this.setUniform(`${name}[${i}].${dataName}`, data[i][dataName]);
+          }
+        }
+      }else{
+        for(const dataName of Object.keys(data)){
+          this.setUniform(`${name}.${dataName}`, data[dataName]);
+        }
+      }
+      return this;
+    }
     setUniform(name, prop){
       // 有効になってるシェーダにuniformをセット（テクスチャ以外）
       // shaderProgramは設定されたuniform変数が内部で使われていないときにエラーを返すんですが
@@ -6228,6 +6246,12 @@ const p5wgex = (function(){
               if (data.length > 1) {
                 this.setColor(data[1], prop);
                 //this.currentPainter.setUniform(data[1], coulour(prop));
+              }
+              break;
+            case "struct":
+              // structで始まる場合、setStructUniformが呼び出される。
+              if(data.length > 1){
+                this.setStructUniform(data[1], prop);
               }
               break;
             default:
