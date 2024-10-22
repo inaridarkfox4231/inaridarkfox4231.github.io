@@ -8807,7 +8807,7 @@ const p5wgex = (function(){
 
       this.vs = {};
       this.vs.precisions = ``;
-      this.vs.defines = ``;
+      this.vs.defines = `\n `; // あらかじめ改行しとけばいい
       this.vs.constants = ``;
       this.vs.structs = ``;
       this.vs.uniforms = ``;
@@ -8818,7 +8818,7 @@ const p5wgex = (function(){
 
       this.fs = {};
       this.fs.precisions = ``;
-      this.fs.defines = ``;
+      this.fs.defines = `\n `; // あらかじめ改行しとけばいい
       this.fs.constants = ``;
       this.fs.structs = ``;
       this.fs.uniforms = ``;
@@ -8854,8 +8854,15 @@ const p5wgex = (function(){
       return this;
     }
     addStruct(name, structInfo, addLocation){
-      // struct 「name」のあとstructInfoのObject.keys()からtype,対象からname
+      // struct 「name」のあとstructInfoのObject.keys()からnameとtypeを取得
+      // typeは重複できるがnameは重複できないのでname:typeという形になる
+      // 宣言時と順序が逆なので注意する必要がある
       // それをaddLocationにおく
+      this[addLocation].structs += `struct ${name} {`;
+      for(const name of Object.keys(structInfo)){
+        this[addLocation].structs += `${structInfo[name]} ${name};`;
+      }
+      this[addLocation].structs += `};\n`;
     }
     addUniform(type, name, addLocation){
       this[addLocation].uniforms +=
@@ -8866,6 +8873,7 @@ const p5wgex = (function(){
     }
     addDefine(targetString, resultString, addLocation){
       // targetStringをresultStringで置き換える
+      this[addLocation].defines += `#define ${targetString} ${resultString} \n`;
     }
     addConstant(type, name, value, addLocation){
       this[addLocation].uniforms +=
