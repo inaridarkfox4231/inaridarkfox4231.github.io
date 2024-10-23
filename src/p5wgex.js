@@ -3156,11 +3156,6 @@ const p5wgex = (function(){
       return this;
     }
     multMat(v1, v2, v3){
-      // caution: multMat3で置き換わる可能性があります。
-      // 近いうちに廃止になるかも？
-      // 結局のところベクトルを3つ並べる方法は特に有用性がありませんでした
-      // 無くしていいと思う
-
       // mは3x3行列を模した長さ9の配列、横並びで決める。つまり0,1,2が1行目、3,4,5が2行目、6,7,8が3行目。
       // ただしベクトル3つで定義できるようにもする。この方が自然だと思うので。
       const m = new Array(9);
@@ -3183,30 +3178,16 @@ const p5wgex = (function(){
       this.z = m[6] * a + m[7] * b + m[8] * c;
       return this;
     }
-    multMat3(m, transpose = false){
-      // 直接行列を対象とするバージョンを用意します
-      // 理由はほとんどの場合行列が対象なのと
-      // 後方互換性、あとは転置版が要るんです（内部の計算を先にやりたい場合）
+    multMat4(mat4, w = 1.0){
+      // multMat3は廃止
+      // mat4はmat4でもいいし、mat4.mでもいい。どっちでもいい。
+      const m = (mat4 instanceof Mat4 ? mat4.m : mat4);
+      // Mat4の転置を掛け算する感じですね
       const {x:a, y:b, z:c} = this;
-      if(transpose){
-        // 転置版
-        // たとえばビュー変換を先に実行したい場合などに使う
-        this.x = m[0] * a + m[3] * b + m[6] * c;
-        this.y = m[1] * a + m[4] * b + m[7] * c;
-        this.z = m[2] * a + m[5] * b + m[8] * c;
-        return this;
-      }
-      // 従来版
-      this.x = m[0] * a + m[1] * b + m[2] * c;
-      this.y = m[3] * a + m[4] * b + m[5] * c;
-      this.z = m[6] * a + m[7] * b + m[8] * c;
+      this.x = m[0]*a + m[4]*b + m[8]*c + m[12]*w;
+      this.y = m[1]*a + m[5]*b + m[9]*c + m[13]*w;
+      this.z = m[2]*a + m[6]*b + m[10]*c + m[14]*w;
       return this;
-    }
-    multMat4(m, transpose = false){
-      // Mat4の3x3部分だけ使うバージョン
-      // Mat4はgetMat3()といって別の3x3を切り出すメソッドを持ってるんで
-      // それを実行するだけ
-      return this.multMat3(m.getMat3(), transpose);
     }
     copy(){
       return new Vec3(this.x, this.y, this.z); // copy欲しいです
