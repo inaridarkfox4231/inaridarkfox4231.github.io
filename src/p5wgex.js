@@ -122,6 +122,14 @@
 // それとは別にaddUniformにおいて構造体のuniformを指定できるようにするのと...
 // そもそも構造体が作れないのでそこを何とかする感じですね
 
+// 20241023
+// PBR実装するにあたり
+// multMat3,multMat4を用意
+// 現在のmultMatは非推奨になるかも
+// glsl内部の行列計算を先に実行したい場合に不便なので転置版が欲しいんです
+// あとsetUniformでvec3の場合に限り、Vec3とVec3Arrayを許すことにしました。
+// いちいちtoArray()するのめんどくさいんで。
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
@@ -2350,14 +2358,16 @@ const p5wgex = (function(){
         if (uniform.size > 1) {
           if (data[0] instanceof Vec3){
             // Vec3の配列の場合はばらして...ひとつながりにする
+            // 3fvは配列なのね...ややこしい...
             gl.uniform3fv(location, data.map((v) => v.toArray()).flat());
           }else{
             gl.uniform3fv(location, data);
           }
         } else {
           // 単独の場合もVec3をそのまま受け取れるようにしようね
+          // ごめんなさいこれバラすのね（3fvは配列が対象だが3fはバラすのよ）
           if (data instanceof Vec3) {
-            gl.uniform3f(location, data.toArray());
+            gl.uniform3f(location, ...data.toArray());
           } else {
             gl.uniform3f(location, data[0], data[1], data[2]);
           }
