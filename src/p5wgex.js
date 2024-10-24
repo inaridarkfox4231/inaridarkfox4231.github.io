@@ -5563,18 +5563,24 @@ const p5wgex = (function(){
       stops = [0,1], colors = [[0,0,0,1],[1,1,1,1]], type = "linear"
     } = target;
 
+    // coulour表記でもOKにする
+    // たとえば["white", "teal", "black"]の0,0.5,1のような表現ができる。
+    // const には代入できないので新しく配列を作る（変更不可、可読性、...）
+    const properColors = colors.map((col) => coulour(col));
+
     // 長さ調整は特に必要ないかと
     // 長さを揃えてしまうので
     while(stops.length < 16){
       stops.push(-1);
     }
-    while(colors.length < 16){
-      colors.push([-1,-1,-1,-1]);
+    // あぶない...ここcolorsにしたら無限ループバグだよ。
+    while(properColors.length < 16){
+      properColors.push([-1,-1,-1,-1]);
     }
 
     node.setUniform("uPos", [from.x, from.y, to.x, to.y]);
     node.setUniform("uStops", stops);
-    node.setUniform("uColors", colors.flat());
+    node.setUniform("uColors", properColors.flat());
     const modeDict = {linear:0, radial:1, manhattan:2};
     node.setUniform("uMode", modeDict[type]);
   }
