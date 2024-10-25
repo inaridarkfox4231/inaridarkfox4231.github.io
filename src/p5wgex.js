@@ -3385,12 +3385,21 @@ const p5wgex = (function(){
     setUniform(name, data){
       // ていうかsetUniformこいつの仕事だろ。
       // texture以外です。
+      // もう面倒なんで
+      // this.uniformsの中に無かったら何もしないことにしましょう
+      if (this.uniforms[name] === undefined) return;
+      // もちろんサイレントエラーの可能性があるのであれだけど
+      // 普通にうっとうしいので
+      // ライティングの方でfsでuViewMatrixを受け取らないようにしたい
+      // それが実現するまでの応急処置
       _setUniform(this.gl, this.uniforms[name], data);
     }
     setTexture(name, _texture){
       // 2d, cube_map, 2d_arrayなどを想定
       const gl = this.gl;
       const uniform = this.uniforms[name];
+      // こっちも存在しない場合はスルーでいいと思う
+      if (this.uniforms[name] === undefined) return;
       const target = this.uniforms.samplerTargetArray[uniform.samplerIndex];
       // activateする番号とuniform1iで登録する番号は一致しており、かつsamplerごとに異なる必要があるということ
       gl.activeTexture(gl.TEXTURE0 + uniform.samplerIndex);
@@ -9110,9 +9119,15 @@ const p5wgex = (function(){
       const {directionalLightCountMax = 5} = options;
       const {pointLightCountMax = 5} = options;
       const {spotLightCountMax = 5} = options;
-
+      // 以下は必須
+      this.fs.uniforms =
+      `
+        uniform vec4 uMonoColor; // monoColorの場合
+        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
+      `;
+      // 以下はライティング時のみ
       if (useLight) {
-        this.fs.uniforms =
+        this.fs.uniforms +=
         `
           uniform mat4 uViewMatrix;
 
@@ -9147,8 +9162,6 @@ const p5wgex = (function(){
         `
           // light flag.
           uniform bool uUseSpecular; // デフォルトはfalse;
-          uniform vec4 uMonoColor; // monoColorの場合
-          uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
         `;
       }
       this.fs.outputs =
@@ -9389,15 +9402,19 @@ const p5wgex = (function(){
       // uniformsはuMonoColorとuMaterialFlagだけ排除して
       // 入力としては先ほどのmaterialColor, viewPosition, viewNormalを
       // textureとして用意する
+      // 以下は必須
+      this.fs.uniforms =
+      `
+        // 各種テクスチャ
+        uniform sampler2D uMaterialColor;  // ubyteの4
+        uniform sampler2D uViewPosition;   // floatの4
+        uniform sampler2D uViewNormal;     // floatの4
+      `;
+      // 以下はライティング時だけ
       if (useLight) {
-        this.fs.uniforms =
+        this.fs.uniforms +=
         `
           uniform mat4 uViewMatrix;
-
-          // 各種テクスチャ
-          uniform sampler2D uMaterialColor;  // ubyteの4
-          uniform sampler2D uViewPosition;   // floatの4
-          uniform sampler2D uViewNormal;     // floatの4
 
           // 汎用色
           uniform vec3 uAmbientColor;
