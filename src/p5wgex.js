@@ -9007,7 +9007,7 @@ const p5wgex = (function(){
       _fs += this.fs.constants;
       _fs += this.fs.structs;
       _fs += this.fs.uniforms;
-      _fs += _convertVaryingsToText(this.varyings, "fs", 2);
+      _fs += _convertVaryingsToText(this.varyings, "fs"); // 謎の2を消去
       _fs += this.fs.outputs;
       _fs += this.fs.routines;
       _fs +=
@@ -9046,6 +9046,7 @@ const p5wgex = (function(){
       super(node);
     }
     initialize(options = {}){
+      const {useLight = true} = options; // これがfalseの場合、ライティング関連のコードはカットされる
       super.initialize();
       this.attrs = [
         {type:"vec3", name:"aPosition"},
@@ -9055,9 +9056,9 @@ const p5wgex = (function(){
         {type:"vec3", name:"vLocalPosition"},
         {type:"vec3", name:"vGlobalPosition"},
         {type:"vec3", name:"vViewPosition"},
+        {type:"vec3", name:"vLocalNormal"} // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
         {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
-        {type:"vec3", name:"vViewNormal"}, // ビュー法線。ライティングで使う。
-        {type:"vec3", name:"vNormal"} // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
+        {type:"vec3", name:"vViewNormal"} // ビュー法線。ライティングで使う。
       ];
 
       this.vs.precisions = ``;
@@ -9080,13 +9081,13 @@ const p5wgex = (function(){
       this.vs.mainProcess =
       `
         // 位置と法線の計算
-        vLocalPosition = position;
+        vLocalPosition = aPosition; // aPositionの方が使えるだろ。ていうかローカルってそういう意味よ
         vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
         vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
         vViewPosition = viewModelPosition.xyz;
-        vViewNormal = normalize(uNormalMatrix * normal);
+        vLocalNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
         vGlobalNormal = normalize(uModelNormalMatrix * normal);
-        vNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
+        vViewNormal = normalize(uNormalMatrix * normal);
 
         gl_Position = uProjMatrix * viewModelPosition;
       `;
@@ -9096,63 +9097,65 @@ const p5wgex = (function(){
       `
         precision highp float;
       `;
-      this.fs.constants =
-      `
-        const float diffuseCoefficient = 0.73;
-        const float specularCoefficient = 2.0;
-      `;
+      if (useLight) {
+        // ...この数値もいい加減使うのやめたいです。まあ難しいけど。
+        this.fs.constants =
+        `
+          const float diffuseCoefficient = 0.73;
+          const float specularCoefficient = 2.0;
+        `;
+      }
 
       // optionで増やせるようにする
       const {directionalLightCountMax = 5} = options;
       const {pointLightCountMax = 5} = options;
       const {spotLightCountMax = 5} = options;
 
-      this.fs.uniforms =
-      `
-        uniform mat4 uViewMatrix;
+      if (useLight) {
+        this.fs.uniforms =
+        `
+          uniform mat4 uViewMatrix;
 
-        // 汎用色
-        uniform vec3 uAmbientColor;
-        uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
-        uniform vec3 uAttenuation; // デフォルトは1,0,0. pointLightで使う
+          // 汎用色
+          uniform vec3 uAmbientColor;
+          uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
+          uniform vec3 uAttenuation; // デフォルトは1,0,0. pointLightで使う
 
-        // directionalLight関連
-        uniform int uDirectionalLightCount; // デフォ0なのでフラグ不要
-      ` +
-      `uniform vec3 uLightingDirection[` + directionalLightCountMax +`];` +
-      `uniform vec3 uDirectionalDiffuseColor[5];` +
-      `uniform vec3 uDirectionalSpecularColor[5];` +
-      `
-      // pointLight関連
-      uniform int uPointLightCount; // これがデフォルトゼロであることによりフラグが不要となる。
-      ` +
-      `uniform vec3 uPointLightLocation[` + pointLightCountMax +`];` +
-      `uniform vec3 uPointLightDiffuseColor[` + pointLightCountMax +`];` +
-      `uniform vec3 uPointLightSpecularColor[` + pointLightCountMax +`];` +
-      `
-        // spotLight関連
-        uniform int uSpotLightCount; // 0～5
-      ` +
-      `uniform vec3 uSpotLightDirection[` + spotLightCountMax +`];` +
-      `uniform vec3 uSpotLightLocation[` + spotLightCountMax +`];` +
-      `uniform float uSpotLightAngle[` + spotLightCountMax +`];` +
-      `uniform float uSpotLightConc[` + spotLightCountMax +`];` +
-      `uniform vec3 uSpotLightDiffuseColor[` + spotLightCountMax +`];` +
-      `uniform vec3 uSpotLightSpecularColor[` + spotLightCountMax +`];` +
-      `
-        // light flag.
-        uniform bool uUseLight;
-        uniform bool uUseSpecular; // デフォルトはfalse;
-        uniform vec4 uMonoColor; // monoColorの場合
-        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
-      `;
-
+          // directionalLight関連
+          uniform int uDirectionalLightCount; // デフォ0なのでフラグ不要
+        ` +
+        `uniform vec3 uLightingDirection[` + directionalLightCountMax +`];` +
+        `uniform vec3 uDirectionalDiffuseColor[` + directionalLightCountMax +`];` +
+        `uniform vec3 uDirectionalSpecularColor[` + directionalLightCountMax +`];` +
+        `
+        // pointLight関連
+        uniform int uPointLightCount; // これがデフォルトゼロであることによりフラグが不要となる。
+        ` +
+        `uniform vec3 uPointLightLocation[` + pointLightCountMax +`];` +
+        `uniform vec3 uPointLightDiffuseColor[` + pointLightCountMax +`];` +
+        `uniform vec3 uPointLightSpecularColor[` + pointLightCountMax +`];` +
+        `
+          // spotLight関連
+          uniform int uSpotLightCount; // 0～5
+        ` +
+        `uniform vec3 uSpotLightDirection[` + spotLightCountMax +`];` +
+        `uniform vec3 uSpotLightLocation[` + spotLightCountMax +`];` +
+        `uniform float uSpotLightAngle[` + spotLightCountMax +`];` +
+        `uniform float uSpotLightConc[` + spotLightCountMax +`];` +
+        `uniform vec3 uSpotLightDiffuseColor[` + spotLightCountMax +`];` +
+        `uniform vec3 uSpotLightSpecularColor[` + spotLightCountMax +`];` +
+        `
+          // light flag.
+          uniform bool uUseSpecular; // デフォルトはfalse;
+          uniform vec4 uMonoColor; // monoColorの場合
+          uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
+        `;
+      }
       this.fs.outputs =
       `
         out vec4 fragColor;
       `
-
-      this.fs.routines = snipet.lightingRoutines;
+      if (useLight) { this.fs.routines = snipet.lightingRoutines; }
       this.fs.preProcess =
       `
         vec3 position = vViewPosition;
@@ -9162,35 +9165,30 @@ const p5wgex = (function(){
           color = uMonoColor;  // uMonoColor単色
         }
       `;
-      // normalは渡す際に正規化した方がいいでしょうね
-      this.fs.mainProcess =
-      `
-        if (uUseLight) {
+      // useLight:falseの場合、ここでやることは何にもない
+      if (useLight) {
+        this.fs.mainProcess =
+        `
+          // normalは渡す際に正規化（今後なんらかの最適化が実行されるかも？）
           vec3 result = totalLight(position, normalize(normal), color.rgb);
           color.rgb = result;
-        }
-      `;
-      // 先に用意する
-      const {useColor = false} = options;
-      const {useTexCoord = false} = options;
-
-      // おそらくpostProcessにfragColorの計算を持ってきているのは、あれですね。
-      // mainProcessで取得したcolorに何か加工をすることが出来るようにするためですね。
-      // useTexCoordがtrueの場合にはcolor.rgb *= color.aを実行しないようにする
-      // そのようなシェーダを併用する場合にはmainProcessにaddCodeを実行して
-      // ポストプロセスの前にcolor.rgbにcolor.aを乗算する必要がある
-      // それは別のテクスチャかもしれないし頂点色かもしれない、わからないので、コーダーがカスタマイズして決める。
-      this.fs.postProcess = (useTexCoord ? `` : `color.rgb *= color.a; `);
-      this.fs.postProcess +=
+        `;
+      }
+      // color.rgb *= color.a; とかそういうのをカット
+      // もし透明度でなんかやりたいなら
+      // uMonoColorあるいは独自ユニフォームで透明度を渡して
+      // mainProcessのあとでrgbにaを掛けるとかなんかそういうことをすればいいですね
+      this.fs.postProcess =
       `
         fragColor = color;
       `;
-
       // たとえばvsPreProcessでvec4 color = aColor;とかして
       // colorをいじって
       // vsPostProcessでvColor = color;みたいにできる。
       // texCoordでも同じことができる
       // colorを使う場合はaColorを追加.
+      const {useColor = false} = options;
+      const {useTexCoord = false} = options;
       if (useColor) {
         // TODO
         this.addAttr("vec4", "aColor");
@@ -9232,9 +9230,9 @@ const p5wgex = (function(){
         {type:"vec3", name:"vLocalPosition"},
         {type:"vec3", name:"vGlobalPosition"},
         {type:"vec3", name:"vViewPosition"},
+        {type:"vec3", name:"vLocalNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
         {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
         {type:"vec3", name:"vViewNormal"}, // ビュー法線。ライティングで使う。
-        {type:"vec3", name:"vNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
         {type:"vec4", name:"vNormalDeviceCoord"} // いわゆるNDC.
       ];
 
@@ -9259,13 +9257,13 @@ const p5wgex = (function(){
       this.vs.mainProcess =
       `
         // 位置と法線の計算
-        vLocalPosition = position;
+        vLocalPosition = aPosition; // aPositionの方が適切だろ. 改変後のpositionをそのまま使うメリットあんまない
         vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
         vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
         vViewPosition = viewModelPosition.xyz;
-        vViewNormal = normalize(uNormalMatrix * normal);
+        vLocalNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
         vGlobalNormal = normalize(uModelNormalMatrix * normal);
-        vNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
+        vViewNormal = normalize(uNormalMatrix * normal);
 
         vec4 ndc = uProjMatrix * viewModelPosition;
         gl_Position = ndc;
@@ -9349,11 +9347,13 @@ const p5wgex = (function(){
     }
   }
   // こっちはディファードをライティングするためのシェーダ
+  // 一貫性を保つためにこっちもuseLight:falseで別のshaderが起動するようにしましょ
   class DeferredLightingShader extends ShaderPrototype{
     constructor(node){
       super(node);
     }
     initialize(options = {}){
+      const {useLight = true} = options;
       super.initialize();
       // 板ポリ。
       this.attrs = [
@@ -9375,11 +9375,13 @@ const p5wgex = (function(){
       `
         precision highp float;
       `;
-      this.fs.constants =
-      `
-        const float diffuseCoefficient = 0.73;
-        const float specularCoefficient = 2.0;
-      `;
+      if (useLight) {
+        this.fs.constants =
+        `
+          const float diffuseCoefficient = 0.73;
+          const float specularCoefficient = 2.0;
+        `;
+      }
       // optionで増やせるようにする
       const {directionalLightCountMax = 5} = options;
       const {pointLightCountMax = 5} = options;
@@ -9387,48 +9389,49 @@ const p5wgex = (function(){
       // uniformsはuMonoColorとuMaterialFlagだけ排除して
       // 入力としては先ほどのmaterialColor, viewPosition, viewNormalを
       // textureとして用意する
-      this.fs.uniforms =
-      `
-        uniform mat4 uViewMatrix;
+      if (useLight) {
+        this.fs.uniforms =
+        `
+          uniform mat4 uViewMatrix;
 
-        // 各種テクスチャ
-        uniform sampler2D uMaterialColor;  // ubyteの4
-        uniform sampler2D uViewPosition;   // floatの4
-        uniform sampler2D uViewNormal;     // floatの4
+          // 各種テクスチャ
+          uniform sampler2D uMaterialColor;  // ubyteの4
+          uniform sampler2D uViewPosition;   // floatの4
+          uniform sampler2D uViewNormal;     // floatの4
 
-        // 汎用色
-        uniform vec3 uAmbientColor;
-        uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
-        uniform vec3 uAttenuation; // デフォルトは1,0,0. pointLightで使う
+          // 汎用色
+          uniform vec3 uAmbientColor;
+          uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
+          uniform vec3 uAttenuation; // デフォルトは1,0,0. pointLightで使う
 
-        // directionalLight関連
-        uniform int uDirectionalLightCount; // デフォ0なのでフラグ不要
-      ` +
-      `uniform vec3 uLightingDirection[` + directionalLightCountMax +`];` +
-      `uniform vec3 uDirectionalDiffuseColor[5];` +
-      `uniform vec3 uDirectionalSpecularColor[5];` +
-      `
-      // pointLight関連
-      uniform int uPointLightCount; // これがデフォルトゼロであることによりフラグが不要となる。
-      ` +
-      `uniform vec3 uPointLightLocation[` + pointLightCountMax +`];` +
-      `uniform vec3 uPointLightDiffuseColor[` + pointLightCountMax +`];` +
-      `uniform vec3 uPointLightSpecularColor[` + pointLightCountMax +`];` +
-      `
-        // spotLight関連
-        uniform int uSpotLightCount; // 0～5
-      ` +
-      `uniform vec3 uSpotLightDirection[` + spotLightCountMax +`];` +
-      `uniform vec3 uSpotLightLocation[` + spotLightCountMax +`];` +
-      `uniform float uSpotLightAngle[` + spotLightCountMax +`];` +
-      `uniform float uSpotLightConc[` + spotLightCountMax +`];` +
-      `uniform vec3 uSpotLightDiffuseColor[` + spotLightCountMax +`];` +
-      `uniform vec3 uSpotLightSpecularColor[` + spotLightCountMax +`];` +
-      `
-        // light flag.
-        uniform bool uUseLight;
-        uniform bool uUseSpecular; // デフォルトはfalse;
-      `;
+          // directionalLight関連
+          uniform int uDirectionalLightCount; // デフォ0なのでフラグ不要
+        ` +
+        `uniform vec3 uLightingDirection[` + directionalLightCountMax +`];` +
+        `uniform vec3 uDirectionalDiffuseColor[5];` +
+        `uniform vec3 uDirectionalSpecularColor[5];` +
+        `
+        // pointLight関連
+        uniform int uPointLightCount; // これがデフォルトゼロであることによりフラグが不要となる。
+        ` +
+        `uniform vec3 uPointLightLocation[` + pointLightCountMax +`];` +
+        `uniform vec3 uPointLightDiffuseColor[` + pointLightCountMax +`];` +
+        `uniform vec3 uPointLightSpecularColor[` + pointLightCountMax +`];` +
+        `
+          // spotLight関連
+          uniform int uSpotLightCount; // 0～5
+        ` +
+        `uniform vec3 uSpotLightDirection[` + spotLightCountMax +`];` +
+        `uniform vec3 uSpotLightLocation[` + spotLightCountMax +`];` +
+        `uniform float uSpotLightAngle[` + spotLightCountMax +`];` +
+        `uniform float uSpotLightConc[` + spotLightCountMax +`];` +
+        `uniform vec3 uSpotLightDiffuseColor[` + spotLightCountMax +`];` +
+        `uniform vec3 uSpotLightSpecularColor[` + spotLightCountMax +`];` +
+        `
+          // light flag.
+          uniform bool uUseSpecular; // デフォルトはfalse;
+        `;
+      }
       // 出力は普通にfragColorですね
       this.fs.outputs =
       `
@@ -9449,13 +9452,13 @@ const p5wgex = (function(){
       // このあとでdepthをいじってなんか作りたいとかあれば
       // ご自由にどうぞ
       // vPositionTex.aを取り出すことでもなんかできるかも
-      this.fs.mainProcess =
-      `
-        if (uUseLight) {
+      if (useLight) {
+        this.fs.mainProcess =
+        `
           vec3 result = totalLight(viewPosition, normalize(viewNormal), color.rgb);
           color.rgb = result;
-        }
-      `;
+        `;
+      }
       // 必要ならこのあとrgbにaを掛けるなりdepthでalphaを決めるなりすればよい
         this.fs.postProcess =
         `
@@ -9543,7 +9546,7 @@ const p5wgex = (function(){
       `;
       this.vs.mainProcess =
       `
-        // 位置と法線の計算
+        // 位置の計算
         vLocalPosition = position;
         vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
         vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
@@ -9919,7 +9922,7 @@ const p5wgex = (function(){
     }
     prepareLightingParameters(){
       this.lightingParams = {
-        use:false,
+        //use:false,
         ambient:[0.5, 0.5, 0.5],
         shininess:40,
         attenuation:[1, 0, 0],
@@ -9953,7 +9956,7 @@ const p5wgex = (function(){
     setLight(info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
-      this.lightingParams.use = true;
+      //this.lightingParams.use = true;
     }
     // directionalLight.
     setDirectionalLight(info = {}){
@@ -9973,6 +9976,7 @@ const p5wgex = (function(){
       for(const _key of keys){ this.spotLightParams[_key] = info[_key]; }
       if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
     }
+    /*
     lightOn(){
       // 即時的に切り替える処理にする
       this.lightingParams.use = true;
@@ -9983,7 +9987,7 @@ const p5wgex = (function(){
       this.lightingParams.use = false;
       this.node.setUniform("uUseLight", this.lightingParams.use);
       return this;
-    }
+    }*/
     setFlag(flag){
       // フラグの切り替えめんどくさいんだよ
       this.node.setUniform("uMaterialFlag", flag);
@@ -10000,10 +10004,8 @@ const p5wgex = (function(){
       // これは破壊的な変更だが、変えるスケッチは多くないので問題ない。どうせdeferredはあんま使わないだろうし...
       const {renderType = "forward"} = options;
 
-      // forwardの場合は事前にやるんだけど
-      // deferredの場合は後回し
-      this.node.setUniform("uUseLight", this.lightingParams.use);
-      if (!this.lightingParams.use) { return; } // noLights.
+      //this.node.setUniform("uUseLight", this.lightingParams.use);
+      //if (!this.lightingParams.use) { return; } // noLights.
 
       this.node.setUniform("uAmbientColor", this.lightingParams.ambient);
       this.node.setUniform("uShininess", this.lightingParams.shininess);
