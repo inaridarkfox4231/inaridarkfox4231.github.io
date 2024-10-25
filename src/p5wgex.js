@@ -9056,7 +9056,7 @@ const p5wgex = (function(){
         {type:"vec3", name:"vLocalPosition"},
         {type:"vec3", name:"vGlobalPosition"},
         {type:"vec3", name:"vViewPosition"},
-        {type:"vec3", name:"vLocalNormal"} // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
+        {type:"vec3", name:"vLocalNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
         {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
         {type:"vec3", name:"vViewNormal"} // ビュー法線。ライティングで使う。
       ];
