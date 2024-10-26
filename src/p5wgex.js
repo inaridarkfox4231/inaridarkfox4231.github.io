@@ -9999,7 +9999,8 @@ const p5wgex = (function(){
       }
       // 長い場合は増やす
       if(target.length < properValue.length){
-        for(let i=0; i<properValue.length - target.length; i++){
+        const addCount = properValue.length - target.length;
+        for(let i=0; i<addCount; i++){
           target.push(new Vec3());
         }
       }
