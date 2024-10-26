@@ -10028,46 +10028,46 @@ const p5wgex = (function(){
       // 特に問題はないだろう（無いよね？？？）
     }
     // directionalLight.
-    setDirectionalLight(info = {}){
+    setDirectionalLight(params = {}, options = {}){
       // view行列の補正を掛けるかどうか
-      const {cameraBase = false} = info;
-      const keys = Object.keys(info);
+      const {cameraBase = false} = options;
+      const keys = Object.keys(params);
       for(const _key of keys){
-        if(_key === "cameraBase") continue;
+        //if(_key === "cameraBase") continue;
         if(_key === "direction"){
-          this.setVectorParam(_key, this.directionalLightParams[_key], info[_key], cameraBase);
+          this.setVectorParam(_key, this.directionalLightParams[_key], params[_key], cameraBase);
         }else{
-          this.directionalLightParams[_key] = info[_key];
+          this.directionalLightParams[_key] = params[_key];
         }
       }
       //if (this.directionalLightParams.count > 0) { this.directionalLightParams.use = true; }
     }
     // pointLight.
-    setPointLight(info = {}){
+    setPointLight(params = {}, options = {}){
       // view行列の補正を掛けるかどうか
-      const {cameraBase = false} = info;
-      const keys = Object.keys(info);
+      const {cameraBase = false} = options;
+      const keys = Object.keys(params);
       for(const _key of keys){
-        if(_key === "cameraBase") continue;
+        //if(_key === "cameraBase") continue;
         if(_key === "location"){
-          this.setVectorParam(_key, this.pointLightParams[_key], info[_key], cameraBase);
+          this.setVectorParam(_key, this.pointLightParams[_key], params[_key], cameraBase);
         }else{
-          this.pointLightParams[_key] = info[_key];
+          this.pointLightParams[_key] = params[_key];
         }
       }
       //if (this.pointLightParams.count > 0) { this.pointLightParams.use = true; }
     }
     // spotLight.
-    setSpotLight(info = {}){
+    setSpotLight(params = {}, options = {}){
       // view行列の補正を掛けるかどうか
-      const {cameraBase = false} = info;
-      const keys = Object.keys(info);
+      const {cameraBase = false} = options;
+      const keys = Object.keys(params);
       for(const _key of keys){
-        if(_key === "cameraBase") continue;
+        //if(_key === "cameraBase") continue;
         if(_key === "location" || _key === "direction"){
-          this.setVectorParam(_key, this.spotLightParams[_key], info[_key], cameraBase);
+          this.setVectorParam(_key, this.spotLightParams[_key], params[_key], cameraBase);
         }else{
-          this.spotLightParams[_key] = info[_key];
+          this.spotLightParams[_key] = params[_key];
         }
       }
       //if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
