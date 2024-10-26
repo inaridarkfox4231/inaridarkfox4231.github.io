@@ -8379,7 +8379,8 @@ const p5wgex = (function(){
         void applyDirectionalLight(vec3 direction, vec3 diffuseColor, vec3 specularColor,
                                    vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
-          vec3 lightVector = (uViewMatrix * vec4(direction, 0.0)).xyz;
+          //vec3 lightVector = (uViewMatrix * vec4(direction, 0.0)).xyz;
+          vec3 lightVector = direction;
           vec3 lightDir = normalize(lightVector);
           // 色計算
           vec3 lightColor = diffuseColor;
@@ -8395,7 +8396,8 @@ const p5wgex = (function(){
         void applyPointLight(vec3 location, vec3 diffuseColor, vec3 specularColor,
                              vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
-          vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz;
+          //vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz;
+          vec3 lightPosition = location;
           vec3 lightVector = modelPosition - lightPosition;
           vec3 lightDir = normalize(lightVector);
           float lightDistance = length(lightVector);
@@ -8416,7 +8418,8 @@ const p5wgex = (function(){
         void applySpotLight(vec3 location, vec3 direction, float angle, float conc, vec3 diffuseColor, vec3 specularColor,
                             vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
-          vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz; // locationは光の射出位置
+          //vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz; // locationは光の射出位置
+          vec3 lightPosition = location;
           vec3 lightVector = modelPosition - lightPosition; // 光源 → モデル位置
           vec3 lightDir = normalize(lightVector);
           float lightDistance = length(lightVector);
@@ -8424,7 +8427,8 @@ const p5wgex = (function(){
           float lightFalloff = 1.0 / dot(uAttenuation, vec3(1.0, d, d*d));
           // falloffは光それ自身の減衰で、これに加えてspot（angleで定義されるcone状の空間）からのずれによる減衰を考慮
           float spotFalloff;
-          vec3 lightDirection = (uViewMatrix * vec4(direction, 0.0)).xyz;
+          //vec3 lightDirection = (uViewMatrix * vec4(direction, 0.0)).xyz;
+          vec3 lightDirection = direction;
           // lightDirはモデルに向かうベクトル、lightDirectionはスポットライトの向きとしての光の向き。そこからのずれで減衰させる仕組み。
           float spotDot = dot(lightDir, normalize(lightDirection));
           if(spotDot < cos(angle)){
@@ -9129,7 +9133,7 @@ const p5wgex = (function(){
       if (useLight) {
         this.fs.uniforms +=
         `
-          uniform mat4 uViewMatrix;
+          //uniform mat4 uViewMatrix; // 廃止
 
           // 汎用色
           uniform vec3 uAmbientColor;
@@ -9414,7 +9418,7 @@ const p5wgex = (function(){
       if (useLight) {
         this.fs.uniforms +=
         `
-          uniform mat4 uViewMatrix;
+          //uniform mat4 uViewMatrix; // 廃止
 
           // 汎用色
           uniform vec3 uAmbientColor;
@@ -9946,24 +9950,24 @@ const p5wgex = (function(){
         useSpecular:false
       };
       this.directionalLightParams = {
-        use:false,
-        count:1,
-        direction:[0, 0, -1],
+        //use:false,
+        count:0,
+        direction:[new Vec3(0,0,-1)],
         diffuseColor:[0.5,0.5,0.5],
         specularColor:[1, 1, 1]
       };
       this.pointLightParams = {
-        use:false,
-        count:1,
-        location:[0, 0, 0],
+        //use:false,
+        count:0,
+        location:[new Vec3(0,0,0)],
         diffuseColor:[1, 1, 1],
         specularColor:[1, 1, 1]
       };
       this.spotLightParams = {
-        use:false,
-        count:1,
-        location:[0, 0, 4],
-        direction:[0, 0, -1],
+        //use:false,
+        count:0,
+        location:[new Vec3(0,0,4)],
+        direction:[new Vec3(0,0,-1)],
         angle:Math.PI/4,
         conc:100,
         diffuseColor:[1, 1, 1],
@@ -9975,23 +9979,98 @@ const p5wgex = (function(){
       for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
       //this.lightingParams.use = true;
     }
+    setVectorParam(_key, target, value, cameraBase = false){
+      // this[prop][key]はベクトルの配列である
+      // valueは配列を想定する
+      if(!Array.isArray(value)) return;
+      if(value.length === 0) return;
+      let properValue;
+      // もうちょっといい書き方があるんだろうけど今ちょっと先に実装を確かめたいので
+      // 応急処置
+      // 後方互換性のために[1,2,3,4,5,6] -> [[1,2,3],[4,5,6]]のような処理をする
+      if(typeof value[0] === 'number'){
+        properValue = new Array();
+        for(let k=0; k<value.length; k+=3){
+          properValue.push([value[3*k], value[3*k+1], value[3*k+2]]);
+        }
+      }else{
+        // value[0]がベクトルとかの場合
+        properValue = value;
+      }
+      // 長い場合は増やす
+      if(target.length < properValue.length){
+        for(let i=0; i<properValue.length - target.length; i++){
+          target.push(new Vec3());
+        }
+      }
+      // set
+      for(let i=0; i<target.length; i++){
+        target[i].set(properValue[i]);
+      }
+      // targetの各成分を行列で...
+      const cam = this.curCam.cam;
+      const viewMat = cam.getViewMat();
+      // cameraBaseをtrueにするとこの処理が行われず、カメラ座標での値となる
+      // たとえば(0,0,-1)にすれば常にカメラ方向からの照射となり、
+      // いちいちfrontとか取らずに済む。もちろん従来のやり方も使える。デフォルトはオフ。
+      if(!cameraBase){
+        for(const v of target){
+          // directionの場合とlocationの場合で適用方法が異なる
+          if(_key === "direction"){
+            v.multMat4(viewMat, 0);
+          }else{
+            v.multMat4(viewMat, 1);
+          }
+        }
+      }
+      // ※この処理はset～～Lightを実行しない場合、行なわれない。
+      // とはいえライトをセットするなら位置や方向は確実に設定することが想定されるので
+      // 特に問題はないだろう（無いよね？？？）
+    }
     // directionalLight.
     setDirectionalLight(info = {}){
+      // view行列の補正を掛けるかどうか
+      const {cameraBase = false} = info;
       const keys = Object.keys(info);
-      for(const _key of keys){ this.directionalLightParams[_key] = info[_key]; }
-      if (this.directionalLightParams.count > 0) { this.directionalLightParams.use = true; }
+      for(const _key of keys){
+        if(_key === "cameraBase") continue;
+        if(_key === "direction"){
+          this.setVectorParam(_key, this.directionalLightParams[_key], info[_key], cameraBase);
+        }else{
+          this.directionalLightParams[_key] = info[_key];
+        }
+      }
+      //if (this.directionalLightParams.count > 0) { this.directionalLightParams.use = true; }
     }
     // pointLight.
     setPointLight(info = {}){
+      // view行列の補正を掛けるかどうか
+      const {cameraBase = false} = info;
       const keys = Object.keys(info);
-      for(const _key of keys){ this.pointLightParams[_key] = info[_key]; }
-      if (this.pointLightParams.count > 0) { this.pointLightParams.use = true; }
+      for(const _key of keys){
+        if(_key === "cameraBase") continue;
+        if(_key === "location"){
+          this.setVectorParam(_key, this.pointLightParams[_key], info[_key], cameraBase);
+        }else{
+          this.pointLightParams[_key] = info[_key];
+        }
+      }
+      //if (this.pointLightParams.count > 0) { this.pointLightParams.use = true; }
     }
     // spotLight.
     setSpotLight(info = {}){
+      // view行列の補正を掛けるかどうか
+      const {cameraBase = false} = info;
       const keys = Object.keys(info);
-      for(const _key of keys){ this.spotLightParams[_key] = info[_key]; }
-      if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
+      for(const _key of keys){
+        if(_key === "cameraBase") continue;
+        if(_key === "location" || _key === "direction"){
+          this.setVectorParam(_key, this.spotLightParams[_key], info[_key], cameraBase);
+        }else{
+          this.spotLightParams[_key] = info[_key];
+        }
+      }
+      //if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
     }
     /*
     lightOn(){
@@ -10019,7 +10098,10 @@ const p5wgex = (function(){
     setLightingUniforms(options = {}){
       // renderTypeで処理を分ける。deferredの場合はここをrenderType:"deferred"にする。
       // これは破壊的な変更だが、変えるスケッチは多くないので問題ない。どうせdeferredはあんま使わないだろうし...
-      const {renderType = "forward"} = options;
+      //const {renderType = "forward"} = options;
+
+      // directionとlocationはベクトル配列を渡すが、"vec3"の場合に限りVec3配列を渡せるので、問題ない、はず！
+      // そしてuViewMatはお払い箱です。
 
       //this.node.setUniform("uUseLight", this.lightingParams.use);
       //if (!this.lightingParams.use) { return; } // noLights.
@@ -10029,21 +10111,21 @@ const p5wgex = (function(){
       this.node.setUniform("uAttenuation", this.lightingParams.attenuation);
       this.node.setUniform("uUseSpecular", this.lightingParams.useSpecular);
 
-      if (this.directionalLightParams.use){
+      if (this.directionalLightParams.count > 0){
         this.node.setUniform("uDirectionalLightCount", this.directionalLightParams.count);
         this.node.setUniform("uLightingDirection", this.directionalLightParams.direction);
         this.node.setUniform("uDirectionalDiffuseColor", this.directionalLightParams.diffuseColor);
         this.node.setUniform("uDirectionalSpecularColor", this.directionalLightParams.specularColor);
       }
 
-      if(this.pointLightParams.use){
+      if(this.pointLightParams.count > 0){
         this.node.setUniform("uPointLightCount", this.pointLightParams.count);
         this.node.setUniform("uPointLightLocation", this.pointLightParams.location);
         this.node.setUniform("uPointLightDiffuseColor", this.pointLightParams.diffuseColor);
         this.node.setUniform("uPointLightSpecularColor", this.pointLightParams.specularColor);
       }
 
-      if (this.spotLightParams.use) {
+      if (this.spotLightParams.count > 0) {
         this.node.setUniform("uSpotLightCount", this.spotLightParams.count);
         this.node.setUniform("uSpotLightLocation", this.spotLightParams.location);
         this.node.setUniform("uSpotLightDirection", this.spotLightParams.direction);
@@ -10053,11 +10135,13 @@ const p5wgex = (function(){
         this.node.setUniform("uSpotLightSpecularColor", this.spotLightParams.specularColor);
       }
       // deferredの場合、こっちでuViewMatrixを設定する。
+      /*
       if (renderType === "deferred") {
         const cam = this.curCam.cam;
         const viewMat = cam.getViewMat();
         this.node.setUniform("uViewMatrix", viewMat.m);
       }
+      */
       return this;
     }
     setMatrixUniforms(options = {}){
