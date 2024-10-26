@@ -9991,7 +9991,7 @@ const p5wgex = (function(){
       if(typeof value[0] === 'number'){
         properValue = new Array();
         for(let k=0; k<value.length; k+=3){
-          properValue.push([value[3*k], value[3*k+1], value[3*k+2]]);
+          properValue.push([value[k], value[k+1], value[k+2]]);
         }
       }else{
         // value[0]がベクトルとかの場合
