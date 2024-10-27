@@ -9916,31 +9916,36 @@ const p5wgex = (function(){
       //this.renderingType = "forward";
     }
     initialize(options = {}){
-      const {
-        type = "forward", // forward/deferred
-        forwardLight = {},
-        deferredPrepare = {},
-        deferredLight = {},
-        lines = {}
-      } = options;
+      // optionsをそのまま渡す形式にします
+      // 破壊的なのは分かってるんですがあまりにもめんどくさいので
+      // おそらくdeferredで分かれてて、じゃあ全部分けようって話なんでしょうが、
+      // フラグの種類が分かれてるんですよ...(useColor, useTexCoordはPrepare, useLightはLight側)
+      // 問題ないと思います。
+      // ていうかtypeで分けて、そのタイプに応じた初期化をするわけです。
+      // 全部いっぺんに、じゃないんですよ。
+      // forwardで初期化して使うのにlinesの初期化の材料を与えても無意味
+      // 完全に無駄...まあ不具合起きたら対処するけど。とにかくやめましょ。
+      const { type = "forward" } = options; // forward, deferred, lines.
       switch(type) {
         case "forward":
-          this.shaders.forwardLight.initialize(forwardLight);
+          this.shaders.forwardLight.initialize(options);
           //this.renderingType = "forward";
           this.bindShader("forwardLight");
           break;
         case "deferred":
-          this.shaders.deferredPrepare.initialize(deferredPrepare);
-          this.shaders.deferredLight.initialize(deferredLight);
+          this.shaders.deferredPrepare.initialize(options);
+          this.shaders.deferredLight.initialize(options);
           //this.renderingType = "deferred";
           this.bindShader("deferredPrepare");
           break;
         case "lines":
-          this.shaders.lines.initialize(lines);
+          this.shaders.lines.initialize(options);
           //this.renderingType = "lines";
           this.bindShader("lines");
           break;
       }
+      // useColor,useTexCoord,useLightすべて無意味になるんで相当影響は大きいですね...まあ、頑張って対処しましょ。
+      // 別に難しくないし。今までがおかしかったんだ...
       this.initializeTransform();
       return this;
     }
