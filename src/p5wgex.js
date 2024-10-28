@@ -3103,11 +3103,11 @@ const p5wgex = (function(){
       const r = _getValidation(a, b, c);
       return this.x * r.x + this.y * r.y + this.z * r.z;
     }
-    mag(v){
+    mag(){
       // いわゆる大きさ。自分の二乗のルート。
       return Math.sqrt(this.dot(this));
     }
-    magSq(v){
+    magSq(){
       // sqrtだと重い場合に大きさの0判定だけしたい場合などに使う。
       return this.dot(this);
     }
@@ -3265,6 +3265,22 @@ const p5wgex = (function(){
 
       return this;
     }
+    angleBetween(v){
+      // vとのなす角（絶対値）
+      const crossMag = this.copy().cross(v).mag();
+      const dotValue = this.dot(v);
+      const theta = Math.atan2(crossMag, dotValue);
+      return theta;
+    }
+    angleTo(v, a=0, b=0, c=1){
+      // axisの先っちょから見た場合のvとのなす角（符号付き）
+      // PI以内ですね。PIを超えると逆方向です。
+      // 便宜上signが負でない場合はすべて1とします。
+      const axis = _getValidation(a,b,c);
+      const sign = Math.sign(this.copy().cross(v).dot(axis)); // ベクトル三重積
+      const theta = this.angleBetween(v);
+      return (sign < 0 ? sign : 1) * theta;
+    }
     static add(v1, v2){
       return v1.copy().add(v2);
     }
@@ -3303,6 +3319,12 @@ const p5wgex = (function(){
     }
     static multMat4(v, mat4, w){
       return v.copy().multMat4(mat4, w);
+    }
+    static angleBetween(v, w){
+      return v.angleBetween(w);
+    }
+    static angleTo(v, w, a, b, c){
+      return v.angleTo(w, a, b, c);
     }
   }
 
