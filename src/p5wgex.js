@@ -3449,27 +3449,6 @@ const p5wgex = (function(){
       vbos[attrName1] = tmpAttr;
     }
   }
-
-  // VAOです
-  // IBOは扱いません。別にします。
-  // VAO廃止
-  /*
-  class VAOFigure{
-    constructor(gl, name, attrs, dict){
-      this.gl = gl;
-      this.name = name;
-      this.useVAO = true; // VAOFigureです
-      this.vao = _createVAO(gl, attrs, dict);
-      // countはもう計算してしまおう（面倒）
-      this.count = this.vao.attrCount;
-    }
-    getVAO(){
-      // この中のvbosに名前経由でbufが入ってる感じ（動的更新で使う）
-      return this.vao;
-    }
-  }
-  */
-
   // TransformFeedback用のFigureは要らないかも。
 
   // ---------------------------------------------------------------------------------------------- //
@@ -9105,7 +9084,8 @@ const p5wgex = (function(){
         vGlobalNormal = normalize(uModelNormalMatrix * normal);
         vViewNormal = normalize(uNormalMatrix * normal);
 
-        gl_Position = uProjMatrix * viewModelPosition;
+        vec4 normalDeviceCoordinate = uProjMatrix * viewModelPosition; // あった方が便利なので
+        gl_Position = normalDeviceCoordinate;
       `;
       this.vs.postProcess = ``;
 
@@ -10017,25 +9997,8 @@ const p5wgex = (function(){
         target[i].set(properValue[i]);
       }
       // targetの各成分を行列で...
-      //const cam = this.curCam.cam;
-      //const viewMat = cam.getViewMat();
-      // cameraBaseをtrueにするとこの処理が行われず、カメラ座標での値となる
-      // たとえば(0,0,-1)にすれば常にカメラ方向からの照射となり、
-      // いちいちfrontとか取らずに済む。もちろん従来のやり方も使える。デフォルトはオフ。
       // ここでやっちゃうとライトの設定そのままでカメラだけ変えるときに困るんで（具体的にはキュービックカメラワーク）
       // 実行はsetLightingUniforms()でやりましょう
-      /*
-      if(!cameraBase){
-        for(const v of target){
-          // directionの場合とlocationの場合で適用方法が異なる
-          if(_key === "direction"){
-            v.multMat4(viewMat, 0);
-          }else{
-            v.multMat4(viewMat, 1);
-          }
-        }
-      }
-      */
     }
     // directionalLight.
     setDirectionalLight(params = {}){
@@ -10073,18 +10036,6 @@ const p5wgex = (function(){
       }
       //if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
     }
-    /*
-    lightOn(){
-      // 即時的に切り替える処理にする
-      this.lightingParams.use = true;
-      this.node.setUniform("uUseLight", this.lightingParams.use);
-      return this;
-    }
-    lightOff(){
-      this.lightingParams.use = false;
-      this.node.setUniform("uUseLight", this.lightingParams.use);
-      return this;
-    }*/
     setFlag(flag){
       // フラグの切り替えめんどくさいんだよ
       this.node.setUniform("uMaterialFlag", flag);
