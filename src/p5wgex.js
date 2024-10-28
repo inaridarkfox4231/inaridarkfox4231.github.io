@@ -3307,8 +3307,8 @@ const p5wgex = (function(){
   }
 
   // Vec3生成関数
-  function createVec3(){
-    return new Vec3(0, 0, 0);
+  function createVec3(x, y, z){
+    return new Vec3(x, y, z);
   }
   // 生成関数にバリエーションがあるといいかもしれない
 
