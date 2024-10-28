@@ -130,6 +130,10 @@
 // あとsetUniformでvec3の場合に限り、Vec3とVec3Arrayを許すことにしました。
 // いちいちtoArray()するのめんどくさいんで。
 
+// 20241028
+// lightingまわりについて改善、仕様変更
+// noLightを廃止
+
 /*
 外部から上書きするメソッドの一覧
 pointerPrototype:
