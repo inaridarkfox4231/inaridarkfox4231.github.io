@@ -1298,7 +1298,7 @@ const p5wgex = (function(){
   // 新規の場合のみSystemがtrueを返すのでalertが発生する。2回目以降の場合は何も起きない。
   function myAlert(_string, properErrorString = ""){
     if (foxDriveErrorSystem.throwError(_string, properErrorString)) {
-      window.alert(_string);
+      window.console.error(_string);
     }
   }
 
@@ -8387,7 +8387,6 @@ const p5wgex = (function(){
         void applyDirectionalLight(vec3 direction, vec3 diffuseColor, vec3 specularColor,
                                    vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
-          //vec3 lightVector = (uViewMatrix * vec4(direction, 0.0)).xyz;
           vec3 lightVector = direction;
           vec3 lightDir = normalize(lightVector);
           // 色計算
@@ -8404,7 +8403,6 @@ const p5wgex = (function(){
         void applyPointLight(vec3 location, vec3 diffuseColor, vec3 specularColor,
                              vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
-          //vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz;
           vec3 lightPosition = location;
           vec3 lightVector = modelPosition - lightPosition;
           vec3 lightDir = normalize(lightVector);
@@ -8426,7 +8424,6 @@ const p5wgex = (function(){
         void applySpotLight(vec3 location, vec3 direction, float angle, float conc, vec3 diffuseColor, vec3 specularColor,
                             vec3 modelPosition, vec3 normal, inout vec3 diffuse, inout vec3 specular){
           vec3 viewDirection = normalize(-modelPosition);
-          //vec3 lightPosition = (uViewMatrix * vec4(location, 1.0)).xyz; // locationは光の射出位置
           vec3 lightPosition = location;
           vec3 lightVector = modelPosition - lightPosition; // 光源 → モデル位置
           vec3 lightDir = normalize(lightVector);
@@ -8435,7 +8432,6 @@ const p5wgex = (function(){
           float lightFalloff = 1.0 / dot(uAttenuation, vec3(1.0, d, d*d));
           // falloffは光それ自身の減衰で、これに加えてspot（angleで定義されるcone状の空間）からのずれによる減衰を考慮
           float spotFalloff;
-          //vec3 lightDirection = (uViewMatrix * vec4(direction, 0.0)).xyz;
           vec3 lightDirection = direction;
           // lightDirはモデルに向かうベクトル、lightDirectionはスポットライトの向きとしての光の向き。そこからのずれで減衰させる仕組み。
           float spotDot = dot(lightDir, normalize(lightDirection));
@@ -9142,8 +9138,6 @@ const p5wgex = (function(){
       if (useLight) {
         this.fs.uniforms +=
         `
-          //uniform mat4 uViewMatrix; // 廃止
-
           // 汎用色
           uniform vec3 uAmbientColor;
           uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
@@ -9427,8 +9421,6 @@ const p5wgex = (function(){
       if (useLight) {
         this.fs.uniforms +=
         `
-          //uniform mat4 uViewMatrix; // 廃止
-
           // 汎用色
           uniform vec3 uAmbientColor;
           uniform float uShininess; // specularに使う、まあこれが大きくないと見栄えが悪いのです。光が集中する。
@@ -9630,6 +9622,18 @@ const p5wgex = (function(){
           vColor = color;
         `, "postProcess", "vs");
       }
+      return this;
+    }
+  }
+
+  // PBR. さしあたりforward. やることはほぼ一緒だがstructを使うとこなど色々異なる。
+  // デモはできてるのでぼちぼち追加していくだけ。
+  class ForwardPBRLightingShader extends ShaderPrototype{
+    constructor(node){
+      super(node);
+    }
+    initialize(options = {}){
+      /* TODO */
       return this;
     }
   }
@@ -10167,10 +10171,9 @@ const p5wgex = (function(){
       if (useModel) this.node.setUniform("u" + name + "ModelMatrix", modelMat.m)
       if (useModelView) this.node.setUniform("u" + name + "ModelViewMatrix", modelViewMat.m)
       if (useProj) this.node.setUniform("u" + name + "ProjMatrix", projMat.m);
-      // forwardの場合はトランスフォームとライティングが一体化してるのでここで登録する必要がある。
-      if ((renderType === "forward") && useView) {
-        this.node.setUniform("u" + name + "ViewMatrix", viewMat.m);
-      }
+
+      // uViewMatrixは廃止されました。
+
       // forwardとdeferredの場合にのみ法線情報を登録する
       if ((renderType === "forward" || renderType === "deferred") && (useNormal || useModelNormal)) {
         const normalMat = getInverseTranspose3x3(modelViewMat.getMat3());
@@ -10181,6 +10184,32 @@ const p5wgex = (function(){
       return this;
     }
   }
+
+  // PBR.
+  // uniformで構造体指定を使う
+  // setLightingUniformでビューベース指定するなど、共通点は多い
+  // StandardでuMonoColorとしていたところがalbedoになり、まあ色々違う。
+  // ambientとかも無いし。あるのはEmissiveだけ。ライティングだと暗い場合の気休め的な。
+  // そしてmetallicとroughnessでおしまい。あとはすべてライト。つまり、
+  // albedo,emissive,各種ライトの色、3～5つしか色成分が出てこない。
+  // 加えて変なattenu...なんちゃらとか、なんかよくわかんない0.73とか2.0も出てこない。シンプルになります。
+  // 行列関連はほぼ同じ内容になるでしょう。
+  class PBRLightingSystem extends RenderingSystem{
+    constructor(node){
+      super(node);
+      // さしあたりこんだけ。まあlineも要るでしょう。ライト使わないので内容的には一緒。
+      // なおForwardPBRにもnoLightのオプションがあります。使う場合、....
+      // albedoで単色表現しよう。emissiveはライティング用とする。つまりalbedoからゴールまでワープ。
+      // postProcessを分岐させる。つまりalbedoまんま、もしくはライティング。
+      // alpha処理挟むならmainProcessでなんかする。まあすっからかんだが。preでいいだろ。
+      this.registShader("forwardPBRLight", new ForwardPBRLightingShader(node));
+      this.registShader("lines", new LineShader(node));
+      this.prepareLightingParameters();
+      //this.renderingType = "forward";
+    }
+  }
+
+  // 以上。もうデモはできてるんで、難しくないはず：https://openprocessing.org/sketch/2420819
 
   // ---------------------------------------------------------------------------------------------- //
   // Performance checker
