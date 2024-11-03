@@ -133,6 +133,24 @@
 // 20241028
 // lightingまわりについて改善、仕様変更
 // noLightを廃止
+// forwardLight:~~~などの無駄な記述の必要性を解消しました
+// angleTo,angleBetweenを実装。angleToは方向考慮、angleBetweenは絶対値のみ。
+// angleToは軸を引数に取りその軸のてっぺんから見た時の角度の変化を返す
+// uViewMatをfsで使うのをやめた。setLightingUniformsでcameraBaseをtrueにするとカメラベースでuniform登録される
+// normalDeviceCoordinateという変数を用意。鏡面描画とかで使えそう。
+
+// 20241103
+// 今後の更新予定
+// ++fisceToyBoxから大量移住
+// ++modifiableTube,createAxisSystem
+// ++曲線からメッシュのメソッドをより使いやすく（ベジエの繋ぎ合わせとかでもいけるように）
+// ++loading関連
+// 以下は余裕があれば。おそらく実行されないが.......webgl-waterが忙しいので。
+// --canvas生成関連
+// --drawLoop関連
+// --textをキャンバスに置くメソッドを独自に用意、formatが作れるように。そんなところ
+// ...
+// PBRが入ってないのはいつでもできるから。デモもうできてるし。
 
 /*
 外部から上書きするメソッドの一覧
@@ -4820,125 +4838,6 @@ const p5wgex = (function(){
     return new Geometry();
   }
   // 生成関数にバリエーションがあるといいかもしれない
-
-  // 立方体
-  // まあキューブマップ使いましょうね
-  /*
-  function getCubeMesh(_size = 1){
-    // 上の方の正方形がxMinusでその下にzPlus,xPlus,zMinusと続く
-    // zPlusの左側がyMinusで、zPlusの右側がyPlusです。
-    // つまり十字のクロスしたところにzPlusが来て下にxPlus,右にyPlusというイメージ。
-    const v=[-1,-1,-1, -1,1,-1, -1,-1,1, -1,1,1, // x-minus
-             -1,-1,1, -1,1,1, 1,-1,1, 1,1,1, // z-plus
-             1,-1,1, 1,1,1, 1,-1,-1, 1,1,-1, // x-plus
-             1,-1,-1, 1,1,-1, -1,-1,-1, -1,1,-1, // z-minus
-             -1,-1,-1, -1,-1,1, 1,-1,-1, 1,-1,1, // y-minus
-             -1,1,1, -1,1,-1, 1,1,1, 1,1,-1] // y-plus.
-    for(let i=0; i<v.length; i++) { v[i] *= _size; }
-    const f = [0,2,3, 0,3,1, 4,6,7, 4,7,5, 8,10,11, 8,11,9, 12,14,15, 12,15,13, 16,18,19, 16,19,17, 20,22,23, 20,23,21];
-    const n = getNormals(v, f);
-    const createUV = (a,b) => { return [a, b, a+0.25, b, a, b+0.25, a+0.25, b+0.25]; }
-    const uv = [];
-    uv.push(...createUV(0.375, 0));
-    uv.push(...createUV(0.375, 0.25));
-    uv.push(...createUV(0.375, 0.5));
-    uv.push(...createUV(0.375, 0.75));
-    uv.push(...createUV(0.125, 0.25));
-    uv.push(...createUV(0.625, 0.25));
-    return {v, f, n, uv};
-  }
-
-  // 雑。z軸に平行な平面。
-  function getPlaneMesh(_size = 1){
-    const v = [-1,-1,0, 1,-1,0, -1,1,0, 1,1,0];
-    for(let i=0; i<_size; i++) { v[i] *= _size; }
-    const uv = [0, 1, 1, 1, 0, 0, 1, 0];
-    const f = [0, 1, 2, 2, 1, 3];
-    const n = [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1];
-    return {v, f, n, uv};
-  }
-
-  // UVめんどくさいな
-  // 頂点を重複させればいい
-  function getSphereMesh(_size = 1){
-    const r = _size;
-    const ds = 32;
-    const dt = 48;
-    const v = [];
-    let n = [];
-    const f = [];
-    const uv = []; // ディテールでUVを張る
-
-    // 頂点は重複させる
-    for(let k=0; k<=ds; k++){
-      const theta = Math.PI*k/ds;
-      for(let m=0; m<=dt; m++){
-        const phi = 2*Math.PI*m/dt;
-        v.push(
-          r*sin(theta)*cos(phi), r*sin(theta)*sin(phi), r*cos(theta)
-        );
-        n.push(
-          sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta)
-        );
-        uv.push(m/dt, k/ds);
-      }
-    }
-
-    for(let k=0; k<ds; k++){
-      // 平面と同じようにする
-      for(let m=0; m<dt; m++){
-        const leftUp = k*(dt+1) + m;
-        const leftDown = (k+1)*(dt+1) + m;
-        const rightUp = leftUp+1;
-        const rightDown = leftDown+1;
-        f.push(leftUp, leftDown, rightDown, leftUp, rightDown, rightUp);
-      }
-    }
-
-    return {v, f, n, uv};
-  }
-
-  function getTorusMesh(a=1.0, b=0.4){
-    // 今回はトーラスで。紙の上で計算してるけどロジックは難しくないのよ。
-    const ds = 32;
-    const dt = 32;
-    const v = [];
-    const n = [];
-    const uv = [];
-    const f = [];
-    const dTheta = Math.PI*2/ds;
-    const dPhi = Math.PI*2/dt;
-    // イメージ的にはkがx軸でlがy軸で原点左下の座標系を考えている
-    // この原点はx軸aでz軸bの点で、そこから右と上にxとyをそれぞれ伸ばす感じ。
-    for(let l=0; l<=dt; l++){
-      for(let k=0; k<=ds; k++){
-        const index = (dt+1)*l + k;
-        const px = Math.cos(dPhi*l);
-        const py = Math.sin(dPhi*l);
-        const nx = Math.sin(dTheta*k)*px;
-        const ny = Math.sin(dTheta*k)*py;
-        const nz = Math.cos(dTheta*k);
-        const x = a*px + b*nx;
-        const y = a*py + b*ny;
-        const z = b*nz;
-        v.push(x, y, z);
-        n.push(nx, ny, nz);
-        uv.push((k+1)/ds, (l+1)/dt);
-      }
-    }
-    // kとlに着目すると分かりやすいかもしれない。
-    for(let l=0; l<dt; l++){
-      for(let k=0; k<ds; k++){
-        const index = dt*l + k;
-        f.push(
-          l*(ds+1) + k, l*(ds+1) + k+1, (l+1)*(ds+1) + k+1,
-          l*(ds+1) + k, (l+1)*(ds+1) + k+1, (l+1)*(ds+1) + k
-        );
-      }
-    }
-    return {v, f, n, uv};
-  }
-  */
 
   // v, n, uv, fは予約されているとする。
   // 他にも使いたい場合は配列の形で付加的に用意する。
