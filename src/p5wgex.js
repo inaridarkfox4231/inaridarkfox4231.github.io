@@ -9896,7 +9896,7 @@ const p5wgex = (function(){
       for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
       //this.lightingParams.use = true;
     }
-    setVectorParam(_key, target, value, cameraBase = false){
+    setVectorParam(_key, target, value){
       // this[prop][key]はベクトルの配列である
       // valueは配列を想定する
       if(!Array.isArray(value)) return;
@@ -10057,7 +10057,7 @@ const p5wgex = (function(){
       const {
         renderType = "forward", name = "", camera,
         useModel = true, useModelView = true, useProj = true,
-        useView = true, useNormal = true, useModelNormal = true
+        useNormal = true, useModelNormal = true
       } = options;
       const tf = this.transform;
       const cam = this.getCamera(camera);
