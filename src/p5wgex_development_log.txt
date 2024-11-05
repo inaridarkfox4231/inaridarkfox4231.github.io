@@ -4603,3 +4603,47 @@ GPUとCPUのデータのやり取りを一切介さないで動かせる
 だから何って一蹴される。
 そういうことですね
 人生の無駄
+
+スマホとデスクトップの挙動の違いとかほしいかも
+
+this.attrs = [
+  {type:"vec3", name:"aPosition"}
+];
+this.varyings = [
+  {type:"vec3", name:"vLocalPosition"},
+  {type:"vec3", name:"vGlobalPosition"},
+  {type:"vec3", name:"vViewPosition"}
+];
+this.vs.precisions = ``;
+this.vs.constants = ``;
+this.vs.uniforms =
+`
+  uniform mat4 uModelMatrix;
+  uniform mat4 uModelViewMatrix;
+  uniform mat4 uProjMatrix;
+`;
+this.vs.routines = ``;
+this.vs.preProcess =
+`
+  vec3 position = aPosition;
+`;
+this.vs.mainProcess =
+`
+  // 位置と法線の計算
+  vLocalPosition = aPosition; // aPositionの方が使えるだろ。ていうかローカルってそういう意味よ
+  vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
+  vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
+  vViewPosition = viewModelPosition.xyz;
+  // 法線関連はあとで加えるので
+
+  vec4 normalDeviceCoordinate = uProjMatrix * viewModelPosition; // あった方が便利なので
+  gl_Position = normalDeviceCoordinate;
+`;
+this.vs.postProcess = ``;
+
+this.fs.precisions =
+`
+  precision highp float;
+`;
+// fsのpostProcessは個別でいいや
+// 共通に書けるのはせいぜいこのくらい。あとは個別処理に任せましょ。

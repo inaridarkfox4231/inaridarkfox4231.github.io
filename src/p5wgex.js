@@ -9091,26 +9091,23 @@ const p5wgex = (function(){
     }
   }
 
-  class ForwardLightingShader extends ShaderPrototype{
+  // 3D描画のプロトタイプ(Lineとかもこれの派生とする)
+  // vsでpositionを用意するところ、あとcolor,texture,fogに関する処理がかぶってるんで
+  // そこら辺ですね. まとめようかと。
+  class Shader3DPrototype extends ShaderPrototype{
     constructor(node){
       super(node);
     }
-    initialize(options = {}){
-      const {useLight = true} = options; // これがfalseの場合、ライティング関連のコードはカットされる
+    initialize(){
       super.initialize();
       this.attrs = [
-        {type:"vec3", name:"aPosition"},
-        {type:"vec3", name:"aNormal"}
+        {type:"vec3", name:"aPosition"}
       ];
       this.varyings = [
         {type:"vec3", name:"vLocalPosition"},
         {type:"vec3", name:"vGlobalPosition"},
-        {type:"vec3", name:"vViewPosition"},
-        {type:"vec3", name:"vLocalNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
-        {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
-        {type:"vec3", name:"vViewNormal"} // ビュー法線。ライティングで使う。
+        {type:"vec3", name:"vViewPosition"}
       ];
-
       this.vs.precisions = ``;
       this.vs.constants = ``;
       this.vs.uniforms =
@@ -9118,15 +9115,11 @@ const p5wgex = (function(){
         uniform mat4 uModelMatrix;
         uniform mat4 uModelViewMatrix;
         uniform mat4 uProjMatrix;
-        uniform mat3 uNormalMatrix;
-        uniform mat3 uModelNormalMatrix;
       `;
-
       this.vs.routines = ``;
       this.vs.preProcess =
       `
         vec3 position = aPosition;
-        vec3 normal = aNormal;
       `;
       this.vs.mainProcess =
       `
@@ -9135,9 +9128,7 @@ const p5wgex = (function(){
         vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
         vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
         vViewPosition = viewModelPosition.xyz;
-        vLocalNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
-        vGlobalNormal = normalize(uModelNormalMatrix * normal);
-        vViewNormal = normalize(uNormalMatrix * normal);
+        // 法線関連はあとで加えるので
 
         vec4 normalDeviceCoordinate = uProjMatrix * viewModelPosition; // あった方が便利なので
         gl_Position = normalDeviceCoordinate;
@@ -9148,6 +9139,77 @@ const p5wgex = (function(){
       `
         precision highp float;
       `;
+      // fsのpostProcessは個別でいいや
+      // 共通に書けるのはせいぜいこのくらい。あとは個別処理に任せましょ。
+    }
+    addColorUsage(){
+      // TODO
+      this.addAttr("vec4", "aColor");
+      this.addVarying("vec4", "vColor");
+      this.addCode(`
+        vec4 color = aColor;
+      `, "preProcess", "vs");
+      this.addCode(`
+        vColor = color;
+      `, "postProcess", "vs");
+    }
+    addTextureUsage(){
+      // TODO
+      this.addAttr("vec2", "aTexCoord");
+      this.addVarying("vec2", "vTexCoord");
+      this.addCode(`
+        vec2 texCoord = aTexCoord;
+      `, "preProcess", "vs");
+      this.addCode(`
+        vTexCoord = texCoord;
+      `, "postProcess", "vs");
+    }
+    addFogUsage(){
+      this.addVarying("vec4", "vNDCForFog");
+      this.addCode(`
+        vNDCForFog = normalDeviceCoordinate;
+      `, "postProcess", "vs");
+      this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
+      this.addCode(`
+        float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
+        float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
+        color *= vec4(depthAlpha);
+        fragColor = color;
+      `, "postProcess", "fs");
+    }
+  }
+
+  // LightingShaderは一つ前を用意してまとめた方がいいかもしれない
+  class ForwardLightingShader extends Shader3DPrototype{
+    constructor(node){
+      super(node);
+    }
+    initialize(options = {}){
+      const {useLight = true} = options; // これがfalseの場合、ライティング関連のコードはカットされる
+      super.initialize();
+      // 法線が無くても描画には困らないということ...あったら便利だけど。
+
+      this.addAttr("vec3", "aNormal");
+
+      this.addVarying("vec3", "vLocalNormal"); // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
+      this.addVarying("vec3", "vGlobalNormal"); // グローバル法線。環境マッピングで使う。
+      this.addVarying("vec3", "vViewNormal"); // ビュー法線。ライティングで使う。
+
+      this.addUniform("mat3", "uNormalMatrix", "vs");
+      this.addUniform("mat3", "uModelNormalMatrix", "vs");
+
+      this.addCode(
+      `
+        vec3 normal = aNormal;
+      `, "preProcess", "vs");
+
+      this.addCode(
+      `
+        vLocalNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
+        vGlobalNormal = normalize(uModelNormalMatrix * normal);
+        vViewNormal = normalize(uNormalMatrix * normal);
+      `, "mainProcess", "vs");
+
       if (useLight) {
         // ...この数値もいい加減使うのやめたいです。まあ難しいけど。
         this.fs.constants =
@@ -9231,6 +9293,7 @@ const p5wgex = (function(){
       // もし透明度でなんかやりたいなら
       // uMonoColorあるいは独自ユニフォームで透明度を渡して
       // mainProcessのあとでrgbにaを掛けるとかなんかそういうことをすればいいですね
+      // postProcessは個別で。
       this.fs.postProcess =
       `
         fragColor = color;
@@ -9242,106 +9305,46 @@ const p5wgex = (function(){
       // colorを使う場合はaColorを追加.
       // fogを使う場合の処理を新たに追加
       const {useColor = false, useTexCoord = false, useFog = false} = options;
-      if (useColor) {
-        // TODO
-        this.addAttr("vec4", "aColor");
-        this.addVarying("vec4", "vColor");
-        this.addCode(`
-          vec4 color = aColor;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vColor = color;
-        `, "postProcess", "vs");
-      }
-      if (useTexCoord) {
-        // TODO
-        this.addAttr("vec2", "aTexCoord");
-        this.addVarying("vec2", "vTexCoord");
-        this.addCode(`
-          vec2 texCoord = aTexCoord;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vTexCoord = texCoord;
-        `, "postProcess", "vs");
-      }
-      if (useFog) {
-        this.addVarying("vec4", "vNDCForFog");
-        this.addCode(`
-          vNDCForFog = normalDeviceCoordinate;
-        `, "postProcess", "vs");
-        this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
-        this.addCode(`
-          float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
-          float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
-          color *= vec4(depthAlpha);
-          fragColor = color;
-        `, "postProcess", "fs");
-      }
+      if (useColor) { this.addColorUsage(); }
+      if (useTexCoord) { this.addTextureUsage(); }
+      if (useFog) { this.addFogUsage(); }
       return this;
     }
   }
 
   // MRT前提のディファード用シェーダ
-  class DeferredPrepareShader extends ShaderPrototype{
+  class DeferredPrepareShader extends Shader3DPrototype{
     constructor(node){
       super(node);
     }
     initialize(options = {}){
       super.initialize();
-      this.attrs = [
-        {type:"vec3", name:"aPosition"},
-        {type:"vec3", name:"aNormal"}
-      ];
-      this.varyings = [
-        {type:"vec3", name:"vLocalPosition"},
-        {type:"vec3", name:"vGlobalPosition"},
-        {type:"vec3", name:"vViewPosition"},
-        {type:"vec3", name:"vLocalNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
-        {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
-        {type:"vec3", name:"vViewNormal"}, // ビュー法線。ライティングで使う。
-        {type:"vec4", name:"vNormalDeviceCoord"} // いわゆるNDC.
-      ];
 
-      this.vs.precisions = ``;
-      this.vs.constants = ``;
-      this.vs.uniforms =
-      `
-        uniform mat4 uModelMatrix;
-        uniform mat4 uModelViewMatrix;
-        uniform mat4 uProjMatrix;
-        uniform mat3 uNormalMatrix;
-        uniform mat3 uModelNormalMatrix;
-      `;
+      this.addAttr("vec3", "aNormal");
 
-      this.vs.routines = ``;
-      this.vs.preProcess =
+      this.addVarying("vec3", "vLocalNormal"); // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
+      this.addVarying("vec3", "vGlobalNormal"); // グローバル法線。環境マッピングで使う。
+      this.addVarying("vec3", "vViewNormal"); // ビュー法線。ライティングで使う。
+      this.addVarying("vec4", "vNormalDeviceCoord"); // いわゆるNDC.
+
+      this.addUniform("mat3", "uNormalMatrix", "vs");
+      this.addUniform("mat3", "uModelNormalMatrix", "vs");
+
+      this.addCode(
       `
-        vec3 position = aPosition;
         vec3 normal = aNormal;
-      `;
+      `, "preProcess", "vs");
 
-      this.vs.mainProcess =
+      // ndcがnormalDeviceCoordinateに名前変わっちゃうけどいいよね
+      this.addCode(
       `
-        // 位置と法線の計算
-        vLocalPosition = aPosition; // aPositionの方が適切だろ. 改変後のpositionをそのまま使うメリットあんまない
-        vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
-        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
-        vViewPosition = viewModelPosition.xyz;
         vLocalNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
         vGlobalNormal = normalize(uModelNormalMatrix * normal);
         vViewNormal = normalize(uNormalMatrix * normal);
-
-        vec4 ndc = uProjMatrix * viewModelPosition;
-        gl_Position = ndc;
-        vNormalDeviceCoord = ndc;
-      `;
-      this.vs.postProcess = ``;
+        vNormalDeviceCoord = normalDeviceCoordinate;
+      `, "mainProcess", "vs");
 
       // 次にfs
-      this.fs.precisions =
-      `
-        precision highp float;
-      `;
       // 名前はとりあえず固定で。変える必要が生じたら、変えます。
       // 渡すのはviewNormalです。計算に使うので。
       this.fs.outputs =
@@ -9379,7 +9382,7 @@ const p5wgex = (function(){
       // 深度とともにデータを格納していくだけでいいと思うんよ
 
       // depthがこれでいいかどうかは謎だけど...
-      this.fs.postProcess +=
+      this.fs.postProcess =
       `
         materialColor = color;
         viewPosition = vec4(position, 1.0);
@@ -9387,28 +9390,8 @@ const p5wgex = (function(){
         viewNormal = vec4(normal, depth);
       `;
       // useColor, useTexCoord
-      if (useColor) {
-        // TODO
-        this.addAttr("vec4", "aColor");
-        this.addVarying("vec4", "vColor");
-        this.addCode(`
-          vec4 color = aColor;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vColor = color;
-        `, "postProcess", "vs");
-      }
-      if (useTexCoord) {
-        // TODO
-        this.addAttr("vec2", "aTexCoord");
-        this.addVarying("vec2", "vTexCoord");
-        this.addCode(`
-          vec2 texCoord = aTexCoord;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vTexCoord = texCoord;
-        `, "postProcess", "vs");
-      }
+      if (useColor) { this.addColorUsage(); }
+      if (useTexCoord) { this.addTextureUsage(); }
       return this;
     }
   }
@@ -9536,159 +9519,9 @@ const p5wgex = (function(){
     }
   }
 
-  // -1～1にしたかったらこっちでvUv = 2.0*vUv-1.0;とかする。
-  // そのほうが柔軟性高そう。
-  // foxBoard使えばそのまま板ポリ芸に移行できる。
-
-  // foxBoardの利用を想定してる。
-  // data:[-1,-1,1,-1,-1,1,1,1]でtriangle_strip
-  // ですから"foxBoard"ってやればそこに落ちる
-  // もちろん描画先を別のfbにすることも可能。
-  // vUvのままではまずいのでuvを用意しましょう。
-  // depthは後方互換性の為に残しますが、多分もう使わないかも....
-  class PlaneShader extends ShaderPrototype{
-    constructor(node){
-      super(node);
-    }
-    initialize(options = {}){
-      super.initialize();
-      const {uvAlign = "leftUp", depth = 0.0} = options;
-      this.attrs =[{type:"vec2", name:"aPosition"}];
-      this.varyings =[{type:"vec2", name:"vUv"}];
-      this.fs.outputs =
-        `out vec4 fragColor;`;
-      // uvAlignで事前の処理
-      switch(uvAlign){
-        case "leftUp": // 左上(0,0)で右が(1,0)で下が(0,1)
-          this.vs.preProcess = `vUv = aPosition * 0.5 + 0.5; vUv.y = 1.0 - vUv.y;`; break;
-        case "leftDown": // 左下(0,0)で右が(1,0)で上が(0,1)
-          this.vs.preProcess = `vUv = aPosition * 0.5 + 0.5;`; break;
-        case "center_yUp": // 中央(0,0)で上が(0,1)で右が(1,0)
-          this.vs.preProcess = `vUv = aPosition;`; break;
-        case "center_yDown": // 中央(0,0)で下が(0,1)で右が(1,0)
-          this.vs.preProcess = `vUv = aPosition; vUv.y = -vUv.y;`; break;
-      }
-      // positionをpreProcess内部でいじれるようにする. これにより描画位置をいじれる。
-      // たとえばposition*=2.0などとすれば原点中心に0.5倍に縮小して描画される。
-      this.vs.preProcess += `vec2 position = aPosition;`;
-
-      // 後ろに置くならdepthは1.0の方がいいし前において透明度補正掛けるなら0.0の方がいいですね
-      this.vs.mainProcess =
-        `gl_Position = vec4(position, ` + depth + `, 1.0);`;
-      this.fs.precisions =
-        `precision highp float;`;
-      this.fs.preProcess =
-        `vec4 color = vec4(1.0); vec2 uv = vUv;`;
-      this.fs.mainProcess =
-        `fragColor = color;`;
-      return this;
-    }
-  }
-
-  // lineShader. 線描画用。3Dです。カメラが必要です。
-  class LineShader extends ShaderPrototype{
-    constructor(node){
-      super(node);
-    }
-    initialize(options = {}){
-      super.initialize();
-      this.attrs = [
-        {type:"vec3", name:"aPosition"}
-      ];
-      this.varyings = [
-        {type:"vec3", name:"vLocalPosition"},
-        {type:"vec3", name:"vGlobalPosition"},
-        {type:"vec3", name:"vViewPosition"}
-      ];
-
-      this.vs.uniforms =
-      `
-        uniform mat4 uModelMatrix;
-        uniform mat4 uModelViewMatrix;
-        uniform mat4 uProjMatrix;
-      `;
-
-      this.vs.preProcess =
-      `
-        vec3 position = aPosition;
-      `;
-      this.vs.mainProcess =
-      `
-        // 位置の計算
-        vLocalPosition = position;
-        vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
-        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
-        vViewPosition = viewModelPosition.xyz;
-
-        vec4 normalDeviceCoordinate = uProjMatrix * viewModelPosition; // fog用
-        gl_Position = normalDeviceCoordinate;
-      `;
-
-      this.fs.precisions =
-      `
-        precision highp float;
-      `;
-
-      this.fs.uniforms =
-      `
-        uniform vec4 uMonoColor; // monoColorの場合
-        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
-      `;
-
-      this.fs.outputs =
-      `
-        out vec4 fragColor;
-      `
-
-      this.fs.preProcess =
-      `
-        vec3 position = vViewPosition;
-        vec4 color = vec4(1.0);
-        if(uMaterialFlag == 0) {
-          color = uMonoColor;  // uMonoColor単色
-        }
-      `;
-
-      this.fs.mainProcess =
-      `
-        color.rgb *= color.a;
-        fragColor = color;
-      `;
-
-      const {useColor = false, useFog = false} = options;
-
-      // colorを使う場合はaColorを追加.
-      if (useColor) {
-        // TODO
-        this.addAttr("vec4", "aColor");
-        this.addVarying("vec4", "vColor");
-        this.addCode(`
-          vec4 color = aColor;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vColor = color;
-        `, "postProcess", "vs");
-      }
-      if (useFog) {
-        this.addVarying("vec4", "vNDCForFog");
-        this.addCode(`
-          vNDCForFog = normalDeviceCoordinate;
-        `, "postProcess", "vs");
-        this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
-        this.addCode(`
-          float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
-          float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
-          color *= vec4(depthAlpha);
-          fragColor = color;
-        `, "postProcess", "fs");
-      }
-      return this;
-    }
-  }
-
   // PBR. さしあたりforward. やることはほぼ一緒だがstructを使うとこなど色々異なる。
   // デモはできてるのでぼちぼち追加していくだけ。
-  class ForwardPBRLightingShader extends ShaderPrototype{
+  class ForwardPBRLightingShader extends Shader3DPrototype{
     constructor(node){
       super(node);
     }
@@ -9696,59 +9529,32 @@ const p5wgex = (function(){
       // これがfalseの場合、Lighting関連はスキップ
       const {useLight = true} = options;
       super.initialize();
-      this.attrs = [
-        {type:"vec3", name:"aPosition"},
-        {type:"vec3", name:"aNormal"}
-      ];
-      this.varyings = [
-        {type:"vec3", name:"vLocalPosition"},
-        {type:"vec3", name:"vGlobalPosition"},
-        {type:"vec3", name:"vViewPosition"},
-        {type:"vec3", name:"vLocalNormal"}, // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
-        {type:"vec3", name:"vGlobalNormal"}, // グローバル法線。環境マッピングで使う。
-        {type:"vec3", name:"vViewNormal"} // ビュー法線。ライティングで使う。
-      ];
+      this.addAttr("vec3", "aNormal");
+
+      this.addVarying("vec3", "vLocalNormal"); // ローカル法線。aNormalそのまま。法線彩色で使う。球のマッピングなど。
+      this.addVarying("vec3", "vGlobalNormal"); // グローバル法線。環境マッピングで使う。
+      this.addVarying("vec3", "vViewNormal"); // ビュー法線。ライティングで使う。
       // この辺は共通、というか違うのLightingのとこだけだし。
-      this.vs.precisions = ``;
-      this.vs.constants = ``;
-      this.vs.uniforms =
-      `
-        uniform mat4 uModelMatrix;
-        uniform mat4 uModelViewMatrix;
-        uniform mat4 uProjMatrix;
-        uniform mat3 uNormalMatrix;
-        uniform mat3 uModelNormalMatrix;
-      `;
-      this.vs.routines = ``;
+
+      this.addUniform("mat3", "uNormalMatrix", "vs");
+      this.addUniform("mat3", "uModelNormalMatrix", "vs");
+
       // position,normalにaPosition,aNormalからの派生を使う場合ここをいじる
-      this.vs.preProcess =
+
+      this.addCode(
       `
-        vec3 position = aPosition;
         vec3 normal = aNormal;
-      `;
-      this.vs.mainProcess =
+      `, "preProcess", "vs");
+      this.addCode(
       `
-        // 位置と法線の計算
-        vLocalPosition = aPosition; // aPositionの方が使えるだろ。ていうかローカルってそういう意味よ
-        vGlobalPosition = (uModelMatrix * vec4(position, 1.0)).xyz;
-        vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
-        vViewPosition = viewModelPosition.xyz;
         vLocalNormal = aNormal; // aNormalですね。頂点と紐ついてる値じゃないとtransformで変わってしまう。
         vGlobalNormal = normalize(uModelNormalMatrix * normal);
         vViewNormal = normalize(uNormalMatrix * normal);
-
-        vec4 normalDeviceCoordinate = uProjMatrix * viewModelPosition; // あった方が便利なので
-        gl_Position = normalDeviceCoordinate;
-      `;
-      this.vs.postProcess = ``;
+      `, "mainProcess", "vs");
 
       // vsここまで。フォンランバートと一緒。構造体も出てこない。
 
       // さあfsだ。
-      this.fs.precisions =
-      `
-        precision highp float;
-      `;
       // ライトの個数をオプションで増やせるようにする
       const {directionalLightCountMax = 4} = options;
       const {pointLightCountMax = 4} = options;
@@ -9956,46 +9762,105 @@ const p5wgex = (function(){
       `
         fragColor = color;
       `;
-      // useColor,useTexCoord案件
+      // useColor,useTexCoord,useFog案件
       const {useColor = false, useTexCoord = false, useFog = false} = options;
-      if (useColor) {
-        // TODO
-        this.addAttr("vec4", "aColor");
-        this.addVarying("vec4", "vColor");
-        this.addCode(`
-          vec4 color = aColor;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vColor = color;
-        `, "postProcess", "vs");
-      }
-      if (useTexCoord) {
-        // TODO
-        this.addAttr("vec2", "aTexCoord");
-        this.addVarying("vec2", "vTexCoord");
-        this.addCode(`
-          vec2 texCoord = aTexCoord;
-        `, "preProcess", "vs");
-        this.addCode(`
-          vTexCoord = texCoord;
-        `, "postProcess", "vs");
-      }
-      if (useFog) {
-        // PBRのfogのtestもそのうち...
-        this.addVarying("vec4", "vNDCForFog");
-        this.addCode(`
-          vNDCForFog = normalDeviceCoordinate;
-        `, "postProcess", "vs");
-        this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
-        this.addCode(`
-          float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
-          float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
-          color *= vec4(depthAlpha);
-          fragColor = color;
-        `, "postProcess", "fs");
-      }
+      if (useColor) { this.addColorUsage(); }
+      if (useTexCoord) { this.addTextureUsage(); }
+      if (useFog) { this.addFogUsage(); }
       // vsで「color,texCoord」にアクセスするとそれをいじったりできるんよ。
       // おつかれさま。
+      return this;
+    }
+  }
+
+  // lineShader. 線描画用。3Dです。カメラが必要です。
+  class LineShader extends Shader3DPrototype{
+    constructor(node){
+      super(node);
+    }
+    initialize(options = {}){
+      super.initialize();
+      this.fs.uniforms =
+      `
+        uniform vec4 uMonoColor; // monoColorの場合
+        uniform int uMaterialFlag; // 0:mono. 1以降はお好みで
+      `;
+
+      this.fs.outputs =
+      `
+        out vec4 fragColor;
+      `
+
+      this.fs.preProcess =
+      `
+        vec3 position = vViewPosition;
+        vec4 color = vec4(1.0);
+        if(uMaterialFlag == 0) {
+          color = uMonoColor;  // uMonoColor単色
+        }
+      `;
+
+      // mainProcessでrgbにaを掛けるのは廃止しました
+      // あとpostProcessに変更しましょ
+      // lightingが無いのでmainProcessでやることはないです
+      this.fs.postProcess =
+      `
+        fragColor = color;
+      `;
+
+      const {useColor = false, useFog = false} = options;
+      // colorを使う場合はaColorを追加.
+      if (useColor) { this.addColorUsage(); }
+      if (useFog) { this.addFogUsage(); }
+      return this;
+    }
+  }
+
+  // -1～1にしたかったらこっちでvUv = 2.0*vUv-1.0;とかする。
+  // そのほうが柔軟性高そう。
+  // foxBoard使えばそのまま板ポリ芸に移行できる。
+
+  // foxBoardの利用を想定してる。
+  // data:[-1,-1,1,-1,-1,1,1,1]でtriangle_strip
+  // ですから"foxBoard"ってやればそこに落ちる
+  // もちろん描画先を別のfbにすることも可能。
+  // vUvのままではまずいのでuvを用意しましょう。
+  // depthは後方互換性の為に残しますが、多分もう使わないかも....
+  class PlaneShader extends ShaderPrototype{
+    constructor(node){
+      super(node);
+    }
+    initialize(options = {}){
+      super.initialize();
+      const {uvAlign = "leftUp", depth = 0.0} = options;
+      this.attrs =[{type:"vec2", name:"aPosition"}];
+      this.varyings =[{type:"vec2", name:"vUv"}];
+      this.fs.outputs =
+        `out vec4 fragColor;`;
+      // uvAlignで事前の処理
+      switch(uvAlign){
+        case "leftUp": // 左上(0,0)で右が(1,0)で下が(0,1)
+          this.vs.preProcess = `vUv = aPosition * 0.5 + 0.5; vUv.y = 1.0 - vUv.y;`; break;
+        case "leftDown": // 左下(0,0)で右が(1,0)で上が(0,1)
+          this.vs.preProcess = `vUv = aPosition * 0.5 + 0.5;`; break;
+        case "center_yUp": // 中央(0,0)で上が(0,1)で右が(1,0)
+          this.vs.preProcess = `vUv = aPosition;`; break;
+        case "center_yDown": // 中央(0,0)で下が(0,1)で右が(1,0)
+          this.vs.preProcess = `vUv = aPosition; vUv.y = -vUv.y;`; break;
+      }
+      // positionをpreProcess内部でいじれるようにする. これにより描画位置をいじれる。
+      // たとえばposition*=2.0などとすれば原点中心に0.5倍に縮小して描画される。
+      this.vs.preProcess += `vec2 position = aPosition;`;
+
+      // 後ろに置くならdepthは1.0の方がいいし前において透明度補正掛けるなら0.0の方がいいですね
+      this.vs.mainProcess =
+        `gl_Position = vec4(position, ` + depth + `, 1.0);`;
+      this.fs.precisions =
+        `precision highp float;`;
+      this.fs.preProcess =
+        `vec4 color = vec4(1.0); vec2 uv = vUv;`;
+      this.fs.mainProcess =
+        `fragColor = color;`;
       return this;
     }
   }
@@ -10934,7 +10799,6 @@ const p5wgex = (function(){
     }
   }
 
-
   // ---------------------------------------------------------------------------------------------- //
   // Export.
   const ex = {};
@@ -10966,6 +10830,7 @@ const p5wgex = (function(){
 
   // shaderPrototype.
   ex.ShaderPrototype = ShaderPrototype;
+  ex.Shader3DPrototype = Shader3DPrototype;
   ex.PlaneShader = PlaneShader; // 板ポリ芸用
   ex.RenderingSystem = RenderingSystem;
   ex.StandardLightingSystem = StandardLightingSystem; // 古典的なフォン/ランバートのライティングによるフォワード/ディファードのライティングテンプレート
