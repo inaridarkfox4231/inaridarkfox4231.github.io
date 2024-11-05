@@ -10800,6 +10800,9 @@ const p5wgex = (function(){
   }
 
   // ---------------------------------------------------------------------------------------------- //
+  // fisceToyBox関連
+
+  // ---------------------------------------------------------------------------------------------- //
   // Export.
   const ex = {};
 
@@ -10808,6 +10811,7 @@ const p5wgex = (function(){
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.getTranspose3x3 = getTranspose3x3; // これ必要ですね...
+
   // 色関連
   ex.presetColors = presetColors; // 色パレット
   ex.hsv2rgb = hsv2rgb;
@@ -10818,12 +10822,13 @@ const p5wgex = (function(){
   ex.hslArray_overlay = hslArray_overlay;
   ex.coulour = coulour; // 汎用色指定関数
   ex.coulour3 = coulour3; // ...の、RGB版
-  // そのうちやめたいnoLoop()
   ex.ErrorSystem = ErrorSystem; // エラーシステム
   ex.clamp = clamp; // clamp関数
   ex.PerformanceChecker = PerformanceChecker; // パフォーマンスチェック用。新しくしました。
 
+  // Geometry関連
   ex.meshUtil = meshUtil; // 最終的にはここにすべてまとめる。registMeshも廃止する方向で。getNormalsも不要です。
+  ex.createGeom = createGeom;
 
   // snipet.
   ex.snipet = snipet; // glslのコードの略記用
@@ -10850,9 +10855,6 @@ const p5wgex = (function(){
   ex.CameraManager = CameraManager;
   ex.Transform = Transform;
   ex.Vec3 = Vec3;
-
-  // Vec3とGeometryの生成関数
-  ex.createGeom = createGeom;
   ex.createVec3 = createVec3;
 
   // data格納用のshader欲しいかも
