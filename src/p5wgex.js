@@ -9240,8 +9240,8 @@ const p5wgex = (function(){
       // vsPostProcessでvColor = color;みたいにできる。
       // texCoordでも同じことができる
       // colorを使う場合はaColorを追加.
-      const {useColor = false} = options;
-      const {useTexCoord = false} = options;
+      // fogを使う場合の処理を新たに追加
+      const {useColor = false, useTexCoord = false, useFog = false} = options;
       if (useColor) {
         // TODO
         this.addAttr("vec4", "aColor");
@@ -9263,6 +9263,19 @@ const p5wgex = (function(){
         this.addCode(`
           vTexCoord = texCoord;
         `, "postProcess", "vs");
+      }
+      if (useFog) {
+        this.addVarying("vec4", "vNDCForFog");
+        this.addCode(`
+          vNDCForFog = normalDeviceCoordinate;
+        `, "postProcess", "vs");
+        this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
+        this.addCode(`
+          float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
+          float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
+          color *= vec4(depthAlpha);
+          fragColor = color;
+        `, "postProcess", "fs");
       }
       return this;
     }
@@ -9607,7 +9620,8 @@ const p5wgex = (function(){
         vec4 viewModelPosition = uModelViewMatrix * vec4(position, 1.0);
         vViewPosition = viewModelPosition.xyz;
 
-        gl_Position = uProjMatrix * viewModelPosition;
+        vec4 normalDeviceCoordinate = uProjMatrix * viewModelPosition; // fog用
+        gl_Position = normalDeviceCoordinate;
       `;
 
       this.fs.precisions =
@@ -9641,7 +9655,7 @@ const p5wgex = (function(){
         fragColor = color;
       `;
 
-      const {useColor = false} = options;
+      const {useColor = false, useFog = false} = options;
 
       // colorを使う場合はaColorを追加.
       if (useColor) {
@@ -9654,6 +9668,19 @@ const p5wgex = (function(){
         this.addCode(`
           vColor = color;
         `, "postProcess", "vs");
+      }
+      if (useFog) {
+        this.addVarying("vec4", "vNDCForFog");
+        this.addCode(`
+          vNDCForFog = normalDeviceCoordinate;
+        `, "postProcess", "vs");
+        this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
+        this.addCode(`
+          float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
+          float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
+          color *= vec4(depthAlpha);
+          fragColor = color;
+        `, "postProcess", "fs");
       }
       return this;
     }
@@ -9930,8 +9957,7 @@ const p5wgex = (function(){
         fragColor = color;
       `;
       // useColor,useTexCoord案件
-      const {useColor = false} = options;
-      const {useTexCoord = false} = options;
+      const {useColor = false, useTexCoord = false, useFog = false} = options;
       if (useColor) {
         // TODO
         this.addAttr("vec4", "aColor");
@@ -9953,6 +9979,20 @@ const p5wgex = (function(){
         this.addCode(`
           vTexCoord = texCoord;
         `, "postProcess", "vs");
+      }
+      if (useFog) {
+        // PBRのfogのtestもそのうち...
+        this.addVarying("vec4", "vNDCForFog");
+        this.addCode(`
+          vNDCForFog = normalDeviceCoordinate;
+        `, "postProcess", "vs");
+        this.addUniform("vec2", "uFogParams", "fs"); // x:Near, y:Far
+        this.addCode(`
+          float depth = 0.5 + 0.5 * vNDCForFog.z/vNDCForFog.w;
+          float depthAlpha = smoothstep(uFogParams.y, uFogParams.x, depth);
+          color *= vec4(depthAlpha);
+          fragColor = color;
+        `, "postProcess", "fs");
       }
       // vsで「color,texCoord」にアクセスするとそれをいじったりできるんよ。
       // おつかれさま。
@@ -10313,6 +10353,10 @@ const p5wgex = (function(){
         diffuseColor:[1, 1, 1],
         specularColor:[1, 1, 1]
       };
+      this.fogParams = {
+        near:0.88,
+        far:0.92
+      }
     }
     setLight(info = {}){
       const keys = Object.keys(info);
@@ -10505,6 +10549,24 @@ const p5wgex = (function(){
       }
       return this;
     }
+    setFogByBand(band = 0.02){
+      const cam = this.getCamera();
+      const depthCenter = 0.5 + 0.5 * cam.getNDC(cam.getView().center).z;
+      this.fogParams.near = depthCenter - band;
+      this.fogParams.far = depthCenter + band;
+      return this;
+    }
+    setFogByDistance(distance = 0.1){
+      const cam = this.getCamera();
+      const {front, center} = cam.getView();
+      this.fogParams.near = 0.5 + 0.5 * cam.getNDC(center.copy().addScalar(front, distance)).z;
+      this.fogParams.far = 0.5 + 0.5 * cam.getNDC(center.copy().addScalar(front, -distance)).z;
+      return this;
+    }
+    setFogUniform(){
+      this.node.setUniform("uFogParams", [this.fogParams.near, this.fogParams.far]);
+      return this;
+    }
   }
 
   // PBR.
@@ -10574,6 +10636,10 @@ const p5wgex = (function(){
         // coneCosより内側で0～1,penumbraCosより内側はすべて1
       }
       // setするときはcountの数だけlightsに従ってぶちこんでけばいい
+      this.fogParams = {
+        near:0.88,
+        far:0.92
+      }
     }
     setLight(params = {}){
       // albedo,emissive,metallic,roughnessを設定する感じ
@@ -10766,6 +10832,24 @@ const p5wgex = (function(){
         this.node.setUniform("u" + name + "NormalMatrix", normalMat)
         this.node.setUniform("u" + name + "ModelNormalMatrix", modelNormalMat);
       }
+      return this;
+    }
+    setFogByBand(band = 0.02){
+      const cam = this.getCamera();
+      const depthCenter = 0.5 + 0.5 * cam.getNDC(cam.getView().center).z;
+      this.fogParams.near = depthCenter - band;
+      this.fogParams.far = depthCenter + band;
+      return this;
+    }
+    setFogByDistance(distance = 0.1){
+      const cam = this.getCamera();
+      const {front, center} = cam.getView();
+      this.fogParams.near = 0.5 + 0.5 * cam.getNDC(center.copy().addScalar(front, distance)).z;
+      this.fogParams.far = 0.5 + 0.5 * cam.getNDC(center.copy().addScalar(front, -distance)).z;
+      return this;
+    }
+    setFogUniform(){
+      this.node.setUniform("uFogParams", [this.fogParams.near, this.fogParams.far]);
       return this;
     }
   }
