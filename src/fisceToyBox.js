@@ -785,9 +785,11 @@ const fisceToyBox = (function(){
     a,b,cはp5.Vectorを想定しているが
     まあVec3でも普通に機能する
   */
+  /*
   function getDet2(a,b,c){
     return (c.x-a.x) * (c.y-b.y) - (c.x-b.x) * (c.y-a.y);
   }
+  */
 
   /*
     getIntersection(a,b,c,d,threshold=1e-9)
@@ -811,6 +813,8 @@ const fisceToyBox = (function(){
     a,b,c,dをVec3にすればOKで、distもちゃんとあるので問題ない
   */
   function getIntersection(a,b,c,d,threshold = 1e-9){
+    // 内部に書いちゃう
+    const getDet2 = (a,b,c) => (c.x-a.x) * (c.y-b.y) - (c.x-b.x) * (c.y-a.y);
     // a,b,c,dは2次元ベクトル
     // a-b と c-dが交わるかどうか調べる
     const abc = getDet2(a,b,c);
@@ -3151,7 +3155,7 @@ const fisceToyBox = (function(){
 
   // utility.
   fisce.getUnionFind = getUnionFind;
-  fisce.getIntersection = getIntersection;
+  fisce.getIntersection = getIntersection; // これgetDet2()を中で使ってるからちょっとまずいかもですね...
   fisce.insideTriangle = insideTriangle;
   fisce.rotateByAxis = rotateByAxis;
   fisce.hsv2rgb = hsv2rgb;
