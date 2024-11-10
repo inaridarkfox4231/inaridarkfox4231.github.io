@@ -389,6 +389,9 @@ const foxIA = (function(){
       if (keydown) { window.addEventListener('keydown', this.keyDownAction.bind(this), {passive:false}); }
       if (keyup) { window.addEventListener('keyup', this.keyUpAction.bind(this), {passive:false}); }
     }
+    getRect(){
+      return this.rect;
+    }
     updateCanvasData(){
       const newRect = canvas.getBoundingClientRect();
       // 対象のキャンバスを更新
