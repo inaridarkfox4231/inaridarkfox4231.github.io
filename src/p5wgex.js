@@ -6122,19 +6122,20 @@ const p5wgex = (function(){
       }
       return this;
     }
-    assignOutIndices(info = {}){
-      // tff用のoutIndicesをこっちで勝手にいじる
-      // shaderごとにoutIndexが異なる場合に対応できないんで
-      // その不便を解消するための処理
-      // outIndexを持つattrに対してのみ、またbindされたFigureに対してのみ実行する
+    assignOutIndices(){
+      // shaderを作るときにoutVaryingsのデータを持たせて
+      // それを元にアサインメントするように変更します
+      const {outVaryings = []} = this.currentFigure;
       const vbos = this.currentFigure.getVBOs();
-      for(const vboKey of Object.keys(vbos)){
-        if(info[vboKey] === undefined) continue;
-        const vbo = vbos[vboKey];
-        // outIndexはすべてに用意され、undefinedの場合-1なので、undefinedならば...のバリデーションは使えないです
-        if(vbo.outIndex < 0) continue;
-        vbo.outIndex = info[vboKey]; // 割り当て完了...のはず。
+      for(let i=0; i<outVaryings.length; i++){
+        const name = outVaryings[i];
+        vbos[name].outIndex = i; // これでいいはず
+        // まあこれもvbo＝attrっていう限定的な枠組みに依存してるんだけどな...
       }
+      // もっともswapとか考えるとあれだけど。ただoutIndexはTFFでoutするattrにしか必要ないはずなんで
+      // 問題ないかと...inの方は変えなくてもいいということ。
+      // また、同じ割り当てを使いまわすならこれは要らないですね。
+      return this;
     }
     bufferSubData(bufName, targetName, dstByteOffset, srcData, srcOffset = 0){
       // いわゆる動的更新。currentFigureに対し、それがもつ属性の名前と放り込む際に使う配列を渡して更新させる。
