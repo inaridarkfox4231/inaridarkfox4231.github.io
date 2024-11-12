@@ -6122,6 +6122,20 @@ const p5wgex = (function(){
       }
       return this;
     }
+    assignOutIndices(info = {}){
+      // tff用のoutIndicesをこっちで勝手にいじる
+      // shaderごとにoutIndexが異なる場合に対応できないんで
+      // その不便を解消するための処理
+      // outIndexを持つattrに対してのみ、またbindされたFigureに対してのみ実行する
+      const vbos = this.currentFigure.getVBOs();
+      for(const vboKey of Object.keys(vbos)){
+        if(info[vboKey] === undefined) continue;
+        const vbo = vbos[vboKey];
+        // outIndexはすべてに用意され、undefinedの場合-1なので、undefinedならば...のバリデーションは使えないです
+        if(vbo.outIndex < 0) continue;
+        vbo.outIndex = info[vboKey]; // 割り当て完了...のはず。
+      }
+    }
     bufferSubData(bufName, targetName, dstByteOffset, srcData, srcOffset = 0){
       // いわゆる動的更新。currentFigureに対し、それがもつ属性の名前と放り込む際に使う配列を渡して更新させる。
       // targetNameは array_buf: ARRAY_BUFFER で element_buf: ELEMENT_ARRAY_BUFFER ということですね。OK!
@@ -10226,10 +10240,23 @@ const p5wgex = (function(){
         far:0.92
       }
     }
+    easyLight(params = {}){
+      // 色々面倒な場合の簡易措置。cameraBaseのdefaultはtrueです。オビコン前提。
+      const {
+        direction = [0,0,-1], color = [1,1,1,1],
+        cameraBase = true, process = [], init = true
+      } = params;
+      this.setLight({useSpecular:true});
+      this.setDirectionalLight({count:1,direction:direction});
+      this.setFlag(0).setColor(color);
+      this.setLightingUniforms({cameraBase:cameraBase});
+      this.setTransform(process, init).setMatrixUniforms();
+    }
     setLight(info = {}){
       const keys = Object.keys(info);
       for(const _key of keys){ this.lightingParams[_key] = info[_key]; }
       //this.lightingParams.use = true;
+      return this; // ごめん忘れてた
     }
     setVectorParam(_key, target, value){
       // this[prop][key]はベクトルの配列である
@@ -10275,6 +10302,7 @@ const p5wgex = (function(){
         }
       }
       //if (this.directionalLightParams.count > 0) { this.directionalLightParams.use = true; }
+      return this; // ごめん忘れてた
     }
     // pointLight.
     setPointLight(params = {}){
@@ -10287,6 +10315,7 @@ const p5wgex = (function(){
         }
       }
       //if (this.pointLightParams.count > 0) { this.pointLightParams.use = true; }
+      return this; // ごめん忘れてた
     }
     // spotLight.
     setSpotLight(params = {}){
@@ -10299,6 +10328,7 @@ const p5wgex = (function(){
         }
       }
       //if (this.spotLightParams.count > 0) { this.spotLightParams.use = true; }
+      return this; // ごめん忘れてた
     }
     setFlag(flag){
       // フラグの切り替えめんどくさいんだよ
