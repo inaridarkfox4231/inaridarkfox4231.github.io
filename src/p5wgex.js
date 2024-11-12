@@ -10237,6 +10237,7 @@ const p5wgex = (function(){
       this.setFlag(0).setColor(color);
       this.setLightingUniforms({cameraBase:cameraBase});
       this.setTransform(process, init).setMatrixUniforms();
+      return this;
     }
     setLight(info = {}){
       const keys = Object.keys(info);
@@ -10525,6 +10526,23 @@ const p5wgex = (function(){
         far:0.92
       }
     }
+    easyLight(params = {}){
+      const {
+        metallic = 0.5, roughness = 0.5,
+        albedo = [1,1,1], direction = [0,0,1], cameraBase = true,
+        color = [1,1,1], process = [], init = true
+      } = params;
+      this.setLight({albedo, metallic, roughness});
+      this.setDirectionalLight({
+        count:1,
+        lights:[{
+          direction:new Vec3(direction), color:coulour3(color)
+        }]
+      });
+      this.setLightingUniforms({cameraBase});
+      this.setTransform(process, init).setMatrixUniforms();
+      return this;
+    }
     setLight(params = {}){
       // albedo,emissive,metallic,roughnessを設定する感じ
       // 指定しなかったものについては据え置きとなる。
@@ -10679,11 +10697,8 @@ const p5wgex = (function(){
       // spotLightのオプションで角度指定にできるようにするといいかも？
 
       this.setElementaryLightUniforms();
-
       this.setDirectionalLightUniforms(options);
-
       this.setPointLightUniforms(options);
-
       this.setSpotLightUniforms(options);
 
       return this;
