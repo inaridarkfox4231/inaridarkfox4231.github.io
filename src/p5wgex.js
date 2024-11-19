@@ -6777,11 +6777,22 @@ const p5wgex = (function(){
   // 4x4正方行列
   // イメージ的には行指定で0,1,2,3で最上段、以下下の段4,5,6,7,と続く。
   // こっちにも例のメソッドを移植する
+
+  // ...argumentsでも生成してほしいですね...
+  // あとmultなんですけど「.m」をいちいち取るのめんどくさいです
+  // 後方互換性あると思うんでよろしく
+  // multなんですけどreturn thisしてよくないか？？？transposeとかも。別にいいっしょ。
+  // ああそうかglsl内部じゃないから...んー...
   class Mat4{
     constructor(data){
       this.m = new Array(16).fill(0);
       if(data === undefined){
         this.initialize();
+      }else if(typeof data === 'number'){
+        // 16個の数を直接指定する方法でOKにする
+        for(let i=0; i<arguments.length; i++){
+          this.m[i] = arguments[i];
+        }
       }else{
         for(let i=0; i<16; i++){
           this.m[i] = (data[i] !== undefined ? data[i] : 0);
@@ -6790,6 +6801,7 @@ const p5wgex = (function(){
     }
     initialize(){
       this.m = [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1];
+      return this;
     }
     copy(){
       return new Mat4(this.m);
@@ -6799,6 +6811,7 @@ const p5wgex = (function(){
       for(let i=0; i<16; i++){
         this.m[i] = data[i];
       }
+      return this;
     }
     getMat4(){
       return this.m;
@@ -6811,15 +6824,26 @@ const p5wgex = (function(){
       ];
     }
     mult(s){
-      // sは長さ16の配列で、4x4行列とみなす。
+      // sはMat4もしくは長さ16の配列で、4x4行列とみなす。
       // sを左からmに掛けることでthis.mを変化させる
-      const data = getMult4x4(s, this.m);
+      const target = (s instanceof Mat4 ? s.m : s);
+      const data = getMult4x4(target, this.m);
       this.set(data);
+      return this;
+    }
+    multMat4(s){
+      // sはMat4もしくは長さ16の配列で、4x4行列
+      // sを右から掛けることでmを変化させる
+      const target = (s instanceof Mat4 ? s.m : s);
+      const data = getMult4x4(this.m, target);
+      this.set(data);
+      return this;
     }
     transpose(){
       // 転置。
       const data = getTranspose4x4(this.m);
       this.set(data);
+      return this;
     }
     apply(v, transpose = true, copy = false){
       // Vec3型のvに掛け算。ただし転置して左上の3x3を適用する。
@@ -6866,31 +6890,37 @@ const p5wgex = (function(){
       // x軸の周りにtラジアン回転の行列を掛ける
       const data = getRotX(t);
       this.mult(data);
+      return this;
     }
     rotateY(t){
       // y軸の周りにtラジアン回転の行列を掛ける
       const data = getRotY(t);
       this.mult(data);
+      return this;
     }
     rotateZ(t){
       // z軸の周りにtラジアン回転の行列を掛ける
       const data = getRotZ(t);
       this.mult(data);
+      return this;
     }
     rotate(t, a, b, c){
       // 単位軸ベクトル(a, b, c)の周りにtラジアン回転の行列
       const data = getRot(t, a, b, c);
       this.mult(data);
+      return this;
     }
     translate(a, b, c){
       // a, b, cの平行移動の行列を掛ける
       const data = getTranslate(a, b, c);
       this.mult(data);
+      return this;
     }
     scale(sx, sy, sz){
       // sx, sy, sz倍の行列を掛ける
       const data = getScale(sx, sy, sz);
       this.mult(data);
+      return this;
     }
   }
 
