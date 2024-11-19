@@ -7093,6 +7093,40 @@ const p5wgex = (function(){
     return result;
   }
 
+  // 小行列式に因子を掛けて返すだけ
+  function _getSmallDet3x3(m,c=0){
+    m = (m instanceof Mat4 ? m.m : m);
+    // mは16配列
+    const a=c%4;
+    const b=(c/4)|0;
+    // 例：a=2,b=1の場合は2+4でpivotは6です
+    // a=1,b=3の場合は4*3+1=13がpivotです～
+    const detSign = 1-2*((a+b)&1);
+    const u=[];
+    for(let i=0;i<16;i++){
+      if((i%4)===a || ((i/4)|0)===b)continue;
+      u.push(m[i]);
+    }
+    return (u[0]*u[4]*u[8] + u[1]*u[5]*u[6] + u[2]*u[3]*u[7] - u[0]*u[5]*u[7] - u[1]*u[3]*u[8] - u[2]*u[4]*u[6])*detSign;
+  }
+
+  // 4x4の逆行列を返す。
+  function getInverse4x4(m){
+    m = (m instanceof Mat4 ? m.m : m);
+    // mの逆行列出すで
+    let result = [];
+    for(let c=0;c<16;c++){
+      const d = _getSmallDet3x3(m, c);
+      result.push(d);
+    }
+    // 行列式これでいいよもう
+    const determinantValue = result[0]*m[0]+result[1]*m[1]+result[2]*m[2]+result[3]*m[3];
+
+    const resultMat = new Mat4(result.map(x=>x/determinantValue));
+    resultMat.transpose();
+    return resultMat;
+  }
+
   // ベースにあるのが射影のPでそこにビューのVを掛けてさらにモデルのMを掛けていく
   // 例えば離れたところで回転させる場合は単純に平行移動→回転、と考えてOK
   // それが内部ではまず回転、次いで平行移動、のように作用する。
@@ -10875,6 +10909,7 @@ const p5wgex = (function(){
   ex.getMult4x4 = getMult4x4; // こっちは使い道あるかもしれない
   ex.getInverseTranspose3x3 = getInverseTranspose3x3;
   ex.getTranspose3x3 = getTranspose3x3; // これ必要ですね...
+  ex.getInverse4x4 = getInverse4x4; // 4x4の逆行列
 
   // 色関連
   ex.presetColors = presetColors; // 色パレット
