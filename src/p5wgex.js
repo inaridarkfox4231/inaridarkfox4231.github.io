@@ -10277,11 +10277,14 @@ const p5wgex = (function(){
       };
       this.spotLightParams = {
         //use:false,
+        // angleとconcは配列ですね。ここPBRはlightごとになってるからいいんだけど
+        // こっちは全部配列じゃないとまずいわけだ
+        // ああこういうことがあるから嫌なんだよな...まあ仕方ないか。ダイレクトでいいか。
         count:0,
         location:[new Vec3(0,0,4)],
         direction:[new Vec3(0,0,-1)],
-        angle:Math.PI/4,
-        conc:100,
+        angle:[Math.PI/4],
+        conc:[100],
         diffuseColor:[1, 1, 1],
         specularColor:[1, 1, 1]
       };
