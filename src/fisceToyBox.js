@@ -2273,8 +2273,20 @@ const fisceToyBox = (function(){
         lastIndex += cn*2;
       }
     }
-
     geom.computeNormals();
+    // 側面は問題ないんですが、上面と下面がポリゴン分割の関係で法線がゼロになってしまう場合が
+    // 存在することが確認されました。そこで修正します。
+    // 具体的にはv.zが正の場合に0,0,1とし、負の場合に0,0,-1とします。
+    for(let i=0; i<geom.vertices.length; i++){
+      const vn = geom.vertexNormals[i];
+      const v = geom.vertices[i];
+      if(vn.mag() > 0.1)continue;
+      if(v.z > 0){
+        vn.set(0,0,1);
+      }else{
+        vn.set(0,0,-1);
+      }
+    }
     return geom;
   }
 
