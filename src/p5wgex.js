@@ -2081,8 +2081,10 @@ const p5wgex = (function(){
     d.r16f = gl.R16F;
     d.r32f = gl.R32F;
     d.rg32f = gl.RG32F;
+    d.rgb32f = gl.RGB32F;
     d.red = gl.RED;
     d.rg = gl.RG;
+    d.rgb = gl.RGB;
     d.short = gl.SHORT;
     d.ushort = gl.UNSIGNED_SHORT;
     d.int = gl.INT;
@@ -2547,6 +2549,7 @@ const p5wgex = (function(){
   // r32fとか使ってみたいわね。効率性よさそう
   // これtextureの話しかしてないからこれでいいね？
   // reference: https://registry.khronos.org/webgl/specs/latest/2.0/#TEXTURE_TYPES_FORMATS_FROM_DOM_ELEMENTS_TABLE
+  // internalFormat --- format --- type
   // gl.RG32F --- gl.RG --- gl.FLOAT
   // gl.RGBA32F --- gl.RGBA --- gl.FLOAT
   // gl.RGBA16F --- gl.RGBA --- gl.FLOAT
