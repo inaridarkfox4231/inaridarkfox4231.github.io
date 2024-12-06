@@ -151,6 +151,17 @@
 // --textをキャンバスに置くメソッドを独自に用意、formatが作れるように。そんなところ
 // ...
 // PBRが入ってないのはいつでもできるから。デモもうできてるし。
+// 20241205
+// textureについて
+// floatTextureをstorageとして扱う場合にそれ単体で生成できるようにする
+// ただvec4の場合unpack-premultiplyAlphaが邪魔をするので（format:RGBAの場合のみ）
+// レアケースですが一時的にそれを解除する処理を追加する
+// 具体的にはmultiplyAlpha:falseとかしてfalseの場合に一時的にfalseにして後で戻す（デフォルトtrueは据え置き）
+// separateAlpha:true/falseとかの方がいいかも。
+// if(this.separateAlpha){~~~~}
+// fboでテクスチャする場合は空っぽで生成するうえ、shader経由でしか更新しないので必要ないですね。
+// separateAlphaのdefault:falseにしてregistTextureの際にtrueにすることで
+// regist時とupdate時に解除されるようにする
 
 /*
 外部から上書きするメソッドの一覧
@@ -2632,6 +2643,11 @@ const p5wgex = (function(){
         info.src = {};
       }
     }
+    // registTextureにおいてseparateAlpha:trueとすることで
+    // format:rgbaの際のunpack時にmultiplyAlphaを解除してalphaが乗算されないようにできる
+    // floatTextureをvec4で用いる場合これをしないとrgbの値をいじられてしまうので
+    // fboの場合はshaderでtextureをいじる都合上これは必要ありません。
+    if(info.separateAlpha === undefined){ info.separateAlpha = false; }
   }
 
   // info.srcが用意されてないならnullを返す。一種のバリデーション。
@@ -2705,8 +2721,15 @@ const p5wgex = (function(){
     gl.bindTexture(target, tex);
 
     // テクスチャにメモリ領域を確保。ここの処理はCUBE_MAPの場合ちょっと異なる。場合分けする。
+    if(info.separateAlpha){
+      // alphaを分離する場合はUNPACK_PREMULTIPLY_ALPHA_WEBGLを一旦falseにする
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    }
     _texImage(gl, target, data, info.w, info.h, dict[info.internalFormat], dict[info.format], dict[info.type]);
-
+    if(info.separateAlpha){
+      // 戻す
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    }
     // mipmapの作成はどうも失敗してるみたいです。原因は調査中。とりあえず使わないで。
     //if(info.mipmap){ gl.generateMipmap(gl.TEXTURE_2D); }
 
@@ -3003,6 +3026,7 @@ const p5wgex = (function(){
       this.src = info.src; // ソース。p5.Graphicsの場合これを使って...
       _validateForTexture(info); // _createTexture内部ではやらないことになった
       this.target = info.target; // テクスチャターゲット。デフォルトは2dですがcube_mapも使えるようにします。
+      this.separateAlpha = info.separateAlpha; // たとえばfloatTexture,vec4の場合にこれがないとまずい
       this.tex = _createTexture(gl, info, dict);
       // infoのバリデーションが済んだので各種情報を格納
       this.w = (info.w !== undefined ? info.w : 1);
@@ -3057,7 +3081,13 @@ const p5wgex = (function(){
 
       const data = _getTextureData(this.target, this.src);
       gl.bindTexture(target, this.tex);
+      if(this.separateAlpha){
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      }
       _texImage(gl, target, data, this.w, this.h, dict[this.formatParam.internalFormat], dict[this.formatParam.format], dict[this.formatParam.type]);
+      if(this.separateAlpha){
+        gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      }
 
       gl.bindTexture(target, null);
       // 果たしてこれでちゃんと上書きされるのか...
