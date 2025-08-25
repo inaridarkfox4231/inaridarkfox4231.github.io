@@ -106622,7 +106622,10 @@ var p5 = (function () {
             moveDeltaY =  this.movedY * cam.yScale;
           }
           // start rotate and move when mouse is pressed within the canvas.
-          if (pointersInCanvas) this._renderer.executeRotateAndMove = true;
+          if (pointersInCanvas){
+            console.log('pointersInCanvas');
+            this._renderer.executeRotateAndMove = true;
+          }
         } else {
           // quit rotate and move if mouse is released.
           this._renderer.executeRotateAndMove = false;
@@ -106672,6 +106675,7 @@ var p5 = (function () {
       if ((deltaTheta !== 0 || deltaPhi !== 0) &&
       this._renderer.executeRotateAndMove) {
         // accelerate rotate velocity
+        console.log('accelerate rotate velocity');
         this._renderer.rotateVelocity.add(
           deltaTheta * rotateAccelerationFactor,
           deltaPhi * rotateAccelerationFactor
