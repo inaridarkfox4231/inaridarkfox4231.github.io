@@ -106690,7 +106690,6 @@ var p5 = (function () {
             0
           );
         } else {
-          console.log(`rotation:${this._renderer.rotateVelocity.x},${this._renderer.rotateVelocity.y}`);
           cam._orbit(
             this._renderer.rotateVelocity.x,
             this._renderer.rotateVelocity.y,
