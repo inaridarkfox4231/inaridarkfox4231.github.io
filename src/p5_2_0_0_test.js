@@ -99033,6 +99033,7 @@ var p5 = (function () {
                touches.push(getTouchInfo(canvas, sx, sy, touch));
             }
             this.touches = touches;
+            console.log(touches.length);
          } else {
             const mousePos = getMouseInfo(canvas, sx, sy, e);
             this.movedX = e.movementX || 0;
@@ -106562,6 +106563,7 @@ var p5 = (function () {
           movedTouches[0].y > 0 && movedTouches[0].y < this.height;
 
         if (movedTouches.length === 1) {
+          console.log(`Hello, orbitControl! ${movedTouches.length}`);
           const t = movedTouches[0];
           deltaTheta = -sensitivityX * (t.x - t.px) / scaleFactor;
           deltaPhi = sensitivityY * (t.y - t.py) / scaleFactor;
@@ -106581,6 +106583,7 @@ var p5 = (function () {
         }
         if (this.touches.length > 0) {
           if (pointersInCanvas) {
+            console.log(`pointersInCanvas moved touches:${movedTouches.length}`);
             // Initiate an interaction if touched in the canvas
             this._renderer.executeRotateAndMove = true;
             this._renderer.executeZoom = true;
@@ -106608,7 +106611,9 @@ var p5 = (function () {
           deltaRadius *= mouseZoomScaleFactor;
           this._mouseWheelDeltaY = 0;
           // start zoom when the mouse is wheeled within the canvas.
-          if (pointersInCanvas) this._renderer.executeZoom = true;
+          if (pointersInCanvas){
+            this._renderer.executeZoom = true;
+          }
         } else {
           // quit zoom when you stop wheeling.
           this._renderer.executeZoom = false;
@@ -106623,7 +106628,6 @@ var p5 = (function () {
           }
           // start rotate and move when mouse is pressed within the canvas.
           if (pointersInCanvas){
-            console.log('pointersInCanvas');
             this._renderer.executeRotateAndMove = true;
           }
         } else {
@@ -106675,7 +106679,6 @@ var p5 = (function () {
       if ((deltaTheta !== 0 || deltaPhi !== 0) &&
       this._renderer.executeRotateAndMove) {
         // accelerate rotate velocity
-        console.log('accelerate rotate velocity');
         this._renderer.rotateVelocity.add(
           deltaTheta * rotateAccelerationFactor,
           deltaPhi * rotateAccelerationFactor
